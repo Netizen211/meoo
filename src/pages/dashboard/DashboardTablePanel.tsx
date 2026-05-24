@@ -21,6 +21,9 @@ export default function DashboardTablePanel({
   setCurrentPage, toggleCol, togglePin, setSortField, setSortDesc,
   draggedPanel, onDragStart, onDragOver, onDragEnd
 }: Props) {
+  const isNumeric = (key: string) => ['paid', 'merchant', 'qty'].includes(key);
+  const alignClass = (key: string) => isNumeric(key) ? 'text-right' : 'text-left';
+
   return (
     <motion.div key="table" layoutId="table" draggable onDragStart={() => onDragStart('table')} onDragOver={e => onDragOver(e, 'table')} onDragEnd={onDragEnd}
       className={`bg-pdd-card rounded-xl border border-pdd-border p-3 cursor-move transition-all ${draggedPanel === 'table' ? 'opacity-50 scale-95' : ''}`}>
@@ -46,7 +49,7 @@ export default function DashboardTablePanel({
         <table className="w-full text-xs">
           <thead><tr className="text-pdd-text-secondary border-b border-pdd-border">
             {pinnedColumns.map(col => (
-              <th key={col.key} className="py-1.5 text-left font-medium bg-pdd-bg sticky left-0 z-10" style={{ width: col.width }}>
+              <th key={col.key} className={`py-1.5 font-medium bg-pdd-bg sticky left-0 z-10 ${alignClass(col.key)}`} style={{ width: col.width }}>
                 <div className="flex items-center gap-1">
                   <button onClick={() => togglePin(col.key)} className="text-pdd-primary-light"><Pin size={10} fill="#818cf8" /></button>
                   {col.label}
@@ -55,7 +58,7 @@ export default function DashboardTablePanel({
             ))}
             {unpinnedColumns.map(col => (
               <th key={col.key} onClick={() => { setSortField(col.key); setSortDesc(sortField === col.key ? !sortDesc : true); }}
-                className="py-1.5 text-left font-medium cursor-pointer hover:text-pdd-primary-light relative group" style={{ width: col.width }}>
+                className={`py-1.5 font-medium cursor-pointer hover:text-pdd-primary-light relative group ${alignClass(col.key)}`} style={{ width: col.width }}>
                 <div className="flex items-center gap-1">
                   <button onClick={(e) => { e.stopPropagation(); togglePin(col.key); }} className="text-pdd-text-muted hover:text-pdd-primary-light"><Pin size={10} /></button>
                   {col.label} {sortField === col.key && (sortDesc ? '↓' : '↑')}
@@ -66,11 +69,13 @@ export default function DashboardTablePanel({
           <tbody>{paginatedData.map((r, i) => (
             <tr key={i} className={`${i % 2 === 1 ? 'bg-pdd-bg/50' : ''} hover:bg-[var(--pdd-gray-200)]/50`}>
               {visibleColumns.map(col => (
-                <td key={col.key} className={`py-1.5 text-pdd-text ${pinnedCols.has(col.key) ? 'bg-pdd-bg sticky left-0 z-10' : ''}`} style={{ width: col.width }}>
+                <td key={col.key} className={`py-1.5 ${alignClass(col.key)} ${pinnedCols.has(col.key) ? 'bg-pdd-bg sticky left-0 z-10' : ''}`} style={{ width: col.width }}>
                   {col.key === 'orderNo' ? <span className="font-mono text-[10px] text-pdd-text-secondary">{r[col.key].slice(-8)}</span> :
                    col.key === 'product' ? <span className="truncate max-w-[120px] block">{r[col.key]}</span> :
                    col.key === 'status' ? <span className="px-1.5 py-0.5 rounded text-[10px] bg-[var(--pdd-gray-200)] text-pdd-text-secondary">{r[col.key]}</span> :
-                   ['paid', 'merchant'].includes(col.key) ? <span className={`text-right block ${col.key === 'merchant' ? 'text-pdd-primary-light font-medium' : ''}`}>¥{r[col.key].toFixed(0)}</span> :
+                   col.key === 'paid' ? <span className="text-pdd-text">¥{r[col.key].toFixed(0)}</span> :
+                   col.key === 'merchant' ? <span className="text-pdd-primary-light font-medium">¥{r[col.key].toFixed(0)}</span> :
+                   col.key === 'qty' ? <span className="text-pdd-text">{r[col.key]}</span> :
                    r[col.key]}
                 </td>
               ))}
