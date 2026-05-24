@@ -1,0 +1,23 @@
+The file /home/project/src/App.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 287→      return '';
+ 288→    }
+ 289→    return saved || '';
+ 290→  });
+ 291→  const [storeDataMap, setStoreDataMap] = useState<Record<string, StoreDataItem>>(() => {
+ 292→    const parseStoreData = (sd: any): StoreDataItem => ({
+ 293→      ...sd,
+ 294→      afterSaleRecords: sd.afterSaleRecords || [],
+ 295→      availableFields: {
+ 296→        csv: new Set(sd.availableFields?.csv || []),
+ 297→        promotion: new Set(sd.availableFields?.promotion || []),
+ 298→        insurance: new Set(sd.availableFields?.insurance || []),
+ 299→        afterSale: new Set(sd.availableFields?.afterSale || [])
+ 300→      }
+ 301→    });
+ 302→
+ 303→    // 优先尝试整体存储
+ 304→    const saved = localStorage.getItem('dianfx_store_data_map');
+ 305→    if (saved) {
+ 306→      try {

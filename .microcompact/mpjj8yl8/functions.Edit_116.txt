@@ -1,0 +1,13 @@
+The file /home/project/src/pages/product/ProductFullLinkTab.tsx has been updated. Made 2 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 204→                <span className="text-xs font-bold" style={{ color: p.roi >= 1 ? 'pdd-success' : 'pdd-danger' }}>ROI {p.roi.toFixed(2)}x</span>
+ 205→              </div>
+ 206→              <div className="grid grid-cols-3 gap-1 text-[10px]">
+ 207→                <div><span className="text-gray-500">GMV</span><br /><span className="font-mono">¥{fmt(p.gmv)}</span></div>
+ 208→                <div><span className="text-gray-500">实收</span><br /><span className="font-mono text-pdd-success">¥{fmt(p.revenue)}</span></div>
+ 209→                <div><span className="text-gray-500">净利</span><br /><span className="font-mono" style={{ color: p.netProfit >= 0 ? 'pdd-success' : 'pdd-danger' }}>¥{fmt(p.netProfit)}</span></div>
+ 210→              </div>
+ 211→            </motion.div>
+ 212→          ))}
+ 213→        </div>

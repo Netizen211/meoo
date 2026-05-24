@@ -1,0 +1,13 @@
+The file /home/project/src/pages/StoresPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+   2→import { useNavigate } from 'react-router-dom';
+   3→import { motion, AnimatePresence } from 'framer-motion';
+   4→import { Store, Plus, Trash2, ArrowRight, ShoppingBag, TrendingUp, DollarSign, ShoppingCart, BarChart3, RefreshCw, Eye, Calendar, FileText, Users, Package, Truck, AlertCircle, CheckCircle, Clock, ChevronRight } from 'lucide-react';
+   5→import { useStore, useData } from '../App';
+   6→import { safeFloat } from '../components/TimeFilter';
+   7→
+   8→export default function StoresPage() {
+   9→  const { stores, currentStore, addStore, switchStore, deleteStore } = useStore();
+  10→  const { uploadRecords, dataFilter, setDataFilter, getStoreData } = useData();
+  11→  const navigate = useNavigate();

@@ -1,0 +1,109 @@
+The file /home/project/src/pages/RiskPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  69→    })).sort((a, b) => b.afterSaleRate - a.afterSaleRate);
+  70→  }, [filteredOrders, filteredAfterSaleRecords]);
+  71→
+  72→  const highAfterSale = productRisk.filter(p => p.afterSaleRate > 30).length;
+  73→  const overdueOrders = useMemo(() => {
+  74→    return filteredOrders.filter((o: any) => {
+  75→      const payT = ss(o['支付时间']);
+  76→      const shipT = ss(o['发货时间']);
+  77→      if (!payT || !shipT) return false;
+  78→      return (new Date(shipT).getTime() - new Date(payT).getTime()) / 3600000 > 48;
+  79→    }).length;
+  80→  }, [filteredOrders]);
+  81→
+  82→  const zeroSales = useMemo(() => {
+  83→    const salesMap: Record<string, number> = {};
+  84→    filteredOrders.forEach((o: any) => { const id = ss(o['商品id']); salesMap[id] = (salesMap[id] || 0) + sf(o['商品数量(件)']); });
+  85→    return Object.values(salesMap).filter(v => v <= 0).length;
+  86→  }, [filteredOrders]);
+  87→
+  88→  const riskScore = useMemo(() => {
+  89→    if (!filteredOrders.length) return 0;
+  90→    const asRate = filteredOrders.filter(o => { const s = ss(o['售后状态']); return s && s !== '无售后或售后取消' && s !== '无'; }).length / filteredOrders.length * 100;
+  91→    const rfRate = filteredOrders.filter(o => ss(o['售后状态']).includes('退款')).length / filteredOrders.length * 100;
+  92→    const ovRate = overdueOrders / filteredOrders.length * 100;
+  93→    return Math.min(100, asRate * 1.5 + rfRate * 2 + ovRate * 1.2);
+  94→  }, [filteredOrders, overdueOrders]);
+  95→
+  96→  const riskTypePie = useMemo(() => [
+  97→    { name: '售后风险', value: highAfterSale },
+  98→    { name: '物流超时', value: overdueOrders },
+  99→    { name: '退款异常', value: filteredOrders.filter(o => ss(o['售后状态']).includes('退款')).length },
+ 100→    { name: '动销风险', value: zeroSales },
+ 101→  ], [highAfterSale, overdueOrders, filteredOrders, zeroSales]);
+ 102→
+ 103→  const trendData = useMemo(() => {
+ 104→    if (!filteredOrders.length) return [];
+ 105→    const byDate: Record<string, { total: number; as: number; rf: number; ov: number }> = {};
+ 106→    filteredOrders.forEach((o: any) => {
+ 107→      const d = ss(o['支付时间']).split(' ')[0];
+ 108→      if (!d) return;
+ 109→      if (!byDate[d]) byDate[d] = { total: 0, as: 0, rf: 0, ov: 0 };
+ 110→      byDate[d].total++;
+ 111→      const s = ss(o['售后状态']);
+ 112→      if (s && s !== '无售后或售后取消' && s !== '无') byDate[d].as++;
+ 113→      if (s.includes('退款')) byDate[d].rf++;
+ 114→      const payT = ss(o['支付时间']);
+ 115→      const shipT = ss(o['发货时间']);
+ 116→      if (payT && shipT && (new Date(shipT).getTime() - new Date(payT).getTime()) / 3600000 > 48) byDate[d].ov++;
+ 117→    });
+ 118→    return Object.entries(byDate).sort((a, b) => a[0].localeCompare(b[0])).slice(-7).map(([d, v]) => ({
+ 119→      date: d.slice(5),
+ 120→      asRate: v.total > 0 ? (v.as / v.total) * 100 : 0,
+ 121→      rfRate: v.total > 0 ? (v.rf / v.total) * 100 : 0,
+ 122→      ovRate: v.total > 0 ? (v.ov / v.total) * 100 : 0,
+ 123→    }));
+ 124→  }, [filteredOrders]);
+ 125→
+ 126→  const abnormalOrders = useMemo(() => {
+ 127→    return filteredOrders.filter((o: any) => {
+ 128→      const s = ss(o['售后状态']);
+ 129→      const payT = ss(o['支付时间']);
+ 130→      const shipT = ss(o['发货时间']);
+ 131→      const isRefundAbnormal = s.includes('退款');
+ 132→      const isOverdue = payT && shipT && (new Date(shipT).getTime() - new Date(payT).getTime()) / 3600000 > 48;
+ 133→      const isHighDisc = (sf(o['店铺优惠折扣(元)']) + sf(o['平台优惠折扣(元)']) + sf(o['多多支付立减金额(元)'])) / sf(o['商品总价(元)']) > 0.2;
+ 134→      return isRefundAbnormal || isOverdue || isHighDisc;
+ 135→    }).slice(0, 20).map((o: any) => {
+ 136→      const s = ss(o['售后状态']);
+ 137→      const payT = ss(o['支付时间']);
+ 138→      const shipT = ss(o['发货时间']);
+ 139→      const types: string[] = [];
+ 140→      if (s.includes('退款')) types.push('退款异常');
+ 141→      if (payT && shipT && (new Date(shipT).getTime() - new Date(payT).getTime()) / 3600000 > 48) types.push('发货超时');
+ 142→      if ((sf(o['店铺优惠折扣(元)']) + sf(o['平台优惠折扣(元)']) + sf(o['多多支付立减金额(元)'])) / sf(o['商品总价(元)']) > 0.2) types.push('高优惠');
+ 143→      return { id: ss(o['订单号']).slice(-8), product: ss(o['商品']).slice(0, 18), type: types.join('/'), amount: sf(o['用户实付金额(元)']), time: ss(o['支付时间']).slice(0, 16) };
+ 144→    });
+ 145→  }, [filteredOrders]);
+ 146→
+ 147→  const rules = useMemo(() => {
+ 148→    if (!filteredOrders.length) return [];
+ 149→    const asRate = filteredOrders.filter(o => { const s = ss(o['售后状态']); return s && s !== '无售后或售后取消' && s !== '无'; }).length / filteredOrders.length * 100;
+ 150→    const rfRate = filteredOrders.filter(o => ss(o['售后状态']).includes('退款')).length / filteredOrders.length * 100;
+ 151→    const ship48Rate = (() => {
+ 152→      const shipped = filteredOrders.filter(o => ss(o['发货时间']) !== '');
+ 153→      const in48 = shipped.filter(o => (new Date(ss(o['发货时间'])).getTime() - new Date(ss(o['支付时间'])).getTime()) / 3600000 <= 48);
+ 154→      return shipped.length > 0 ? (in48.length / shipped.length) * 100 : 100;
+ 155→    })();
+ 156→    const zeroRate = (() => {
+ 157→      const salesMap: Record<string, number> = {};
+ 158→      filteredOrders.forEach(o => { const id = ss(o['商品id']); salesMap[id] = (salesMap[id] || 0) + sf(o['商品数量(件)']); });
+ 159→      const total = Object.keys(salesMap).length;
+ 160→      const zero = Object.values(salesMap).filter(v => v <= 0).length;
+ 161→      return total > 0 ? (zero / total) * 100 : 0;
+ 162→    })();
+ 163→    return [
+ 164→      { name: '售后率>30%', value: asRate, status: asRate > 30 ? '危险' : asRate > 15 ? '预警' : '正常' },
+ 165→      { name: '48h发货率<90%', value: ship48Rate, status: ship48Rate < 90 ? '危险' : ship48Rate < 95 ? '预警' : '正常' },
+ 166→      { name: '退款率>15%', value: rfRate, status: rfRate > 15 ? '危险' : rfRate > 8 ? '预警' : '正常' },
+ 167→      { name: '零动销>20%', value: zeroRate, status: zeroRate > 20 ? '危险' : zeroRate > 10 ? '预警' : '正常' },
+ 168→    ];
+ 169→  }, [filteredOrders]);
+ 170→
+ 171→  const kpis = [
+ 172→    { label: '高售后率商品', value: highAfterSale, icon: AlertTriangle, color: '#e02e24' },
+ 173→    { label: '超时发货订单', value: overdueOrders, icon: Truck, color: '#faad14' },
+ 174→    { label: '异常订单数', value: abnormalOrders.length, icon: RotateCcw, color: '#ff4d4f' },

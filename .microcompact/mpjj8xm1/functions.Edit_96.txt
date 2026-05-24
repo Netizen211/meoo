@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardStatusPanel.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  16→
+  17→export default function DashboardStatusPanel({ statusDist, noData, draggedPanel, onDragStart, onDragOver, onDragEnd }: Props) {
+  18→  return (
+  19→    <motion.div key="status" layoutId="status" draggable onDragStart={() => onDragStart('status')} onDragOver={e => onDragOver(e, 'status')} onDragEnd={onDragEnd}
+  20→      className={`bg-pdd-card rounded-xl border border-pdd-border p-3 cursor-move transition-all ${draggedPanel === 'status' ? 'opacity-50 scale-95' : ''}`}>
+  21→      <div className="flex items-center justify-between mb-2">
+  22→        <h3 className="text-sm font-semibold text-white">订单状态分布</h3>
+  23→        <Move size={14} className="text-[#64748b]" />
+  24→      </div>
+  25→      {noData ? (

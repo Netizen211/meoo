@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardPromoPanel.tsx has been updated. Made 2 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  32→              <YAxis yAxisId="cost" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+  33→              <YAxis yAxisId="roi" orientation="right" tick={{ fontSize: 10, fill: '#94a3b8' }} />
+  34→              <Tooltip contentStyle={{ background: '#1a1d2e', border: '1px solid #2a2d3e', borderRadius: '8px', color: '#e2e8f0', fontSize: '11px' }} labelStyle={{ color: '#94a3b8' }} />
+  35→              <Bar yAxisId="cost" dataKey="cost" fill="pdd-primary" name="花费(元)" radius={[2, 2, 0, 0]} />
+  36→              <Line yAxisId="roi" type="monotone" dataKey="roi" stroke="pdd-purple" strokeWidth={2} name="ROI" dot={{ r: 3, fill: '#a855f7' }} />
+  37→            </ComposedChart>
+  38→          </ResponsiveContainer>
+  39→          {topPromoProducts.length > 0 && (
+  40→            <div>
+  41→              <h4 className="text-xs font-medium mb-1.5 text-pdd-text-secondary">推广商品TOP5</h4>

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "1",
+    "content": "读取所有待修复文件内容",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "批量修复子组件目录中的硬编码颜色",
+    "status": "in_progress",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "批量修复页面子目录中的硬编码颜色",
+    "status": "pending",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "批量修复其他页面中的硬编码颜色",
+    "status": "pending",
+    "priority": "high"
+  },
+  {
+    "id": "5",
+    "content": "汇总修改结果并输出文件引用表",
+    "status": "pending",
+    "priority": "medium"
+  }
+]

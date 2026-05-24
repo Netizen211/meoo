@@ -1,0 +1,27 @@
+The file /home/project/src/pages/UploadPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  10→  message: string;
+  11→  details: string;
+  12→}
+  13→
+  14→interface UploadedFile {
+  15→  name: string;
+  16→  type: 'csv' | 'xlsx';
+  17→  size: number;
+  18→  status: 'parsing' | 'done' | 'error';
+  19→  progress: number;
+  20→  detectedType?: string;
+  21→  fieldCount?: number;
+  22→  rowCount?: number;
+  23→  missingFields?: string[];
+  24→  duplicateCount?: number;
+  25→  newCount?: number;
+  26→  mismatchWarning?: DataMismatchWarning;
+  27→  errorMessage?: string;
+  28→}
+  29→
+  30→const FILE_TYPE_RULES: { keywords: string[]; label: string; icon: string }[] = [
+  31→  { keywords: ['订单', 'order'], label: '订单数据', icon: '📦' },
+  32→  { keywords: ['商品推广', '商品_推广'], label: '商品推广数据', icon: '📢' },
+  33→  { keywords: ['明星店铺', '明星店铺'], label: '明星店铺数据', icon: '⭐' },

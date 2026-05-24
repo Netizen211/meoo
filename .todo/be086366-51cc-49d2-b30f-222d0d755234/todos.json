@@ -1,0 +1,20 @@
+[
+  {
+    "id": "d1",
+    "status": "in_progress",
+    "content": "修复App.tsx localStorage数据截断问题（slice(0,500)导致数据丢失）",
+    "priority": "high"
+  },
+  {
+    "id": "d2",
+    "status": "pending",
+    "content": "统一StoresPage的sf为safeFloat",
+    "priority": "medium"
+  },
+  {
+    "id": "d3",
+    "status": "pending",
+    "content": "验证编译通过",
+    "priority": "high"
+  }
+]

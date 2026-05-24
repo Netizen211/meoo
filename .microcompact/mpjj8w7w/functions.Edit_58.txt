@@ -1,0 +1,26 @@
+Error: Could not find text to replace in "/home/project/src/components/product-analysis/TrendChartCard.tsx". Tried exact text matching strategy.
+
+请检查是否有以下常见问题：
+- 中英文字符不匹配（如中文引号vs英文引号）
+- 空格缩进数量不一致
+- 引号未正确转义
+- 换行符差异
+
+搜索的内容 (old_string):
+"stroke=\"#52c41a\""
+
+
+
+<system-reminder>
+🚫 EDIT LOOP WARNING: You've used Edit on "/home/project/src/components/product-analysis/TrendChartCard.tsx" 8 times consecutively!
+
+Your current approach is likely not working. You need to change strategy NOW.
+
+⚠️ REQUIRED ACTIONS:
+1. STOP retrying the same approach on "/home/project/src/components/product-analysis/TrendChartCard.tsx"
+2. Consider: is this modification actually critical? If not, SKIP it and move on to the next task
+3. If you must fix it, try a fundamentally different approach — not a minor variation of what you've been doing
+4. If you still can't get it right, tell the user what's blocking you and MOVE ON to the next step
+
+⏰ 4 more attempt(s) before Edit to this file is AUTOMATICALLY BLOCKED. Focus on forward progress.
+</system-reminder>

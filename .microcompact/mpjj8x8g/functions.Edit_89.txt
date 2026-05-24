@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardPromoPanel.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  43→                {topPromoProducts.map((p, i) => (
+  44→                  <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-pdd-border last:border-0 text-[#94a3b8]">
+  45→                    <span className="truncate flex-1">{i + 1}. {p.name}</span>
+  46→                    <span className="text-pdd-primary-light font-medium ml-2">¥{p.cost.toFixed(0)}</span>
+  47→                    <span className="text-pdd-purple-light ml-2">ROI {p.roi.toFixed(2)}</span>
+  48→                  </div>
+  49→                ))}
+  50→              </div>
+  51→            </div>
+  52→          )}

@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardTablePanel.tsx has been updated. Made 6 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  35→              </button>
+  36→            ))}
+  37→          </div>
+  38→          <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}
+  39→            className="p-1 rounded hover:bg-[#1e2235] disabled:opacity-30 text-pdd-text-secondary"><ChevronLeft size={14} /></button>
+  40→          <span className="text-xs text-[#94a3b8]">{currentPage}/{totalPages || 1}</span>
+  41→          <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}
+  42→            className="p-1 rounded hover:bg-[#1e2235] disabled:opacity-30 text-[#94a3b8]"><ChevronRight size={14} /></button>
+  43→        </div>
+  44→      </div>

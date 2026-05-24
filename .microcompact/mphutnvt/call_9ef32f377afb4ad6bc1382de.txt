@@ -1,0 +1,141 @@
+The file /home/project/src/pages/UploadPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 133→      addUploadRecord({ fileName: file.name, fileType: detectedType, storeId: targetStoreId, storeName: targetStoreName, rowCount: data.length, fieldCount: fields.length });
+ 134→    })();
+ 135→  }, [getStoreData, setStoreData, addUploadRecord]);
+ 136→
+ 137→  const processXlsxFile = useCallback((file: File, targetStoreId: string, targetStoreName: string) => {
+ 138→    const reader = new FileReader();
+ 139→    reader.onprogress = (e) => { if (e.lengthComputable) setFiles(prev => prev.map(f => f.name === file.name ? { ...f, progress: Math.round((e.loaded / e.total) * 80) } : f)); };
+ 140→    reader.onload = (e) => {
+ 141→      try {
+ 142→        const wb = XLSX.read(e.target!.result, { type: 'array' });
+ 143→        const sheets: Record<string, any[]> = {};
+ 144→        wb.SheetNames.forEach(sn => { sheets[sn] = XLSX.utils.sheet_to_json(wb.Sheets[sn]); });
+ 145→
+ 146→        const existing = getStoreData(targetStoreId) || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set() } };
+ 147→
+ 148→        // 对每个sheet独立识别类型并处理，支持一个文件包含多种数据类型
+ 149→        let totalRows = 0;
+ 150→        let allFields: string[] = [];
+ 151→        let primaryType = '未知类型';
+ 152→        const processedTypes = new Set<string>();
+ 153→
+ 154→        for (const sn of wb.SheetNames) {
+ 155→          const sheetData = sheets[sn];
+ 156→          if (!sheetData || sheetData.length === 0) continue;
+ 157→          const sheetFields = Object.keys(sheetData[0]);
+ 158→          let sheetType = detectFileTypeByContent(sheetFields);
+ 159→
+ 160→          // 如果内容检测不到类型，用文件名辅助判断（但仅作为该sheet的fallback）
+ 161→          if (sheetType === '未知类型') {
+ 162→            // 对于子sheet（如"商品_xxx"、"品牌词_xxx"），尝试从sheet名推断
+ 163→            if (sn.includes('商品')) sheetType = '商品推广数据';
+ 164→            else if (sn.includes('品牌词') || sn.includes('创意')) sheetType = '明星店铺数据';
+ 165→            else if (sn.includes('直播间')) sheetType = '直播推广数据';
+ 166→            else sheetType = detectFileType(file.name);
+ 167→          }
+ 168→
+ 169→          if (allFields.length === 0) allFields = sheetFields;
+ 170→          totalRows += sheetData.length;
+ 171→          if (primaryType === '未知类型' && sheetType !== '未知类型') primaryType = sheetType;
+ 172→
+ 173→          // 避免同一类型被多个sheet重复处理（汇总sheet优先）
+ 174→          if (processedTypes.has(sheetType) && sheetType !== '商品推广数据') continue;
+ 175→
+ 176→          if (sheetType === '商品推广数据') {
+ 177→            // 区分汇总sheet和商品明细sheet
+ 178→            const hasProductId = sheetFields.includes('商品ID');
+ 179→            if (hasProductId) {
+ 180→              // 商品明细sheet → promotionProducts
+ 181→              // 去重key: 日期+商品ID+推广名称（因为同一商品可能有多条推广计划）
+ 182→              const existingProductKeys = new Set(existing.promotionProducts.map((r: any) => `${r['日期'] || ''}-${r['商品ID'] || ''}-${r['推广名称'] || ''}`));
+ 183→              let addedCount = 0;
+ 184→              sheetData.forEach((item: any) => {
+ 185→                const key = `${item['日期'] || ''}-${item['商品ID'] || ''}-${item['推广名称'] || ''}`;
+ 186→                if (!existingProductKeys.has(key)) {
+ 187→                  existing.promotionProducts.push(item);
+ 188→                  existingProductKeys.add(key);
+ 189→                  addedCount++;
+ 190→                }
+ 191→              });
+ 192→              // 合并字段集
+ 193→              sheetFields.forEach(f => existing.availableFields.promotion.add(f));
+ 194→              if (addedCount === 0 && processedTypes.has(sheetType)) continue;
+ 195→            } else {
+ 196→              // 汇总sheet → promotionSummary
+ 197→              // 去重key: 日期（汇总数据每天只有一条）
+ 198→              const existingSummaryKeys = new Set(existing.promotionSummary.map((r: any) => `${r['日期'] || ''}`));
+ 199→              sheetData.forEach((item: any) => {
+ 200→                const key = `${item['日期'] || ''}`;
+ 201→                if (!existingSummaryKeys.has(key)) {
+ 202→                  existing.promotionSummary.push(item);
+ 203→                  existingSummaryKeys.add(key);
+ 204→                }
+ 205→              });
+ 206→              sheetFields.forEach(f => existing.availableFields.promotion.add(f));
+ 207→            }
+ 208→            processedTypes.add(sheetType);
+ 209→          } else if (sheetType === '明星店铺数据') {
+ 210→            // 去重key: 日期 + 推广名称（品牌词sheet有推广名称区分）
+ 211→            const existingKeys = new Set(existing.starStoreSummary.map((r: any) => `${r['日期'] || ''}-${r['推广名称'] || r['创意样式'] || ''}`));
+ 212→            sheetData.forEach((item: any) => {
+ 213→              const key = `${item['日期'] || ''}-${item['推广名称'] || item['创意样式'] || ''}`;
+ 214→              if (!existingKeys.has(key)) {
+ 215→                existing.starStoreSummary.push(item);
+ 216→                existingKeys.add(key);
+ 217→              }
+ 218→            });
+ 219→            processedTypes.add(sheetType);
+ 220→          } else if (sheetType === '直播推广数据') {
+ 221→            // 去重key: 日期 + 直播间
+ 222→            const existingKeys = new Set(existing.liveStreamSummary.map((r: any) => `${r['日期'] || ''}-${r['直播间'] || ''}`));
+ 223→            sheetData.forEach((item: any) => {
+ 224→              const key = `${item['日期'] || ''}-${item['直播间'] || ''}`;
+ 225→              if (!existingKeys.has(key)) {
+ 226→                existing.liveStreamSummary.push(item);
+ 227→                existingKeys.add(key);
+ 228→              }
+ 229→            });
+ 230→            processedTypes.add(sheetType);
+ 231→          } else if (sheetType === '运费险数据') {
+ 232→            const existingKeys = new Set(existing.shippingInsurance.map((r: any) => String(r['订单编号'] || '')));
+ 233→            sheetData.forEach((item: any) => {
+ 234→              const key = String(item['订单编号'] || '');
+ 235→              if (key && !existingKeys.has(key)) { existing.shippingInsurance.push(item); existingKeys.add(key); }
+ 236→            });
+ 237→            existing.availableFields.insurance = new Set(sheetFields);
+ 238→            processedTypes.add(sheetType);
+ 239→          } else if (sheetType === '订单数据') {
+ 240→            const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订单号'] || '')));
+ 241→            let duplicateCount = 0;
+ 242→            const newOrders: any[] = [];
+ 243→            sheetData.forEach((row: any) => {
+ 244→              const orderId = String(row['订单号'] || '');
+ 245→              if (orderId && !existingOrderIds.has(orderId)) { newOrders.push(row); existingOrderIds.add(orderId); }
+ 246→              else if (orderId) { duplicateCount++; }
+ 247→            });
+ 248→            existing.orders = [...existing.orders, ...newOrders];
+ 249→            existing.availableFields.csv = new Set(sheetFields);
+ 250→            processedTypes.add(sheetType);
+ 251→          }
+ 252→        }
+ 253→
+ 254→        if (primaryType === '未知类型') primaryType = detectFileType(file.name);
+ 255→        const required = REQUIRED_FIELDS[primaryType] || [];
+ 256→        const missing = required.filter(r => !allFields.includes(r));
+ 257→
+ 258→        setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, fieldCount: allFields.length, rowCount: totalRows, detectedType: primaryType, missingFields: missing } : f));
+ 259→        setStoreData(targetStoreId, { ...existing, availableFields: { ...existing.availableFields } });
+ 260→        setFieldReport({ available: allFields, missing, type: primaryType });
+ 261→        addUploadRecord({ fileName: file.name, fileType: primaryType, storeId: targetStoreId, storeName: targetStoreName, rowCount: totalRows, fieldCount: allFields.length });
+ 262→      } catch { setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error' } : f)); }
+ 263→    };
+ 264→    reader.readAsArrayBuffer(file);
+ 265→  }, [getStoreData, setStoreData, addUploadRecord]);
+ 266→
+ 267→  const processFile = useCallback((file: File) => {
+ 268→    if (!currentStore) { alert('请先选择一个店铺'); return; }
+ 269→    const targetStoreId = currentStore.id;
+ 270→    const targetStoreName = currentStore.name;

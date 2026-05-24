@@ -1,0 +1,13 @@
+The file /home/project/src/pages/MembershipPage.tsx has been updated. Made 2 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  45→    key: 'enterprise',
+  46→    name: '企业版',
+  47→    price: '¥99',
+  48→    period: '/月 ¥999/年',
+  49→    color: 'pdd-warning',
+  50→    features: [
+  51→      { text: '全部专业版功能', included: true },
+  52→      { text: '无限数据存储', included: true },
+  53→      { text: '自定义看板', included: true },
+  54→      { text: '无限店铺', included: true },

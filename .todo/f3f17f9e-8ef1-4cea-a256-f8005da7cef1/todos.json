@@ -1,0 +1,26 @@
+[
+  {
+    "id": "1",
+    "content": "为缺编码SKU标签页添加筛选功能",
+    "status": "in_progress",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "为新品定价预设标签页添加筛选功能",
+    "status": "pending",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "为税务配置标签页添加筛选功能",
+    "status": "pending",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "为自定义扣费标签页添加筛选功能",
+    "status": "pending",
+    "priority": "high"
+  }
+]

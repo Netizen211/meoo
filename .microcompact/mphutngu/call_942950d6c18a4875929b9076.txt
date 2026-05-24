@@ -1,0 +1,50 @@
+The file /home/project/src/App.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 258→      return '';
+ 259→    }
+ 260→    return saved || '';
+ 261→  });
+ 262→  const [storeDataMap, setStoreDataMap] = useState<Record<string, StoreDataItem>>(() => {
+ 263→    const parseStoreData = (sd: any): StoreDataItem => ({
+ 264→      ...sd,
+ 265→      availableFields: {
+ 266→        csv: new Set(sd.availableFields?.csv || []),
+ 267→        promotion: new Set(sd.availableFields?.promotion || []),
+ 268→        insurance: new Set(sd.availableFields?.insurance || [])
+ 269→      }
+ 270→    });
+ 271→
+ 272→    // 优先尝试整体存储
+ 273→    const saved = localStorage.getItem('dianfx_store_data_map');
+ 274→    if (saved) {
+ 275→      try {
+ 276→        const data = JSON.parse(saved);
+ 277→        const result: Record<string, StoreDataItem> = {};
+ 278→        for (const [storeId, storeData] of Object.entries(data)) {
+ 279→          result[storeId] = parseStoreData(storeData);
+ 280→        }
+ 281→        return result;
+ 282→      } catch {}
+ 283→    }
+ 284→
+ 285→    // 降级：尝试分片存储格式
+ 286→    const keysJson = localStorage.getItem('dianfx_store_data_map_keys');
+ 287→    if (keysJson) {
+ 288→      try {
+ 289→        const keys: string[] = JSON.parse(keysJson);
+ 290→        const result: Record<string, StoreDataItem> = {};
+ 291→        for (const storeId of keys) {
+ 292→          const chunk = localStorage.getItem(`dianfx_store_${storeId}`);
+ 293→          if (chunk) {
+ 294→            result[storeId] = parseStoreData(JSON.parse(chunk));
+ 295→          }
+ 296→        }
+ 297→        if (Object.keys(result).length > 0) return result;
+ 298→      } catch {}
+ 299→    }
+ 300→    const legacyData = localStorage.getItem('dianfx_parsed_data');
+ 301→    if (legacyData) {
+ 302→      try {
+ 303→        const data = JSON.parse(legacyData);
+ 304→        const legacyStoreId = localStorage.getItem('dianfx_current_store');

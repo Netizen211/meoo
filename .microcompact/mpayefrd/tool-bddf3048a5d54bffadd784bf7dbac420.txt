@@ -1,0 +1,1 @@
+{"files":["src/App.tsx","src/components/MainLayout.tsx","src/pages/UploadPage.tsx","src/pages/StoresPage.tsx"],"pattern":"storeId|currentStore","path":"src","totalFiles":4}

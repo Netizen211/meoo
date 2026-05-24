@@ -1,0 +1,1 @@
+{"results":[{"file":"./src/pages/StoresPage.tsx","matches":[{"line":10,"content":"  const { getAllStoresData, uploadRecords, dataFilter, setDataFilter, getStoreData } = useData();"},{"line":32,"content":"  const allStoresData = getAllStoresData();"}]}],"pattern":"getAllStoresData","path":"./src","totalMatches":2}

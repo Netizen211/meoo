@@ -1,0 +1,50 @@
+[
+  {
+    "id": "1",
+    "content": "添加 import 语句（新图标和类型）",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "更新 TABS 数组为5个Tab",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "更新 useData 解构添加新字段",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "增强全局设置区域（添加默认成本比例、快递费、批量导入）",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "5",
+    "content": "新增税务配置 Tab 内容",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "6",
+    "content": "新增自定义扣费 Tab 内容",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "7",
+    "content": "在裸货成本填充Tab添加成本历史记录",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "8",
+    "content": "验证编译",
+    "status": "completed",
+    "priority": "high"
+  }
+]

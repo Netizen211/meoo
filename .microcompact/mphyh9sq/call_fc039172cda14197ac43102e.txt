@@ -1,0 +1,85 @@
+The file /home/project/src/pages/ProductPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 344→      </div>
+ 345→    );
+ 346→  };
+ 347→
+ 348→  const renderOverviewPanel = () => (
+ 349→    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+ 350→      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pdd-card lg:col-span-2 border border-gray-100 shadow-sm bg-white overflow-hidden">
+ 351→        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+ 352→          <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2"><Package size={15} color="#e02e24" />商品概览 <span className="text-xs font-normal text-gray-400 ml-1">共{filteredProducts.length}款</span></h3>
+ 353→          <div className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-2 py-1">
+ 354→            <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="p-1 rounded hover:bg-white disabled:opacity-30 transition-colors text-gray-500"><ChevronLeft size={14} /></button>
+ 355→            <span className="text-xs text-gray-600 font-medium min-w-[3rem] text-center">{currentPage} / {totalPages || 1}</span>
+ 356→            <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="p-1 rounded hover:bg-white disabled:opacity-30 transition-colors text-gray-500"><ChevronRight size={14} /></button>
+ 357→          </div>
+ 358→        </div>
+ 359→        {noData ? <div className="h-48 flex flex-col items-center justify-center text-xs text-gray-400 gap-2"><Package size={24} className="opacity-20" /><span>请先上传订单数据</span></div> : (
+ 360→          <div className="overflow-x-auto">
+ 361→            <table className="w-full text-xs">
+ 362→              <thead><tr className="text-[11px] text-gray-500 font-semibold border-b border-gray-100 bg-gray-50/50 sticky top-0 z-10">
+ 363→                <th className="py-3 px-4 text-left w-10">对比</th>
+ 364→                <th className="py-3 px-4 text-left cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('name'); setSortDesc(sortField === 'name' ? !sortDesc : true); }}>商品信息</th>
+ 365→                <th className="py-3 px-4 text-right cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('gmv'); setSortDesc(sortField === 'gmv' ? !sortDesc : true); }}>GMV</th>
+ 366→                <th className="py-3 px-4 text-right cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('revenue'); setSortDesc(sortField === 'revenue' ? !sortDesc : true); }}>实收</th>
+ 367→                <th className="py-3 px-4 text-right cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('profit'); setSortDesc(sortField === 'profit' ? !sortDesc : true); }}>利润</th>
+ 368→                <th className="py-3 px-4 text-right cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('roi'); setSortDesc(sortField === 'roi' ? !sortDesc : true); }}>ROI</th>
+ 369→                <th className="py-3 px-4 text-left">状态</th>
+ 370→                <th className="py-3 px-4 text-center">操作</th>
+ 371→              </tr></thead>
+ 372→              <tbody className="divide-y divide-gray-50">{paginatedProducts.map((p, i) => {
+ 373→                const alerts = getAlertTags(p);
+ 374→                return (
+ 375→                  <tr key={p.id} className={`group transition-colors ${alerts.length > 0 ? 'bg-orange-50/30' : i % 2 === 1 ? 'bg-gray-50/30' : ''} hover:bg-blue-50/40`}>
+ 376→                    <td className="py-3 px-4"><button onClick={() => toggleCompare(p.id)} className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${compareProducts.includes(p.id) ? 'bg-purple-600 border-purple-600 text-white' : 'border-gray-300 hover:border-purple-400 text-transparent'}`}><Check size={12} /></button></td>
+ 377→                    <td className="py-3 px-4 max-w-[160px]">
+ 378→                      <div className="truncate font-medium text-gray-800 cursor-pointer hover:text-red-600 transition-colors" onClick={() => setSelectedProduct(p.id)}>{p.name}</div>
+ 379→                      {p.code && <div className="text-[10px] text-gray-400 font-mono mt-0.5">{p.code}</div>}
+ 380→                    </td>
+ 381→                    <td className="py-3 px-4 text-right font-mono text-gray-700">¥{p.gmv.toFixed(0)}</td>
+ 382→                    <td className="py-3 px-4 text-right font-mono text-gray-700">¥{p.revenue.toFixed(0)}</td>
+ 383→                    <td className="py-3 px-4 text-right">
+ 384→                      <ProfitTooltip
+ 385→                        netProfit={p.profit}
+ 386→                        grossProfit={p.grossProfit || 0}
+ 387→                        preTaxProfit={p.preTaxProfit || 0}
+ 388→                        netProfitAfterTax={p.netProfitAfterTax || p.profit}
+ 389→                        revenue={p.revenue}
+ 390→                        costBreakdown={p.costBreakdown || { productCost: 0, packagingFee: 0, shippingFee: 0, promoCost: 0, discount: 0, platformFee: 0, taxes: 0, customDeductions: 0 }}
+ 391→                        costSource={p.costSource || { productCost: 'missing', taxes: 'default', customDeductions: 'none' }}
+ 392→                        taxDetails={p.taxDetails || []}
+ 393→                        deductionDetails={p.deductionDetails || []}
+ 394→                        profitConfidence={p.profitConfidence || 'low'}
+ 395→                        hasRealCost={p.costSource?.productCost === 'real' || p.costSource?.productCost === 'estimated'}
+ 396→                        onGoToCostManagement={() => window.location.hash = '#/cost-management'}
+ 397→                      />
+ 398→                    </td>
+ 399→                    <td className="py-3 px-4 text-right font-mono font-medium" style={{ color: p.roi >= 0 ? '#52c41a' : '#ff4d4f' }}>{p.roi.toFixed(1)}%</td>
+ 400→                    <td className="py-3 px-4">
+ 401→                      <div className="flex flex-wrap gap-1">
+ 402→                        {alerts.length === 0 && <span className="text-[10px] text-gray-300">正常</span>}
+ 403→                        {alerts.map(a => (
+ 404→                          <span key={a.label} className="px-1.5 py-0.5 rounded text-[9px] font-medium" style={{ color: a.color, backgroundColor: a.bg }}>{a.label}</span>
+ 405→                        ))}
+ 406→                      </div>
+ 407→                    </td>
+ 408→                    <td className="py-3 px-4">
+ 409→                      <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+ 410→                        <button onClick={() => setDrawerProductId(p.id)} className="p-1.5 rounded-md hover:bg-blue-100 text-gray-400 hover:text-blue-600 transition-colors" title="查看详情"><Eye size={13} /></button>
+ 411→                        <button onClick={() => setTaggingProduct(p.id)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-400 hover:text-gray-700 transition-colors" title="标签"><Tag size={13} /></button>
+ 412→                      </div>
+ 413→                    </td>
+ 414→                  </tr>
+ 415→                );
+ 416→              })}</tbody>
+ 417→            </table>
+ 418→          </div>
+ 419→        )}
+ 420→      </motion.div>
+ 421→
+ 422→      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="pdd-card border border-gray-200 flex flex-col">
+ 423→        <div className="px-4 py-3 border-b border-gray-200">
+ 424→          <h3 className="text-sm font-semibold flex items-center gap-1.5"><Target size={14} color="#e02e24" />商品360度分析</h3>
+ 425→        </div>

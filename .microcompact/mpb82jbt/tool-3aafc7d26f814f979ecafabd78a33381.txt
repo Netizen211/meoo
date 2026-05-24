@@ -1,0 +1,1 @@
+{"results":[{"file":"src/components/MainLayout.tsx","matches":[{"line":10,"content":"  Moon, Sun, Pin, XCircle, LayoutGrid, Link"}]}],"pattern":"LayoutGrid","path":"src/components/MainLayout.tsx","totalMatches":1}

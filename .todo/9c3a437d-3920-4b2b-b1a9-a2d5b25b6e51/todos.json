@@ -1,0 +1,20 @@
+[
+  {
+    "id": "1",
+    "content": "修复 style={{ color }} 内联样式问题（转换为 CSS 变量或十六进制值）",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "修复 recharts 图表 fill/stroke/stopColor 属性（转换为十六进制值）",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "验证修复效果",
+    "status": "completed",
+    "priority": "medium"
+  }
+]

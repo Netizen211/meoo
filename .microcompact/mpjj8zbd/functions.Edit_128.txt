@@ -1,0 +1,19 @@
+The file /home/project/src/pages/promotion/PromotionTotalTab.tsx has been updated. Made 2 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+   2→import { motion } from 'framer-motion';
+   3→import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+   4→import { DollarSign, ShoppingCart, TrendingUp, Target, Eye, Percent, Users, Mail, Star } from 'lucide-react';
+   5→
+   6→const COLORS = ['pdd-danger', 'pdd-primary', 'pdd-success', 'pdd-warning', 'pdd-purple', '#ff4d4f', 'pdd-cyan', '#eb2f96'];
+   7→
+   8→interface TotalKpiData {
+   9→  totalCost: number; promoOrders: number; promoGMV: number; roi: number; avgOrder: number; promoRatio: number;
+  10→  totalImpressions: number; totalClicks: number; ctr: number; cvr: number; cpc: number; cpa: number;
+  11→  inquiryCost: number; inquiryCount: number; favoriteCost: number; favoriteCount: number; followCost: number; followCount: number;
+
+<system-reminder>
+⚠️ NOTICE: You've used Edit on "/home/project/src/pages/promotion/PromotionTotalTab.tsx" 7 times consecutively.
+
+Verify your changes are taking effect before modifying again. If the approach isn't working, move on to the next task rather than retrying.
+</system-reminder>

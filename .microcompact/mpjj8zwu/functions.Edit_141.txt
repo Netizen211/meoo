@@ -1,0 +1,27 @@
+The file /home/project/src/pages/promotion/PromotionLiveTab.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  16→
+  17→  const kpiCards = [
+  18→    { label: '推广花费', value: liveKpiData.totalCost, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: 'pdd-danger' },
+  19→    { label: '推广订单数', value: liveKpiData.promoOrders, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, color: 'pdd-primary' },
+  20→    { label: '推广GMV', value: liveKpiData.promoGMV, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, color: 'pdd-success' },
+  21→    { label: '推广ROI', value: liveKpiData.roi, fmt: (v: number) => v.toFixed(2), icon: Target, color: '#722ed1' },
+  22→    { label: '曝光量', value: liveKpiData.totalImpressions, fmt: (v: number) => v.toFixed(0), icon: Eye, color: 'pdd-primary' },
+  23→    { label: '关注量', value: liveKpiData.followCount, fmt: (v: number) => v.toFixed(0), icon: Users, color: '#722ed1' },
+  24→    { label: '商品收藏量', value: liveKpiData.favoriteCount, fmt: (v: number) => v.toFixed(0), icon: Star, color: '#faad14' },
+  25→    { label: '直播评论量', value: liveKpiData.commentCount, fmt: (v: number) => v.toFixed(0), icon: Mail, color: '#13c2c2' },
+
+<system-reminder>
+🚫 EDIT LOOP WARNING: You've used Edit on "/home/project/src/pages/promotion/PromotionLiveTab.tsx" 8 times consecutively!
+
+Your current approach is likely not working. You need to change strategy NOW.
+
+⚠️ REQUIRED ACTIONS:
+1. STOP retrying the same approach on "/home/project/src/pages/promotion/PromotionLiveTab.tsx"
+2. Consider: is this modification actually critical? If not, SKIP it and move on to the next task
+3. If you must fix it, try a fundamentally different approach — not a minor variation of what you've been doing
+4. If you still can't get it right, tell the user what's blocking you and MOVE ON to the next step
+
+⏰ 4 more attempt(s) before Edit to this file is AUTOMATICALLY BLOCKED. Focus on forward progress.
+</system-reminder>

@@ -1,0 +1,13 @@
+The file /home/project/src/pages/StoresPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+   6→import { sf } from '../utils';
+   7→
+   8→export default function StoresPage() {
+   9→  const { stores, currentStore, addStore, switchStore, deleteStore } = useStore();
+  10→  const { uploadRecords, dataFilter, setDataFilter, getStoreData } = useData();
+  11→  const navigate = useNavigate();
+  12→  const [name, setName] = useState('');
+  13→  const [showAllStores, setShowAllStores] = useState(false);
+  14→
+  15→  const handleAdd = () => {

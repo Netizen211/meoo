@@ -1,0 +1,136 @@
+The file /home/project/src/pages/ProductPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 418→          </div>
+ 419→        )}
+ 420→      </motion.div>
+ 421→
+ 422→      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="pdd-card border border-gray-100 shadow-sm bg-white flex flex-col overflow-hidden">
+ 423→        <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/30">
+ 424→          <h3 className="text-sm font-bold text-gray-800 flex items-center gap-2"><Target size={15} color="#e02e24" />商品360°分析</h3>
+ 425→        </div>
+ 426→        {selectedProduct ? (() => {
+ 427→          const p = products.find(x => x.id === selectedProduct);
+ 428→          if (!p) return null;
+ 429→          const stat = productStats[selectedProduct];
+ 430→          return (
+ 431→            <div className="p-5 space-y-5 overflow-y-auto max-h-[560px] custom-scrollbar">
+ 432→              {/* 基础信息 */}
+ 433→              <div>
+ 434→                <div className="text-sm font-bold text-gray-900 truncate mb-1.5">{p.name}</div>
+ 435→                <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-gray-500">
+ 436→                  {p.code && <span className="font-mono bg-gray-100 px-1.5 py-0.5 rounded text-gray-600">{p.code}</span>}
+ 437→                  {p.firstDate && <span>首单: {p.firstDate}</span>}
+ 438→                  <span>活跃 {p.activeDays} 天</span>
+ 439→                </div>
+ 440→              </div>
+ 441→
+ 442→              {/* 核心指标 - 精简为6个关键指标 */}
+ 443→              <div className="grid grid-cols-3 gap-2">
+ 444→                {[
+ 445→                  { label: 'GMV', value: `¥${p.gmv.toFixed(0)}`, color: '#1890ff' },
+ 446→                  { label: '净利润', value: `¥${p.profit.toFixed(0)}`, color: p.profit >= 0 ? '#52c41a' : '#ff4d4f' },
+ 447→                  { label: '利润率', value: `${p.profitRate.toFixed(1)}%`, color: p.profitRate >= 0 ? '#52c41a' : '#ff4d4f' },
+ 448→                  { label: 'ROI', value: `${p.roi.toFixed(1)}%`, color: p.roi >= 0 ? '#52c41a' : '#ff4d4f' },
+ 449→                  { label: '销量', value: p.sales.toFixed(0), color: '#1890ff' },
+ 450→                  { label: '客单价', value: `¥${p.avgPrice.toFixed(0)}`, color: '#faad14' },
+ 451→                ].map(k => (
+ 452→                  <div key={k.label} className="bg-gray-50 rounded-lg p-2.5 text-center hover:bg-gray-100 transition-colors">
+ 453→                    <div className="text-[10px] text-gray-500 mb-1">{k.label}</div>
+ 454→                    <div className="text-sm font-bold font-mono" style={{ color: k.color }}>{k.value}</div>
+ 455→                  </div>
+ 456→                ))}
+ 457→              </div>
+ 458→
+ 459→              {/* 雷达图 */}
+ 460→              <div className="bg-gray-50/50 rounded-xl p-3">
+ 461→                <div className="text-[11px] font-semibold mb-2 text-gray-600">综合能力评分</div>
+ 462→                <ResponsiveContainer width="100%" height={180}><RadarChart data={radarData}><PolarGrid stroke="#e5e7eb" /><PolarAngleAxis dataKey="subject" tick={{ fontSize: 10, fill: '#6b7280' }} /><PolarRadiusAxis angle={30} domain={[0, 100]} tick={false} axisLine={false} /><Radar name="评分" dataKey="A" stroke="#e02e24" fill="#e02e24" fillOpacity={0.25} strokeWidth={2} /><Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '11px' }} /></RadarChart></ResponsiveContainer>
+ 463→              </div>
+ 464→
+ 465→              {/* 销售趋势迷你图 */}
+ 466→              {stat && stat.dailySales.length > 1 && (
+ 467→                <div>
+ 468→                  <div className="text-[11px] font-semibold mb-2 text-gray-600">近期销售趋势</div>
+ 469→                  <div className="bg-white border border-gray-100 rounded-xl p-2">
+ 470→                    <ResponsiveContainer width="100%" height={90}>
+ 471→                      <LineChart data={stat.dailySales}>
+ 472→                        <Line type="monotone" dataKey="sales" stroke="#1890ff" strokeWidth={2} dot={false} />
+ 473→                        <Tooltip formatter={(v: number) => [v.toFixed(0), '销量']} contentStyle={{ borderRadius: '6px', border: 'none', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', fontSize: '10px' }} />
+ 474→                      </LineChart>
+ 475→                    </ResponsiveContainer>
+ 476→                  </div>
+ 477→                </div>
+ 478→              )}
+ 479→
+ 480→              {/* 运营指标 - 两列布局 */}
+ 481→              <div>
+ 482→                <div className="text-[11px] font-semibold mb-2 text-gray-600">运营健康度</div>
+ 483→                <div className="grid grid-cols-2 gap-2">
+ 484→                  <div className="bg-gray-50 rounded-lg p-2.5">
+ 485→                    <div className="text-[10px] text-gray-500 mb-0.5">周转天数</div>
+ 486→                    <div className="text-sm font-bold font-mono" style={{ color: p.turnoverDays > 30 ? '#ff4d4f' : p.turnoverDays > 14 ? '#faad14' : '#52c41a' }}>
+ 487→                      {p.turnoverDays < 999 ? `${p.turnoverDays}天` : '-'}
+ 488→                    </div>
+ 489→                  </div>
+ 490→                  <div className="bg-gray-50 rounded-lg p-2.5">
+ 491→                    <div className="text-[10px] text-gray-500 mb-0.5">退款率</div>
+ 492→                    <div className="text-sm font-bold font-mono" style={{ color: p.refundRate > 10 ? '#ff4d4f' : '#52c41a' }}>{p.refundRate.toFixed(1)}%</div>
+ 493→                  </div>
+ 494→                  <div className="bg-gray-50 rounded-lg p-2.5">
+ 495→                    <div className="text-[10px] text-gray-500 mb-0.5">日均销量</div>
+ 496→                    <div className="text-sm font-bold font-mono text-gray-800">{p.avgDailySales.toFixed(1)}</div>
+ 497→                  </div>
+ 498→                  <div className="bg-gray-50 rounded-lg p-2.5">
+ 499→                    <div className="text-[10px] text-gray-500 mb-0.5">折扣率</div>
+ 500→                    <div className="text-sm font-bold font-mono text-gray-800">{p.discountRatio.toFixed(1)}%</div>
+ 501→                  </div>
+ 502→                </div>
+ 503→              </div>
+ 504→
+ 505→              {/* 推广数据（如有） */}
+ 506→              {stat && stat.hasPromoData && (
+ 507→                <div className="pt-4 border-t border-gray-100">
+ 508→                  <div className="text-[11px] font-semibold mb-2.5 text-gray-600">推广效果</div>
+ 509→                  <div className="grid grid-cols-3 gap-2">
+ 510→                    <div className="bg-purple-50/50 rounded-lg p-2 text-center">
+ 511→                      <div className="text-[9px] text-gray-500">CTR</div>
+ 512→                      <div className="text-xs font-bold font-mono text-purple-700">{stat.ctr.toFixed(2)}%</div>
+ 513→                    </div>
+ 514→                    <div className="bg-purple-50/50 rounded-lg p-2 text-center">
+ 515→                      <div className="text-[9px] text-gray-500">CVR</div>
+ 516→                      <div className="text-xs font-bold font-mono text-purple-700">{stat.cvr.toFixed(2)}%</div>
+ 517→                    </div>
+ 518→                    <div className="bg-purple-50/50 rounded-lg p-2 text-center">
+ 519→                      <div className="text-[9px] text-gray-500">花费</div>
+ 520→                      <div className="text-xs font-bold font-mono text-purple-700">¥{stat.promoCost.toFixed(0)}</div>
+ 521→                    </div>
+ 522→                  </div>
+ 523→                </div>
+ 524→              )}
+ 525→
+ 526→              {/* 查看详情按钮 */}
+ 527→              <button onClick={() => setDrawerProductId(selectedProduct)} className="w-full py-2.5 rounded-xl text-white text-xs font-semibold hover:shadow-lg hover:scale-[1.01] active:scale-[0.99] transition-all" style={{ background: 'linear-gradient(135deg, #e02e24 0%, #ff6b5b 100%)' }}>
+ 528→                查看完整分析报告
+ 529→              </button>
+ 530→            </div>
+ 531→          );
+ 532→        })() : (
+ 533→          <div className="flex-1 min-h-[360px] flex flex-col items-center justify-center text-xs text-gray-400 gap-3 p-6">
+ 534→            <div className="w-16 h-16 rounded-2xl bg-gray-50 flex items-center justify-center">
+ 535→              <Target size={28} className="text-gray-300" />
+ 536→            </div>
+ 537→            <div className="text-center">
+ 538→              <div className="font-medium text-gray-600 mb-1">选择商品进行分析</div>
+ 539→              <div className="text-[11px] text-gray-400">点击左侧表格中的商品名称</div>
+ 540→            </div>
+ 541→          </div>
+ 542→        )}
+ 543→      </motion.div>
+ 544→    </div>
+ 545→  );
+ 546→
+ 547→  const renderLifecyclePanel = () => (
+ 548→    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pdd-card border border-gray-200">
+ 549→      <div className="px-4 py-3 border-b border-gray-200">
+ 550→        <h3 className="text-sm font-semibold flex items-center gap-1.5"><Clock size={14} color="#e02e24" />动销分析</h3>

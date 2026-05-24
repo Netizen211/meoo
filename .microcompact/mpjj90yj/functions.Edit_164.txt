@@ -1,0 +1,13 @@
+The file /home/project/src/pages/InsurancePage.tsx has been updated. Made 4 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  89→
+  90→  const noData = filteredData.length === 0;
+  91→
+  92→  const kpiCards = [
+  93→    { label: '运费险总费用', value: `¥${totalCost.toFixed(2)}`, icon: DollarSign, color: 'pdd-danger', change: compareEnabled ? changePct(totalCost, compareCost) : null },
+  94→    { label: '费用占比', value: `${costRatio.toFixed(2)}%`, icon: Percent, color: '#faad14', change: null },
+  95→    { label: '运费补偿率', value: `${compRate.toFixed(1)}%`, icon: ShieldCheck, color: '#52c41a', change: null },
+  96→  ];
+  97→
+  98→  return (

@@ -1,0 +1,86 @@
+[
+  {
+    "id": "1",
+    "content": "修复 App.tsx 中的 setStoreDataMap 和 setUploadRecords 未定义错误",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "修复 FilterBar.tsx 的类型错误",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "修复 SearchBox.tsx 的类型错误",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "修复 AfterSalePage.tsx 的图表 size 属性错误",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "5",
+    "content": "修复 CostManagementPage.tsx 的 updatedAt 类型错误",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "6",
+    "content": "修复 DashboardPage.tsx 的 kpi 可能为 null 错误",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "7",
+    "content": "修复 LogisticsPage.tsx 的类型错误",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "8",
+    "content": "修复 PromotionPage.tsx 的 productCosts 属性错误",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "9",
+    "content": "修复 RegionPage.tsx 的类型错误",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "10",
+    "content": "修复 RiskPage.tsx 的 afterSaleRate 属性错误",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "11",
+    "content": "修复 StoresPage.tsx 的可能为 undefined 错误",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "12",
+    "content": "修复 TrendPage.tsx 的 null 错误",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "13",
+    "content": "修复 ProductFullLinkTab.tsx 的类型错误",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "14",
+    "content": "修复 formulaEngine.ts 的类型错误",
+    "status": "completed",
+    "priority": "medium"
+  }
+]

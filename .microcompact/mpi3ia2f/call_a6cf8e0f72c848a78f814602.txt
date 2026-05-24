@@ -1,0 +1,27 @@
+The file /home/project/src/pages/ProductLinksPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  88→    if (sortKey === key) setSortDir(d => d === 'desc' ? 'asc' : 'desc');
+  89→    else { setSortKey(key); setSortDir('desc'); }
+  90→  };
+  91→
+  92→  const exportCSV = () => {
+  93→    const headers = ['商品名称', '商品ID', 'GMV', '订单数', '销量', '客单价', '商家实收', '推广花费', '推广成交', '曝光量', '点击量', 'CTR', 'CVR', '折扣成本', '总成本', '退款金额', '退款率', '售后率', '折扣占比', '推广占比', '净利润', '利润率', 'ROI', '数据来源'];
+  94→    const rows = filteredProducts.map(p => {
+  95→      const source = p.hasOrderData && p.hasPromoData ? '订单+推广' : p.hasOrderData ? '订单' : p.hasPromoData ? '推广' : '无';
+  96→      return [p.productName, p.productId, p.gmv, p.orders, p.sales, p.avgOrderValue, p.revenue, p.promoCost, p.promoTransaction, p.promoImpressions, p.promoClicks, p.ctr, p.cvr, p.discount, p.totalCost, p.refund, p.refundRate, p.afterSaleRate, p.discountRatio, p.promoCostRatio, p.netProfit, p.profitRate, p.roi, source];
+  97→    });
+  98→    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  99→    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+ 100→    const url = URL.createObjectURL(blob);
+ 101→    const a = document.createElement('a');
+ 102→    a.href = url;
+ 103→    a.download = `product_correlation_${new Date().toISOString().slice(0, 10)}.csv`;
+ 104→    a.click();
+ 105→    URL.revokeObjectURL(url);
+ 106→  };
+ 107→
+ 108→  const kpiCards = [
+ 109→    { label: '总GMV', value: `¥${fmtInt(totalStats.gmv)}`, icon: DollarSign, color: '#1890ff' },
+ 110→    { label: '总实收', value: `¥${fmtInt(totalStats.revenue)}`, icon: TrendingUp, color: '#52c41a' },
+ 111→    { label: '推广花费', value: `¥${fmtInt(totalStats.promoCost)}`, icon: Target, color: '#722ed1' },

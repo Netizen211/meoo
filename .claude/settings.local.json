@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(read d *)",
+      "Bash(npx tsc *)",
+      "Bash(npx webpack *)",
+      "Bash(pnpm install *)",
+      "Bash(rm -rf node_modules)",
+      "Bash(rm -f pnpm-lock.yaml)",
+      "Bash(pnpm run *)",
+      "Bash(python -c ' *)",
+      "Bash(python)",
+      "Bash(start *)",
+      "Bash(python fix_batch.py)",
+      "Bash(python verify_fixes.py)",
+      "Bash(rm -f fix_batch.py verify_fixes.py)",
+      "Bash(npm run *)"
+    ]
+  }
+}

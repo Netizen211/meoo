@@ -1,0 +1,26 @@
+[
+  {
+    "id": "1",
+    "content": "修复 MainLayout.tsx 中的硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "修复 KpiCard.tsx 中的硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "修复 MetricCard.tsx 中的硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "修复 FilterBar.tsx 中的硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  }
+]

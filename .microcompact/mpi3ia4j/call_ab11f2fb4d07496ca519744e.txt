@@ -1,0 +1,46 @@
+The file /home/project/src/pages/ProductLinksPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 259→                      {p.hasPromoData && <Target size={12} color="#722ed1" />}
+ 260→                      <span className="text-sm font-bold" style={{ color: p.roi >= 1 ? '#52c41a' : '#ff4d4f' }}>ROI {p.roi.toFixed(2)}x</span>
+ 261→                    </div>
+ 262→                  </div>
+ 263→                  <div className="grid grid-cols-3 gap-2 text-xs">
+ 264→                    <div><span className="text-[var(--pdd-text-secondary)]">GMV</span><br /><span className="font-mono font-bold">¥{fmt(p.gmv)}</span></div>
+ 265→                    <div><span className="text-[var(--pdd-text-secondary)]">实收</span><br /><span className="font-mono font-bold text-[#52c41a]">¥{fmt(p.revenue)}</span></div>
+ 266→                    <div><span className="text-[var(--pdd-text-secondary)]">成本</span><br /><span className="font-mono font-bold text-[#ff4d4f]">¥{fmt(p.totalCost)}</span></div>
+ 267→                    <div><span className="text-[var(--pdd-text-secondary)]">订单</span><br /><span className="font-mono">{p.orders}</span></div>
+ 268→                    <div><span className="text-[var(--pdd-text-secondary)]">销量</span><br /><span className="font-mono">{p.sales}</span></div>
+ 269→                    <div><span className="text-[var(--pdd-text-secondary)]">客单价</span><br /><span className="font-mono">¥{fmt(p.avgOrderValue)}</span></div>
+ 270→                    <div><span className="text-[var(--pdd-text-secondary)]">退款率</span><br /><span className="font-mono">{p.refundRate.toFixed(1)}%</span></div>
+ 271→                    <div><span className="text-[var(--pdd-text-secondary)]">净利润</span><br /><span className="font-mono font-bold" style={{ color: p.netProfit >= 0 ? '#52c41a' : '#ff4d4f' }}>¥{fmt(p.netProfit)}</span></div>
+ 272→                    <div><span className="text-[var(--pdd-text-secondary)]">利润率</span><br /><span className="font-mono">{p.profitRate.toFixed(1)}%</span></div>
+ 273→                    {p.hasPromoData && (
+ 274→                      <>
+ 275→                        <div><span className="text-[var(--pdd-text-secondary)]">推广花费</span><br /><span className="font-mono text-[#722ed1]">¥{fmt(p.promoCost)}</span></div>
+ 276→                        <div><span className="text-[var(--pdd-text-secondary)]">推广成交</span><br /><span className="font-mono text-[#52c41a]">¥{fmt(p.promoTransaction)}</span></div>
+ 277→                        <div><span className="text-[var(--pdd-text-secondary)]">曝光量</span><br /><span className="font-mono">{fmtInt(p.promoImpressions)}</span></div>
+ 278→                        <div><span className="text-[var(--pdd-text-secondary)]">点击量</span><br /><span className="font-mono">{fmtInt(p.promoClicks)}</span></div>
+ 279→                        <div><span className="text-[var(--pdd-text-secondary)]">CTR</span><br /><span className="font-mono">{p.ctr.toFixed(2)}%</span></div>
+ 280→                        <div><span className="text-[var(--pdd-text-secondary)]">CVR</span><br /><span className="font-mono">{p.cvr.toFixed(2)}%</span></div>
+ 281→                      </>
+ 282→                    )}
+ 283→                  </div>
+ 284→                </motion.div>
+ 285→              ))}
+ 286→            </div>
+ 287→          )}
+ 288→
+
+<system-reminder>
+⚠️ REPEATED FILE MODIFICATION WARNING: You have modified "/home/project/src/pages/ProductLinksPage.tsx" 5 times (Write + Edit combined)!
+
+You keep rewriting or editing the same file. This is a strong sign your current approach is not working.
+
+🛑 REQUIRED ACTIONS:
+1. STOP and think: why do you keep modifying the same file?
+2. If the content keeps being wrong, try a fundamentally different approach
+3. If you're making incremental fixes, consolidate them into ONE write instead of many small changes
+
+⏰ 3 more attempt(s) before modifications to this file are AUTOMATICALLY BLOCKED.
+</system-reminder>

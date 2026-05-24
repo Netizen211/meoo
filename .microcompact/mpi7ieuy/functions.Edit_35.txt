@@ -1,0 +1,13 @@
+The file /home/project/src/pages/DashboardPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 315→    { label: '退款率', value: kpi?.rfRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: RotateCcw, color: '#ff4d4f', change: null },
+ 316→    { label: '邮费总额', value: kpi?.postage, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Mail, color: '#13c2c2', change: null },
+ 317→    { label: '买家数', value: new Set(filteredOrders.map(o => { const no = String(o['订单号'] || '').trim(); return no.length >= 4 ? no.slice(-4) : no; }).filter(Boolean)).size || (filteredOrders.length > 0 ? 1 : 0), fmt: (v: number) => v.toFixed(0), icon: Users, color: '#722ed1', change: null },
+ 318→    { label: '商品数', value: filteredOrders.reduce((s, o) => s + safeFloat(o['商品数量']), 0), fmt: (v: number) => v.toFixed(0), icon: Package, color: '#eb2f96', change: null },
+ 319→    { label: '平均件数', value: (kpi?.cnt || 0) > 0 ? filteredOrders.reduce((s, o) => s + safeFloat(o['商品数量']), 0) / (kpi?.cnt || 1) : 0, fmt: (v: number) => v.toFixed(1), icon: Tag, color: '#fa8c16', change: null },
+ 320→    { label: '退款金额', value: kpi?.rfAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: RotateCcw, color: '#ff7875', change: null },
+ 321→    { label: '优惠总额', value: kpi?.discount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, color: '#ffc53d', change: null },
+ 322→    { label: '发货率', value: kpi?.conversionRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Truck, color: '#36cfc9', change: null },
+ 323→    { label: '平均发货时长', value: kpi?.avgShipHours, fmt: (v: number) => `${v.toFixed(1)}h`, icon: Clock, color: '#597ef7', change: null },
+ 324→    { label: '用户实付', value: kpi?.paid, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: '#73d13d', change: null },

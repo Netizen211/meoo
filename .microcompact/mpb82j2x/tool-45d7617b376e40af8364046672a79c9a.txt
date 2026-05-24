@@ -1,0 +1,14 @@
+The file /home/project/src/components/MainLayout.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  39→};
+  40→
+  41→export default function MainLayout({ children }: { children: React.ReactNode }) {
+  42→  const { user, isTestUser, logout } = useAuth();
+  43→  const { stores, currentStore, switchStore, addStore } = useStore();
+  44→  const { dataFilter, setDataFilter } = useData();
+  45→  const [storeDropdown, setStoreDropdown] = useState(false);
+  46→  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  47→  const [searchOpen, setSearchOpen] = useState(false);
+  48→  const [notifOpen, setNotifOpen] = useState(false);
+  49→  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);

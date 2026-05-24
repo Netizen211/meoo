@@ -1,0 +1,15 @@
+The file /home/project/src/pages/ProductLinksPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+   1→import React, { useState, useMemo } from 'react';
+   2→import { motion, AnimatePresence } from 'framer-motion';
+   3→import { Link, TrendingUp, TrendingDown, DollarSign, ShoppingCart, BarChart3, ArrowUpDown, Download, Filter, LayoutGrid, Table, Eye, RefreshCw, Percent, Target, RotateCcw, Package, Search, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
+   4→import { useData } from '../App';
+   5→import { useProductStats, useTotalProductStats, ProductStat } from '../components/ProductLinkStats';
+   6→import ProductLinkChart from '../components/ProductLinkChart';
+   7→import TimeFilter, { TimeRange, TimeGranularity, filterByTimeRange, getAllDateGroups, filterPromoByTimeRange } from '../components/TimeFilter';
+   8→
+   9→function fmt(n: number) { return n.toFixed(2); }
+  10→function fmtInt(n: number) { return n.toFixed(0); }
+  11→
+  12→type ViewMode = 'card' | 'table' | 'chart';

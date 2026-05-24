@@ -1,0 +1,74 @@
+[
+  {
+    "id": "1",
+    "content": "阶段一：创建主题配置文件 src/themes/types.ts",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "阶段一：创建主题配置 src/themes/theme-config.ts",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "阶段一：重构 CSS 变量系统 src/styles/theme.css",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "阶段一：更新 tailwind.config.js 同步主题变量",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "5",
+    "content": "阶段一：更新 src/styles/index.css 整合 theme.css",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "6",
+    "content": "阶段二：修复 MainLayout.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "7",
+    "content": "阶段二：修复 KpiCard.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "8",
+    "content": "阶段二：修复 MetricCard.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "9",
+    "content": "阶段二：修复 FilterBar.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "10",
+    "content": "阶段二：批量修复其他组件硬编码颜色",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "11",
+    "content": "阶段三：优化 useTheme.ts 主题切换",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "12",
+    "content": "阶段四：验证所有页面配色协调",
+    "status": "completed",
+    "priority": "high"
+  }
+]

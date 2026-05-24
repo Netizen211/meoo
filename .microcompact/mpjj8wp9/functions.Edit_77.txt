@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardTablePanel.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  29→        <div className="flex items-center gap-2">
+  30→          <div className="flex items-center gap-1">
+  31→            {columns.map(c => (
+  32→              <button key={c.key} onClick={() => toggleCol(c.key)}
+  33→                className={`px-1.5 py-0.5 rounded text-xs flex items-center gap-1 ${hiddenCols.has(c.key) ? 'bg-[#1e2235] text-pdd-text-secondary' : 'bg-indigo-500/10 text-indigo-400'}`}>
+  34→                {hiddenCols.has(c.key) ? <EyeOff size={10} /> : <Eye size={10} />}{c.label}
+  35→              </button>
+  36→            ))}
+  37→          </div>
+  38→          <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}

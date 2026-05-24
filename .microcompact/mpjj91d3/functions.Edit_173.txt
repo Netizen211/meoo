@@ -1,0 +1,13 @@
+The file /home/project/src/pages/MembershipPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+   9→    key: 'free',
+  10→    name: '免费版',
+  11→    price: '¥0',
+  12→    period: '/永久',
+  13→    color: 'pdd-text-secondary',
+  14→    features: [
+  15→      { text: '52个基础指标', included: true },
+  16→      { text: '单期数据上传', included: true },
+  17→      { text: '浏览器本地计算', included: true },
+  18→      { text: '7天数据保留', included: true },

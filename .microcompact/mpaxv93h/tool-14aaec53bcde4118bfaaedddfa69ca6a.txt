@@ -1,0 +1,96 @@
+The file /home/project/.plan/1ec21e77-f46d-44f5-bf35-583b3cdc52b8/plan.md has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+   1→# 推广利润页面数据不显示问题修复计划
+   2→
+   3→## 问题诊断
+   4→
+   5→### 根本原因分析
+   6→
+   7→经过深入分析，我发现了问题的根本原因：
+   8→
+   9→**文件 Sheet 命名规则变化导致匹配失败**
+  10→
+  11→用户上传的文件 `商品推广_分天数据_20260217至20260517.xlsx` 包含两个 Sheet：
+  12→1. `汇总数据_分天数据_20260217至20260517`（汇总数据）
+  13→2. `商品_分天数据_20260217至20260517`（商品明细数据）
+  14→
+  15→**问题代码位置**：`src/pages/UploadPage.tsx` 第 128-132 行
+  16→
+  17→```typescript
+  18→if (detectedType === '商品推广数据') {
+  19→  const summarySheet = wb.SheetNames.find(s => s.includes('汇总')) || wb.SheetNames[0];
+  20→  const productSheet = wb.SheetNames.find(s => s.includes('商品')) || wb.SheetNames[1] || wb.SheetNames[0];
+  21→  existing.promotionSummary = sheets[summarySheet] || [];
+  22→  existing.promotionProducts = sheets[productSheet] || [];
+  23→  // ...
+  24→}
+  25→```
+  26→
+  27→**问题分析**：
+  28→1. `summarySheet` 匹配逻辑：`s.includes('汇总')` ✅ 能匹配到 `汇总数据_分天数据...`
+  29→2. `productSheet` 匹配逻辑：`s.includes('商品')` ✅ 能匹配到 `商品_分天数据...`
+  30→3. **但是**：`sheets[summarySheet]` 和 `sheets[productSheet]` 获取的是 Sheet 名称，而 `sheets` 对象的 key 是 Sheet 名称，所以这部分逻辑是正确的
+  31→
+  32→**真正的问题**：
+  33→- 数据确实被正确解析并存储到 `parsedData` 中
+  34→- 但 `PromotionPage.tsx` 第 18 行检查 `parsedData?.promotionSummary?.length > 0` 时，可能因为数据持久化问题导致数据丢失
+  35→
+  36→### 数据流分析
+  37→
+  38→1. **上传流程**：`UploadPage.tsx` → 解析文件 → `setParsedData()` → 存储到 `parsedData`
+  39→2. **持久化流程**：`App.tsx` 第 242-256 行 → `localStorage.setItem('dianfx_parsed_data', ...)`
+  40→3. **读取流程**：`App.tsx` 第 202-220 行 → 从 `localStorage` 读取并恢复 `parsedData`
+  41→
+  42→**潜在问题**：
+  43→- `Set` 对象在序列化/反序列化过程中可能丢失
+  44→- 数据量大时可能超出 `localStorage` 限制（5MB）
+  45→
+  46→## 修复方案
+  47→
+  48→### 方案一：优化数据检测逻辑（推荐）
+  49→
+  50→**修改文件**：`src/pages/UploadPage.tsx`
+  51→
+  52→**修改内容**：
+  53→1. 在解析完成后，添加数据验证日志
+  54→2. 确保 `promotionSummary` 和 `promotionProducts` 不为空
+  55→3. 添加错误处理，防止数据丢失
+  56→
+  57→### 方案二：增强数据持久化
+  58→
+  59→**修改文件**：`src/App.tsx`
+  60→
+  61→**修改内容**：
+  62→1. 优化 `Set` 对象的序列化/反序列化逻辑
+  63→2. 添加数据压缩，防止超出 `localStorage` 限制
+  64→3. 添加数据完整性检查
+  65→
+  66→### 方案三：添加调试信息
+  67→
+  68→**修改文件**：`src/pages/PromotionPage.tsx`
+  69→
+  70→**修改内容**：
+  71→1. 在空数据提示中显示当前 `parsedData` 的状态
+  72→2. 帮助用户了解数据是否正确上传
+  73→
+  74→## 具体修改步骤
+  75→
+  76→### 步骤 1：修改 UploadPage.tsx
+  77→- 在第 127-133 行添加数据验证
+  78→- 确保 `promotionSummary` 和 `promotionProducts` 正确赋值
+  79→- 添加 console.log 用于调试
+  80→
+  81→### 步骤 2：修改 PromotionPage.tsx
+  82→- 在第 135-142 行优化空数据检查
+  83→- 添加更详细的提示信息
+  84→
+  85→### 步骤 3：测试验证
+  86→- 上传测试文件
+  87→- 检查控制台日志
+  88→- 验证推广利润页面是否显示数据
+  89→
+  90→## 预期结果
+  91→- 用户上传商品推广数据后，数据能正确解析并持久化
+  92→- 推广利润页面能正确显示 KPI 指标、趋势图表等分析内容
+  93→- 数据在页面刷新后依然可用

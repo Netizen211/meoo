@@ -1,0 +1,69 @@
+The file /home/project/src/pages/UploadPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 254→                      <p className="text-xs text-[var(--pdd-text-secondary)]">
+ 255→                        {record.fileType} · {record.rowCount}行 · {new Date(record.uploadedAt).toLocaleString('zh-CN')}
+ 256→                      </p>
+ 257→                    </div>
+ 258→                    {deleteConfirm === record.id ? (
+ 259→                      <div className="flex items-center gap-2">
+ 260→                        <span className="text-xs text-[#ff4d4f]">确认删除?</span>
+ 261→                        <button
+ 262→                          onClick={() => handleDeleteRecord(record.id)}
+ 263→                          className="px-2 py-1 text-xs bg-[#ff4d4f] text-white rounded hover:bg-[#ff7875] transition-colors"
+ 264→                        >
+ 265→                          确认
+ 266→                        </button>
+ 267→                        <button
+ 268→                          onClick={() => setDeleteConfirm(null)}
+ 269→                          className="px-2 py-1 text-xs border border-[#e2e8f0] rounded hover:bg-[#f1f5f9] transition-colors"
+ 270→                        >
+ 271→                          取消
+ 272→                        </button>
+ 273→                      </div>
+ 274→                    ) : (
+ 275→                      <div className="flex items-center gap-2">
+ 276→                        {record.fileType === '商品推广数据' && (
+ 277→                          <button
+ 278→                            onClick={() => window.location.hash = '#/promotion'}
+ 279→                            className="px-2 py-1 text-xs bg-[#52c41a] text-white rounded hover:bg-[#73d13d] transition-colors"
+ 280→                          >同步</button>
+ 281→                        )}
+ 282→                        {record.fileType === '明星店铺数据' && (
+ 283→                          <button
+ 284→                            onClick={() => window.location.hash = '#/promotion'}
+ 285→                            className="px-2 py-1 text-xs bg-[#52c41a] text-white rounded hover:bg-[#73d13d] transition-colors"
+ 286→                          >同步</button>
+ 287→                        )}
+ 288→                        {record.fileType === '直播推广数据' && (
+ 289→                          <button
+ 290→                            onClick={() => window.location.hash = '#/promotion'}
+ 291→                            className="px-2 py-1 text-xs bg-[#52c41a] text-white rounded hover:bg-[#73d13d] transition-colors"
+ 292→                          >同步</button>
+ 293→                        )}
+ 294→                        {record.fileType === '订单数据' && (
+ 295→                          <button
+ 296→                            onClick={() => window.location.hash = '#/dashboard'}
+ 297→                            className="px-2 py-1 text-xs bg-[#52c41a] text-white rounded hover:bg-[#73d13d] transition-colors"
+ 298→                          >同步</button>
+ 299→                        )}
+ 300→                        {record.fileType === '运费险数据' && (
+ 301→                          <button
+ 302→                            onClick={() => window.location.hash = '#/shipping-insurance'}
+ 303→                            className="px-2 py-1 text-xs bg-[#52c41a] text-white rounded hover:bg-[#73d13d] transition-colors"
+ 304→                          >同步</button>
+ 305→                        )}
+ 306→                        <button
+ 307→                          onClick={() => setDeleteConfirm(record.id)}
+ 308→                          className="p-1.5 text-[var(--pdd-text-secondary)] hover:text-[var(--pdd-danger)] hover:bg-red-50 rounded transition-colors"
+ 309→                          title="删除此上传记录"
+ 310→                        >
+ 311→                          <Trash2 size={16} />
+ 312→                        </button>
+ 313→                      </div>
+ 314→                    )}
+ 315→                  </div>
+ 316→                ))}
+ 317→              </div>
+ 318→              <div className="mt-3 pt-3 border-t border-[var(--pdd-border)]">
+ 319→                <p className="text-xs text-[var(--pdd-text-secondary)] flex items-center gap-1">

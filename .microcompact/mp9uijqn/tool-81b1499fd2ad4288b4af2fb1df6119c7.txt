@@ -1,0 +1,29 @@
+The file /home/project/src/App.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+   1→import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+   2→import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+   3→import LoginPage from './pages/LoginPage';
+   4→import StoresPage from './pages/StoresPage';
+   5→import MainLayout from './components/MainLayout';
+   6→import UploadPage from './pages/UploadPage';
+   7→import DashboardPage from './pages/DashboardPage';
+   8→import CostManagementPage from './pages/CostManagementPage';
+   9→import ProductPage from './pages/ProductPage';
+  10→import UserPage from './pages/UserPage';
+  11→import TrendPage from './pages/TrendPage';
+  12→import RegionPage from './pages/RegionPage';
+  13→import LogisticsPage from './pages/LogisticsPage';
+  14→import CostPage from './pages/CostPage';
+  15→import AfterSalePage from './pages/AfterSalePage';
+  16→import InsurancePage from './pages/InsurancePage';
+  17→import PromotionPage from './pages/PromotionPage';
+  18→import RiskPage from './pages/RiskPage';
+  19→import MembershipPage from './pages/MembershipPage';
+  20→import { AdminHomePage, AdminUsersPage, AdminMembersPage, AdminDataPage, AdminAiPage, AdminSettingsPage } from './pages/AdminPages';
+  21→import AdminLayout from './components/AdminLayout';
+  22→
+  23→// Auth context
+  24→interface User {
+  25→  id: string;
+  26→  username: string;

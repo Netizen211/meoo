@@ -1,0 +1,13 @@
+The file /home/project/src/pages/CostPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  66→
+  67→  const compareKpi = useMemo(() => {
+  68→    if (!compareOrders.length) return null;
+  69→    const totalMerchant = compareOrders.reduce((s, o) => s + safeFloat(o['商家实收金额(元)']), 0);
+  70→    const totalDisc = compareOrders.reduce((s, o) => s + safeFloat(o['店铺优惠折扣(元)']) + safeFloat(o['平台优惠折扣(元)']) + safeFloat(o['多多支付立减金额(元)']), 0);
+  71→    const totalProduct = compareOrders.reduce((s, o) => s + safeFloat(o['商品总价(元)']), 0);
+  72→    return { totalMerchant, totalDisc, recvRate: totalProduct > 0 ? (totalMerchant / totalProduct) * 100 : 0 };
+  73→  }, [compareOrders]);
+  74→
+  75→  const dailyData = useMemo(() => {

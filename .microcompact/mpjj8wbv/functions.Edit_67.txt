@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardKpiPanel.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  86→      className={`cursor-move transition-all ${draggedPanel === 'kpi' ? 'opacity-50 scale-95' : ''}`}>
+  87→      <div className="flex items-center justify-between mb-2">
+  88→        <h3 className="text-sm font-semibold text-white">核心指标</h3>
+  89→        <div className="flex items-center gap-2">
+  90→          <button onClick={() => setShowKpiSelector(!showKpiSelector)} className="text-xs text-pdd-primary-light hover:text-indigo-300 flex items-center gap-1">
+  91→            <Settings size={12} /> 选择指标
+  92→          </button>
+  93→          <Move size={14} className="text-[#64748b]" />
+  94→        </div>
+  95→      </div>

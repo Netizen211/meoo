@@ -1,0 +1,28 @@
+The file /home/project/src/pages/PromotionPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 190→    }
+ 191→    return channels;
+ 192→  }, [filteredPromoSummary, filteredStarSummary, filteredLiveSummary, hasPromo, hasStar, hasLive]);
+ 193→
+ 194→  const filteredPromoProducts = useMemo(() => filterPromoByTimeRange(currentDisplayData?.promotionProducts || [], allDates, timeRange), [currentDisplayData, allDates, timeRange]);
+ 195→
+ 196→  const topProducts = useMemo(() => {
+ 197→    if (!filteredPromoProducts.length) return [];
+ 198→    return filteredPromoProducts
+ 199→      .map((r: any) => ({
+ 200→        name: String(r['商品名称'] || r['商品'] || '').slice(0, 20),
+ 201→        cost: safeFloat(r['总花费(元)'] || r['花费(元)'] || r['推广花费']),
+ 202→        orders: parseInt(r['成交笔数'] || r['订单数'] || '0') || 0,
+ 203→        gmv: safeFloat(r['交易额(元)'] || r['成交金额(元)'] || r['GMV']),
+ 204→        roi: safeFloat(r['总花费(元)'] || r['花费(元)'] || r['推广花费']) > 0 ? safeFloat(r['交易额(元)'] || r['成交金额(元)'] || r['GMV']) / safeFloat(r['总花费(元)'] || r['花费(元)'] || r['推广花费']) : 0,
+ 205→        cvr: safeFloat(r['点击率'] || r['转化率'] || r['CTR']) || 0,
+ 206→      }))
+ 207→      .sort((a, b) => b.cost - a.cost)
+ 208→      .slice(0, 10);
+ 209→  }, [filteredPromoProducts]);
+ 210→
+ 211→  const profitData = useMemo(() => {
+ 212→    if (!filteredOrders.length || !hasAnyPromo) return null;
+ 213→    const merchantIncome = filteredOrders.reduce((s: number, o: any) => s + safeFloat(o['商家实收金额(元)']), 0);
+ 214→    const promoCost = totalKpiData?.totalCost || 0;

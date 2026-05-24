@@ -1,0 +1,13 @@
+The file /home/project/src/pages/AdminPages.tsx has been updated. Made 9 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  37→    <div className="space-y-4">
+  38→      <h2 className="text-white text-lg font-bold">平台概览</h2>
+  39→      <div className="grid grid-cols-4 gap-3">
+  40→        <StatCard icon={Users} label="总用户数" value={MOCK_STATS.totalUsers} color="text-pdd-primary-light" />
+  41→        <StatCard icon={Database} label="总店铺数" value={MOCK_STATS.totalStores} color="text-pdd-success" />
+  42→        <StatCard icon={Database} label="上传文件数" value={MOCK_STATS.totalFiles} color="text-yellow-400" />
+  43→        <StatCard icon={Database} label="总订单数" value={MOCK_STATS.totalOrders} color="text-pdd-red" />
+  44→      </div>
+  45→      <div className={cardCls}>
+  46→        <h3 className="text-white text-sm mb-2">近7日上传趋势</h3>

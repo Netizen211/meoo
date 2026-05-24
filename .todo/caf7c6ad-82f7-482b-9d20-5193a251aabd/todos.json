@@ -1,0 +1,32 @@
+[
+  {
+    "id": "m1",
+    "status": "completed",
+    "content": "分析 ProductPage 和 ProductLinksPage 的内容结构",
+    "priority": "high"
+  },
+  {
+    "id": "m2",
+    "status": "completed",
+    "content": "在 ProductPage 新增'全链路'Tab，整合 ProductLinksPage 内容",
+    "priority": "high"
+  },
+  {
+    "id": "m3",
+    "status": "completed",
+    "content": "修改路由配置，移除独立的商品关联路由",
+    "priority": "high"
+  },
+  {
+    "id": "m4",
+    "status": "completed",
+    "content": "修改导航菜单，移除商品关联入口",
+    "priority": "high"
+  },
+  {
+    "id": "m5",
+    "status": "completed",
+    "content": "验证编译通过",
+    "priority": "high"
+  }
+]

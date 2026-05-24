@@ -1,0 +1,27 @@
+The file /home/project/src/pages/promotion/PromotionProductTab.tsx has been updated. Made 4 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  22→export default function PromotionProductTab({ productKpiData, trendData, topProducts, rangeLabel }: Props) {
+  23→  if (!productKpiData) return <div className="pdd-card text-center py-8 text-[var(--pdd-text-secondary)]">暂无商品推广数据</div>;
+  24→
+  25→  const kpiCards = [
+  26→    { label: '推广花费', value: productKpiData.totalCost, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: 'pdd-danger' },
+  27→    { label: '推广订单数', value: productKpiData.promoOrders, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, color: '#1890ff' },
+  28→    { label: '推广GMV', value: productKpiData.promoGMV, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, color: '#52c41a' },
+  29→    { label: '推广ROI', value: productKpiData.roi, fmt: (v: number) => v.toFixed(2), icon: Target, color: '#722ed1' },
+  30→    { label: '曝光量', value: productKpiData.totalImpressions, fmt: (v: number) => v.toFixed(0), icon: Eye, color: '#1890ff' },
+  31→    { label: '点击量', value: productKpiData.totalClicks, fmt: (v: number) => v.toFixed(0), icon: Target, color: '#52c41a' },
+
+<system-reminder>
+🚫 EDIT LOOP WARNING: You've used Edit on "/home/project/src/pages/promotion/PromotionProductTab.tsx" 8 times consecutively!
+
+Your current approach is likely not working. You need to change strategy NOW.
+
+⚠️ REQUIRED ACTIONS:
+1. STOP retrying the same approach on "/home/project/src/pages/promotion/PromotionProductTab.tsx"
+2. Consider: is this modification actually critical? If not, SKIP it and move on to the next task
+3. If you must fix it, try a fundamentally different approach — not a minor variation of what you've been doing
+4. If you still can't get it right, tell the user what's blocking you and MOVE ON to the next step
+
+⏰ 4 more attempt(s) before Edit to this file is AUTOMATICALLY BLOCKED. Focus on forward progress.
+</system-reminder>

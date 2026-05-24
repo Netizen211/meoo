@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardKpiPanel.tsx has been updated. Made 2 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  89→        <div className="flex items-center gap-2">
+  90→          <button onClick={() => setShowKpiSelector(!showKpiSelector)} className="text-xs text-pdd-primary-light hover:text-indigo-300 flex items-center gap-1">
+  91→            <Settings size={12} /> 选择指标
+  92→          </button>
+  93→          <Move size={14} className="text-pdd-text-secondary" />
+  94→        </div>
+  95→      </div>
+  96→      {showKpiSelector && (
+  97→        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="bg-pdd-card rounded-xl border border-pdd-border p-3 mb-2">
+  98→          <div className="mb-3 pb-2 border-b border-pdd-border">

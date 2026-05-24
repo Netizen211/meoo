@@ -1,0 +1,26 @@
+[
+  {
+    "id": "1",
+    "content": "创建 ProductInfoCard.tsx - 商品基础信息区组件",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "创建 SalesDataCard.tsx - 销售数据区组件",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "创建 CostProfitCard.tsx - 成本利润区组件",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "创建 PromotionDataCard.tsx - 推广数据区组件",
+    "status": "completed",
+    "priority": "high"
+  }
+]

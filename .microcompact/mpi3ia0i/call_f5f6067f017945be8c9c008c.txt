@@ -1,0 +1,30 @@
+The file /home/project/src/pages/ProductLinksPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 139→    { key: 'netProfit', label: '净利润', sortable: true },
+ 140→    { key: 'profitRate', label: '利润率', sortable: true },
+ 141→  ];
+ 142→
+ 143→  const renderStatValue = (s: ProductStat, key: string) => {
+ 144→    const isRate = ['roi', 'refundRate', 'afterSaleRate', 'discountRatio', 'promoCostRatio', 'profitRate', 'ctr', 'cvr'].includes(key);
+ 145→    const isMoney = ['gmv', 'revenue', 'promoCost', 'promoTransaction', 'discount', 'totalCost', 'refund', 'netProfit', 'avgOrderValue'].includes(key);
+ 146→    const isCount = ['orders', 'sales', 'promoImpressions', 'promoClicks'].includes(key);
+ 147→    const val = s[key as keyof ProductStat] as number;
+ 148→    if (isRate) {
+ 149→      const color = key === 'roi' || key === 'profitRate' ? (val >= 0 ? '#52c41a' : '#ff4d4f') : undefined;
+ 150→      return <span style={{ color }}>{val.toFixed(1)}%</span>;
+ 151→    }
+ 152→    if (isMoney) {
+ 153→      const color = key === 'netProfit' ? (val >= 0 ? '#52c41a' : '#ff4d4f') : key === 'revenue' || key === 'promoTransaction' ? '#52c41a' : key === 'totalCost' || key === 'promoCost' ? '#ff4d4f' : undefined;
+ 154→      return <span style={{ color }}>¥{fmt(val)}</span>;
+ 155→    }
+ 156→    if (isCount) {
+ 157→      return <span>{fmtInt(val)}</span>;
+ 158→    }
+ 159→    return <span>{val}</span>;
+ 160→  };
+ 161→
+ 162→  const selectedDetail = selectedProduct ? productStats[selectedProduct] : null;
+ 163→
+ 164→  const noData = productList.length === 0;
+ 165→

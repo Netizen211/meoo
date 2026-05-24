@@ -1,0 +1,86 @@
+[
+  {
+    "id": "1",
+    "content": "读取所有待修复组件文件",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "修复 DataTable.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "修复 DataGrid.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "修复 ChartContainer.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "5",
+    "content": "修复 TimeFilter.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "6",
+    "content": "修复 ExportButton.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "7",
+    "content": "修复 SearchBox.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "8",
+    "content": "修复 FilterPanel.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "9",
+    "content": "修复 AmountFilterPanel.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "10",
+    "content": "修复 AdminLayout.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "11",
+    "content": "修复 ProductLinkChart.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "12",
+    "content": "修复 ProductLinkStats.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "13",
+    "content": "修复 SampleDataImporter.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "14",
+    "content": "汇总修改结果",
+    "status": "completed",
+    "priority": "medium"
+  }
+]

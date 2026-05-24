@@ -1,0 +1,44 @@
+[
+  {
+    "id": "1",
+    "content": "读取 App.tsx 了解 useData hook 的完整数据结构",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "重构 CostManagementPage.tsx - 添加全局设置区域",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "实现税务配置 Tab 功能",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "实现自定义扣费 Tab 功能",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "5",
+    "content": "增强裸货成本填充 Tab - 添加成本历史和异常预警",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "6",
+    "content": "实现批量导入成本功能",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "7",
+    "content": "验证代码编译",
+    "status": "completed",
+    "priority": "high"
+  }
+]

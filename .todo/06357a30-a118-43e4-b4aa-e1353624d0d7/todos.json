@@ -1,0 +1,20 @@
+[
+  {
+    "id": "1",
+    "status": "in_progress",
+    "content": "调查商品概览表格推广数据列显示为-的原因",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "status": "pending",
+    "content": "修复推广数据同步到商品概览表格",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "status": "pending",
+    "content": "验证构建和页面正常",
+    "priority": "medium"
+  }
+]

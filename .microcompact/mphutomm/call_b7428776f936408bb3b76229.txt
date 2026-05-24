@@ -1,0 +1,14 @@
+The file /home/project/src/pages/dashboard/DashboardDetailModal.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  13→export default function DashboardDetailModal({ open, title, data, columns, onClose }: Props) {
+  14→  return (
+  15→    <AnimatePresence>
+  16→      {open && (
+  17→        <motion.div id="detail-modal-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4" onClick={onClose}>
+  18→          <motion.div id="detail-modal-content" initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }} className="bg-white rounded-lg p-4 max-w-2xl w-full max-h-[80vh] overflow-auto" onClick={e => e.stopPropagation()}>
+  19→            <div className="flex items-center justify-between mb-3">
+  20→              <h3 className="text-sm font-semibold">{title} - 明细数据</h3>
+  21→              <button onClick={onClose} className="p-1 hover:bg-[#f1f5f9] rounded"><X size={16} /></button>
+  22→            </div>
+  23→            <div className="overflow-auto max-h-[60vh]">

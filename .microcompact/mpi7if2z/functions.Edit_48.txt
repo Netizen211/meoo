@@ -1,0 +1,13 @@
+The file /home/project/src/pages/RiskPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  64→      afterSaleRate: d.orders > 0 ? (d.afterSale / d.orders) * 100 : 0,
+  65→      refundRate: d.orders > 0 ? (d.refund / d.orders) * 100 : 0,
+  66→      overdueRate: d.orders > 0 ? (d.overdue / d.orders) * 100 : 0,
+  67→      orders: d.orders,
+  68→      riskLevel: (d.orders > 0 ? (d.afterSale / d.orders) * 100 : 0) > 30 ? '高' : (d.orders > 0 ? (d.afterSale / d.orders) * 100 : 0) > 15 ? '中' : '低',
+  69→    })).sort((a, b) => b.afterSaleRate - a.afterSaleRate);
+  70→  }, [filteredOrders, filteredAfterSaleRecords]);
+  71→
+  72→  const highAfterSale = productRisk.filter(p => p.afterSaleRate > 30).length;
+  73→  const overdueOrders = useMemo(() => {

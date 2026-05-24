@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardTablePanel.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  22→  draggedPanel, onDragStart, onDragOver, onDragEnd
+  23→}: Props) {
+  24→  return (
+  25→    <motion.div key="table" layoutId="table" draggable onDragStart={() => onDragStart('table')} onDragOver={e => onDragOver(e, 'table')} onDragEnd={onDragEnd}
+  26→      className={`bg-pdd-card rounded-xl border border-[#2a2d3e] p-3 cursor-move transition-all ${draggedPanel === 'table' ? 'opacity-50 scale-95' : ''}`}>
+  27→      <div className="flex items-center justify-between mb-2">
+  28→        <h3 className="text-sm font-semibold text-white">订单明细 ({tableData.length}条)</h3>
+  29→        <div className="flex items-center gap-2">
+  30→          <div className="flex items-center gap-1">
+  31→            {columns.map(c => (

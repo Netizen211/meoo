@@ -1,0 +1,23 @@
+The file /home/project/src/pages/PromotionPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 207→      .sort((a, b) => b.cost - a.cost)
+ 208→      .slice(0, 10);
+ 209→  }, [filteredPromoProducts]);
+ 210→
+ 211→  const filteredInsurance = useMemo(() => filterPromoByTimeRange(currentDisplayData?.shippingInsurance || [], allDates, timeRange, '日期'), [currentDisplayData, allDates, timeRange]);
+ 212→
+ 213→  const profitData = useMemo(() => {
+ 214→    if (!filteredOrders.length || !hasAnyPromo) return null;
+ 215→    const merchantIncome = filteredOrders.reduce((s: number, o: any) => s + safeFloat(o['商家实收金额(元)']), 0);
+ 216→    const promoCost = totalKpiData?.totalCost || 0;
+ 217→    const insuranceCost = filteredInsurance.reduce((s: number, r: any) => s + safeFloat(r['保费(元)'] || r['运费险成本']), 0);
+ 218→    const rawCost = Object.values(currentDisplayData.productCosts || {}).reduce((s: number, v: any) => s + safeFloat(v), 0);
+ 219→    const netProfit = merchantIncome - promoCost - insuranceCost - rawCost;
+ 220→    return { merchantIncome, promoCost, insuranceCost, rawCost, netProfit };
+ 221→  }, [filteredOrders, hasAnyPromo, totalKpiData, filteredInsurance, currentDisplayData]);
+ 222→
+ 223→  if (!hasAnyPromo) {
+ 224→    return (
+ 225→      <div className="p-4">
+ 226→        <h2 className="text-lg font-semibold mb-3 flex items-center gap-2"><Megaphone size={18} color="#e02e24" />推广利润</h2>

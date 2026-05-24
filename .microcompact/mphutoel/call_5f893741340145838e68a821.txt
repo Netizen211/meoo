@@ -1,0 +1,52 @@
+The file /home/project/src/pages/UploadPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 175→
+ 176→          // 过滤掉"总计"/"合计"等汇总行（日期字段不是标准日期格式）
+ 177→          const isValidDateRow = (item: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(item['日期'] || '').trim());
+ 178→
+ 179→          if (sheetType === '商品推广数据') {
+ 180→            // 区分汇总sheet和商品明细sheet
+ 181→            const hasProductId = sheetFields.includes('商品ID');
+ 182→            if (hasProductId) {
+ 183→              // 商品明细sheet → promotionProducts（仅用于TOP商品展示，不参与KPI汇总）
+ 184→              // 注意：商品sheet和汇总sheet是同一份数据的不同视角，花费不能重复累加
+ 185→              // 每次上传新文件时，清空旧的商品明细再重新导入
+ 186→              if (!processedTypes.has('商品推广_产品')) {
+ 187→                existing.promotionProducts = [];
+ 188→              }
+ 189→              const seenKeys = new Set<string>();
+ 190→              sheetData.forEach((item: any) => {
+ 191→                if (!isValidDateRow(item)) return;
+ 192→                // 同一商品同一天可能有多条推广计划，全部保留
+ 193→                const key = `${item['日期'] || ''}-${item['商品ID'] || ''}-${item['推广名称'] || ''}`;
+ 194→                if (!seenKeys.has(key)) {
+ 195→                  existing.promotionProducts.push(item);
+ 196→                  seenKeys.add(key);
+ 197→                }
+ 198→              });
+ 199→              sheetFields.forEach(f => existing.availableFields.promotion.add(f));
+ 200→              processedTypes.add('商品推广_产品');
+ 201→            } else {
+ 202→              // 汇总sheet → promotionSummary（KPI计算的唯一数据源）
+ 203→              // 后上传的文件覆盖先上传的同日期数据
+ 204→              const summaryMap = new Map<string, any>();
+ 205→              // 先加载已有数据
+ 206→              existing.promotionSummary.forEach((r: any) => {
+ 207→                const d = String(r['日期'] || '').trim();
+ 208→                if (/^\d{4}-\d{2}-\d{2}$/.test(d)) summaryMap.set(d, r);
+ 209→              });
+ 210→              // 用新数据覆盖同日期记录
+ 211→              sheetData.forEach((item: any) => {
+ 212→                if (!isValidDateRow(item)) return;
+ 213→                summaryMap.set(String(item['日期']).trim(), item);
+ 214→              });
+ 215→              existing.promotionSummary = Array.from(summaryMap.values());
+ 216→              sheetFields.forEach(f => existing.availableFields.promotion.add(f));
+ 217→            }
+ 218→            processedTypes.add(sheetType);
+ 219→          } else if (sheetType === '明星店铺数据') {
+ 220→            const existingKeys = new Set(existing.starStoreSummary.map((r: any) => `${r['日期'] || ''}-${r['推广名称'] || r['创意样式'] || ''}`));
+ 221→            sheetData.forEach((item: any) => {
+ 222→              if (!isValidDateRow(item)) return;
+ 223→              const key = `${item['日期'] || ''}-${item['推广名称'] || item['创意样式'] || ''}`;

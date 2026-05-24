@@ -1,0 +1,32 @@
+[
+  {
+    "id": "c1",
+    "status": "completed",
+    "content": "排查DashboardPage数据计算（KPI/趋势/状态分布/表格）",
+    "priority": "high"
+  },
+  {
+    "id": "c2",
+    "status": "completed",
+    "content": "排查PromotionPage数据计算（合计/商品/明星/直播）",
+    "priority": "high"
+  },
+  {
+    "id": "c3",
+    "status": "in_progress",
+    "content": "排查其他分析页面（User/Trend/Region/Logistics/Cost/AfterSale/Insurance）",
+    "priority": "high"
+  },
+  {
+    "id": "c3a",
+    "status": "in_progress",
+    "content": "修复InsurancePage parseFloat→safeFloat",
+    "priority": "high"
+  },
+  {
+    "id": "c4",
+    "status": "pending",
+    "content": "验证编译通过",
+    "priority": "high"
+  }
+]

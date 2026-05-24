@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardTrendPanel.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  15→
+  16→export default function DashboardTrendPanel({ revenueTrend, noData, rangeLabel, draggedPanel, onDragStart, onDragOver, onDragEnd }: Props) {
+  17→  return (
+  18→    <motion.div key="trend" layoutId="trend" draggable onDragStart={() => onDragStart('trend')} onDragOver={e => onDragOver(e, 'trend')} onDragEnd={onDragEnd}
+  19→      className={`bg-pdd-card rounded-xl border border-[#2a2d3e] p-3 cursor-move transition-all ${draggedPanel === 'trend' ? 'opacity-50 scale-95' : ''}`}>
+  20→      <div className="flex items-center justify-between mb-2">
+  21→        <h3 className="text-sm font-semibold text-white flex items-center gap-1.5"><BarChart3 size={14} color="#6366f1" />收入趋势({rangeLabel})</h3>
+  22→        <Move size={14} className="text-[#64748b]" />
+  23→      </div>
+  24→      {noData ? <div className="h-40 flex items-center justify-center text-xs text-[#64748b]">请先上传数据</div> : (

@@ -1,0 +1,43 @@
+The file /home/project/src/components/ProductLinkStats.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 173→  
+ 174→  return buckets.filter(b => b.count > 0);
+ 175→}
+ 176→
+ 177→// 清理数据中的字符串字段（去除制表符等空白字符）
+ 178→function cleanDataRows(rows: any[]): any[] {
+ 179→  if (!rows || !Array.isArray(rows)) return [];
+ 180→  return rows.map(row => {
+ 181→    if (!row || typeof row !== 'object') return row;
+ 182→    const cleaned: any = {};
+ 183→    Object.keys(row).forEach(key => {
+ 184→      const val = row[key];
+ 185→      // 清理字段名和字符串值
+ 186→      const cleanKey = typeof key === 'string' ? key.trim() : key;
+ 187→      cleaned[cleanKey] = typeof val === 'string' ? val.trim() : val;
+ 188→    });
+ 189→    return cleaned;
+ 190→  });
+ 191→}
+ 192→
+ 193→export function useProductStats(
+ 194→  currentDisplayData: any,
+ 195→  productCosts?: Record<string, number>,
+ 196→  taxConfigs?: TaxConfig[],
+ 197→  customDeductions?: CustomDeduction[],
+ 198→  defaultCostRatio?: number,
+ 199→  packagingFeePerOrder?: number,
+ 200→  shippingFeePerOrder?: number
+ 201→): Record<string, ProductStat> {
+ 202→  return useMemo(() => {
+ 203→    // 清理所有输入数据，确保字段值和字段名都没有多余空白字符
+ 204→    const orders = cleanDataRows(currentDisplayData?.orders || []);
+ 205→    const promoProducts = cleanDataRows(currentDisplayData?.promotionProducts || []);
+ 206→    const promoSummary = cleanDataRows(currentDisplayData?.promotionSummary || []);
+ 207→    const stats: Record<string, ProductStat> = {};
+ 208→
+ 209→    const productNames: Record<string, string> = {};
+ 210→    const productCodes: Record<string, string> = {};
+ 211→    // Temporary storage for raw data needed for derived metrics
+ 212→    const orderDetails: Record<string, { dates: string[]; prices: number[]; afterSaleStatuses: string[]; orderNos: string[] }> = {};

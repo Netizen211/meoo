@@ -1,0 +1,13 @@
+The file /home/project/src/pages/MembershipPage.tsx has been updated. Made 4 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  27→    key: 'pro',
+  28→    name: '专业版',
+  29→    price: '¥29',
+  30→    period: '/月 ¥299/年',
+  31→    color: 'pdd-danger',
+  32→    features: [
+  33→      { text: '全部86个指标', included: true },
+  34→      { text: '推广ROI分析', included: true },
+  35→      { text: '多期数据对比', included: true },
+  36→      { text: '1年数据存储', included: true },

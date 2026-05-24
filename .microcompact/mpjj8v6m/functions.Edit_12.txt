@@ -1,0 +1,13 @@
+The file /home/project/src/components/product-analysis/SalesDataCard.tsx has been updated. Made 4 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  63→  const getChangeColor = () => {
+  64→    if (change === undefined) return '';
+  65→    // 对于退款率，下降是好的
+  66→    if (label.includes('退款')) {
+  67→      return change < 0 ? 'text-pdd-success' : change > 0 ? 'text-[pdd-danger]' : 'text-gray-500';
+  68→    }
+  69→    return change > 0 ? 'text-[pdd-success]' : change < 0 ? 'text-[pdd-danger]' : 'text-gray-500';
+  70→  };
+  71→
+  72→  const getChangeIcon = () => {

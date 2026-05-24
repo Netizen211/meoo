@@ -1,0 +1,26 @@
+[
+  {
+    "id": "1",
+    "status": "completed",
+    "content": "重构 SettingsPage.tsx，仅保留用户个人数据清理功能",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "status": "completed",
+    "content": "检查并移除 MainLayout 中普通用户可见的后台管理痕迹",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "status": "completed",
+    "content": "验证路由和权限控制，确保普通用户无法访问后台",
+    "priority": "medium"
+  },
+  {
+    "id": "4",
+    "status": "completed",
+    "content": "运行 typecheck 和 dev 验证修改正确性",
+    "priority": "high"
+  }
+]

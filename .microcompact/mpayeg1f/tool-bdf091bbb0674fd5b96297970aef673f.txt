@@ -1,0 +1,44 @@
+The file /home/project/src/components/MainLayout.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 315→              )}
+ 316→            </AnimatePresence>
+ 317→          </div>
+ 318→
+ 319→          <div className="relative">
+ 320→            <button onClick={() => setStoreDropdown(!storeDropdown)}
+ 321→              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--pdd-border)] text-sm hover:border-[#e02e24] transition-colors bg-[var(--pdd-bg)]">
+ 322→              <Store size={14} className="text-[#e02e24]" />
+ 323→              <span className="max-w-[100px] truncate hidden sm:inline">
+ 324→                {dataFilter === 'all' ? '全部店铺' : (stores.find(s => s.id === dataFilter)?.name || '选择店铺')}
+ 325→              </span>
+ 326→              <ChevronDown size={14} className="text-[var(--pdd-text-secondary)]" />
+ 327→            </button>
+ 328→            <AnimatePresence>
+ 329→              {storeDropdown && (
+ 330→                <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+ 331→                  className="absolute top-full right-0 mt-1 w-48 bg-[var(--pdd-card)] border border-[var(--pdd-border)] rounded-xl shadow-xl z-50 overflow-hidden">
+ 332→                  <button onClick={() => { setDataFilter('all'); setStoreDropdown(false); }}
+ 333→                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-[#fff2e8] transition-colors flex items-center gap-2 ${dataFilter === 'all' ? 'text-[#e02e24] font-medium bg-[#fff2e8]' : ''}`}>
+ 334→                    <LayoutGrid size={14} /> 全部店铺
+ 335→                  </button>
+ 336→                  {stores.length > 0 && <div className="border-t border-[var(--pdd-border)]" />}
+ 337→                  {stores.map(s => (
+ 338→                    <button key={s.id} onClick={() => { setDataFilter(s.id); switchStore(s.id); setStoreDropdown(false); }}
+ 339→                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-[#fff2e8] transition-colors flex items-center gap-2 ${s.id === dataFilter ? 'text-[#e02e24] font-medium bg-[#fff2e8]' : ''}`}>
+ 340→                      <Store size={14} /> {s.name}
+ 341→                    </button>
+ 342→                  ))}
+ 343→                  <button onClick={() => { addStore(`店铺${stores.length + 1}`); setStoreDropdown(false); }}
+ 344→                    className="w-full text-left px-4 py-2.5 text-sm text-[#e02e24] border-t border-[var(--pdd-border)] hover:bg-[#fff2e8] transition-colors flex items-center gap-2">
+ 345→                    <Plus size={14} /> 添加店铺
+ 346→                  </button>
+ 347→                </motion.div>
+ 348→              )}
+ 349→            </AnimatePresence>
+ 350→          </div>
+ 351→
+ 352→          <button onClick={() => setDarkMode(!darkMode)} className="p-2 text-[var(--pdd-text-secondary)] hover:text-[var(--pdd-text)] hover:bg-[var(--pdd-bg)] rounded-lg transition-all">
+ 353→            {darkMode ? <Sun size={18} /> : <Moon size={18} />}
+ 354→          </button>
+ 355→

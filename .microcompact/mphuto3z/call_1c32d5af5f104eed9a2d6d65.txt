@@ -1,0 +1,69 @@
+The file /home/project/src/pages/UploadPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 172→
+ 173→          // 避免同一类型被多个sheet重复处理（汇总sheet优先）
+ 174→          if (processedTypes.has(sheetType) && sheetType !== '商品推广数据') continue;
+ 175→
+ 176→          // 过滤掉"总计"/"合计"等汇总行（日期字段不是标准日期格式）
+ 177→          const isValidDateRow = (item: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(item['日期'] || '').trim());
+ 178→
+ 179→          if (sheetType === '商品推广数据') {
+ 180→            // 区分汇总sheet和商品明细sheet
+ 181→            const hasProductId = sheetFields.includes('商品ID');
+ 182→            if (hasProductId) {
+ 183→              // 商品明细sheet → promotionProducts
+ 184→              const existingProductKeys = new Set(existing.promotionProducts.map((r: any) => `${r['日期'] || ''}-${r['商品ID'] || ''}-${r['推广名称'] || ''}`));
+ 185→              let addedCount = 0;
+ 186→              sheetData.forEach((item: any) => {
+ 187→                if (!isValidDateRow(item)) return;
+ 188→                const key = `${item['日期'] || ''}-${item['商品ID'] || ''}-${item['推广名称'] || ''}`;
+ 189→                if (!existingProductKeys.has(key)) {
+ 190→                  existing.promotionProducts.push(item);
+ 191→                  existingProductKeys.add(key);
+ 192→                  addedCount++;
+ 193→                }
+ 194→              });
+ 195→              sheetFields.forEach(f => existing.availableFields.promotion.add(f));
+ 196→              if (addedCount === 0 && processedTypes.has(sheetType)) continue;
+ 197→            } else {
+ 198→              // 汇总sheet → promotionSummary
+ 199→              const existingSummaryKeys = new Set(existing.promotionSummary.map((r: any) => `${r['日期'] || ''}`));
+ 200→              sheetData.forEach((item: any) => {
+ 201→                if (!isValidDateRow(item)) return;
+ 202→                const key = `${item['日期'] || ''}`;
+ 203→                if (!existingSummaryKeys.has(key)) {
+ 204→                  existing.promotionSummary.push(item);
+ 205→                  existingSummaryKeys.add(key);
+ 206→                }
+ 207→              });
+ 208→              sheetFields.forEach(f => existing.availableFields.promotion.add(f));
+ 209→            }
+ 210→            processedTypes.add(sheetType);
+ 211→          } else if (sheetType === '明星店铺数据') {
+ 212→            const existingKeys = new Set(existing.starStoreSummary.map((r: any) => `${r['日期'] || ''}-${r['推广名称'] || r['创意样式'] || ''}`));
+ 213→            sheetData.forEach((item: any) => {
+ 214→              if (!isValidDateRow(item)) return;
+ 215→              const key = `${item['日期'] || ''}-${item['推广名称'] || item['创意样式'] || ''}`;
+ 216→              if (!existingKeys.has(key)) {
+ 217→                existing.starStoreSummary.push(item);
+ 218→                existingKeys.add(key);
+ 219→              }
+ 220→            });
+ 221→            processedTypes.add(sheetType);
+ 222→          } else if (sheetType === '直播推广数据') {
+ 223→            const existingKeys = new Set(existing.liveStreamSummary.map((r: any) => `${r['日期'] || ''}-${r['直播间'] || ''}`));
+ 224→            sheetData.forEach((item: any) => {
+ 225→              if (!isValidDateRow(item)) return;
+ 226→              const key = `${item['日期'] || ''}-${item['直播间'] || ''}`;
+ 227→              if (!existingKeys.has(key)) {
+ 228→                existing.liveStreamSummary.push(item);
+ 229→                existingKeys.add(key);
+ 230→              }
+ 231→            });
+ 232→            processedTypes.add(sheetType);
+ 233→          } else if (sheetType === '运费险数据') {
+ 234→            const existingKeys = new Set(existing.shippingInsurance.map((r: any) => String(r['订单编号'] || '')));
+ 235→            sheetData.forEach((item: any) => {
+ 236→              const key = String(item['订单编号'] || '');
+ 237→              if (key && !existingKeys.has(key)) { existing.shippingInsurance.push(item); existingKeys.add(key); }

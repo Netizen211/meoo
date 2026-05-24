@@ -1,0 +1,26 @@
+[
+  {
+    "id": "1",
+    "content": "创建 AfterSaleCard.tsx - 售后数据区组件",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "创建 TrendChartCard.tsx - 时间趋势区组件",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "创建 RelationAnalysisCard.tsx - 关联分析区组件",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "创建 RegionDistributionCard.tsx - 地域分布区组件",
+    "status": "completed",
+    "priority": "high"
+  }
+]

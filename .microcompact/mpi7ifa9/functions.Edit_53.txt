@@ -1,0 +1,19 @@
+The file /home/project/src/pages/TrendPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 224→          {[
+ 225→            { label: 'GMV总额', value: kpi.gmv, fmt: (v: number) => `¥${v.toFixed(0)}`, color: '#e02e24', change: compareEnabled ? changePct(kpi.gmv, compareKpi?.gmv || 0) : null },
+ 226→            { label: '订单量', value: kpi.cnt, fmt: (v: number) => v.toFixed(0), color: '#1890ff', change: compareEnabled ? changePct(kpi.cnt, compareKpi?.cnt || 0) : null },
+ 227→            { label: '平均客单价', value: kpi.avg, fmt: (v: number) => `¥${v.toFixed(2)}`, color: '#52c41a', change: null },
+ 228→            { label: '环比变化', value: compareEnabled && kpi && compareKpi ? changePct(kpi.gmv, compareKpi.gmv || 0) : 0, fmt: (v: number) => `${v > 0 ? '+' : ''}${v.toFixed(1)}%`, color: compareEnabled && kpi && compareKpi && changePct(kpi.gmv, compareKpi.gmv || 0) > 0 ? '#52c41a' : '#ff4d4f', change: null },
+ 229→          ].map((c, i) => (
+ 230→            <motion.div key={c.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="pdd-card px-3 py-2 flex items-center gap-2">
+ 231→              <div className="flex-1 min-w-0">
+ 232→                <span className="text-xs text-[var(--pdd-text-secondary)]">{c.label}</span>
+ 233→                <div className="flex items-center gap-1">
+
+<system-reminder>
+⚠️ NOTICE: You've used Edit on "/home/project/src/pages/TrendPage.tsx" 7 times consecutively.
+
+Verify your changes are taking effect before modifying again. If the approach isn't working, move on to the next task rather than retrying.
+</system-reminder>
