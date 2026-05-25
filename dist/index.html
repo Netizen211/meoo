@@ -1,0 +1,67 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>店分析 - 拼多多商家数据分析</title><link rel="stylesheet" href="cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><style>html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+    html.light, html.light body { background-color: #ffffff !important; color: #000000; }
+    html.dark, html.dark body { background-color: #1a1a1a !important; color: #ffffff; }</style><script>(function() {
+      var isInIframe = window.self !== window.top;
+      function applyThemeToDOM(theme) {
+        document.documentElement.classList.remove('light', 'dark');
+        document.documentElement.classList.add(theme);
+        document.documentElement.setAttribute('data-theme', theme);
+      }
+      if (isInIframe) {
+        window.addEventListener('message', function(event) {
+          if (event.data && typeof event.data.theme === 'string') {
+            var theme = event.data.theme;
+            if (theme === 'light' || theme === 'dark') applyThemeToDOM(theme);
+          }
+        });
+      } else {
+        var saved = localStorage.getItem('dianfx_dark_mode');
+        applyThemeToDOM(saved === 'true' ? 'dark' : 'light');
+      }
+      // Enable smooth theme transitions after initial paint
+      requestAnimationFrame(function() {
+        requestAnimationFrame(function() {
+          document.documentElement.classList.add('theme-ready');
+        });
+      });
+    })();</script><script>// Fix: querySelectorAll throws SyntaxError when selector contains unescaped brackets []
+    // e.g. Tailwind arbitrary values like .text-[11px] or .bg-[#e02e24]
+    // This patch wraps querySelectorAll/querySelector with try-catch to prevent crashes
+    (function() {
+      function safeQSA(origFn, context, selector) {
+        try { return origFn.call(context, selector); }
+        catch(e) {
+          if (e instanceof DOMException || e.name === 'SyntaxError') {
+            // Try escaping brackets: [ -> \[ and ] -> \]
+            try {
+              var escaped = selector.replace(/([^\\\]])\[/g, '$1\\[').replace(/([^\\\\])\]/g, '$1\\]');
+              return origFn.call(context, escaped);
+            } catch(e2) {
+              // Return empty result instead of crashing
+              return context instanceof Element ? [] : [];
+            }
+          }
+          throw e;
+        }
+      }
+      function safeQS(origFn, context, selector) {
+        try { return origFn.call(context, selector); }
+        catch(e) {
+          if (e instanceof DOMException || e.name === 'SyntaxError') {
+            try {
+              var escaped = selector.replace(/([^\\\]])\[/g, '$1\\[').replace(/([^\\\\])\]/g, '$1\\]');
+              return origFn.call(context, escaped);
+            } catch(e2) { return null; }
+          }
+          throw e;
+        }
+      }
+      var origDocQSA = Document.prototype.querySelectorAll;
+      Document.prototype.querySelectorAll = function(s) { return safeQSA(origDocQSA, this, s); };
+      var origDocQS = Document.prototype.querySelector;
+      Document.prototype.querySelector = function(s) { return safeQS(origDocQS, this, s); };
+      var origElQSA = Element.prototype.querySelectorAll;
+      Element.prototype.querySelectorAll = function(s) { return safeQSA(origElQSA, this, s); };
+      var origElQS = Element.prototype.querySelector;
+      Element.prototype.querySelector = function(s) { return safeQS(origElQS, this, s); };
+    })();</script></head><body><div id="root"></div><script defer="defer" src="bundle.js"></script></body></html>
