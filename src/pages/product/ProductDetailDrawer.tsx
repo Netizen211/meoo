@@ -22,7 +22,7 @@ export default function ProductDetailDrawer({ product, isOpen, onClose }: Props)
       { name: 'GMV', value: product.gmv, fill: 'var(--pdd-primary)' },
       { name: '折扣', value: -product.discount, fill: 'var(--pdd-warning)' },
       { name: '推广费', value: -product.promoCost, fill: 'var(--pdd-purple)' },
-      { name: '成本', value: -(product.gmv * 0.6), fill: 'var(--pdd-danger)' },
+      { name: '成本', value: -(product.costBreakdown?.productCost || product.totalCost), fill: 'var(--pdd-danger)' },
       { name: '净利润', value: product.netProfit, fill: product.netProfit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' },
     ];
   }, [product]);
@@ -218,7 +218,7 @@ export default function ProductDetailDrawer({ product, isOpen, onClose }: Props)
                     </div>
                     <div className="bg-pdd-bg rounded-xl p-3">
                       <span className="text-[11px] text-pdd-text-secondary block mb-1">推广ROI</span>
-                      <span className="font-mono font-bold text-sm" style={{ color: product.roi >= 0 ? 'var(--pdd-success)' : 'var(--pdd-primary-light)' }}>{fmt(product.roi)}%</span>
+                      <span className="font-mono font-bold text-sm" style={{ color: product.roi >= 0 ? 'var(--pdd-success)' : 'var(--pdd-primary-light)' }}>{product.roi.toFixed(2)}x</span>
                     </div>
                   </div>
 

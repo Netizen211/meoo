@@ -10,7 +10,7 @@ const PLANS = [
     name: '免费版',
     price: '¥0',
     period: '/永久',
-    color: 'pdd-text-secondary',
+    color: 'var(--pdd-text-secondary)',
     features: [
       { text: '52个基础指标', included: true },
       { text: '单期数据上传', included: true },
@@ -62,7 +62,7 @@ const PLANS = [
 ];
 
 export default function MembershipPage() {
-  const { user } = useAuth();
+  const { user, upgradeMembership } = useAuth();
   const navigate = useNavigate();
   const currentLevel = user?.membershipLevel || 'free';
 
@@ -82,7 +82,7 @@ export default function MembershipPage() {
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: i * 0.15 }}
-            className={`pdd-card relative overflow-hidden ${currentLevel === plan.key ? 'border-2 border-[pdd-danger]' : ''}`}
+            className={`pdd-card relative overflow-hidden ${currentLevel === plan.key ? 'border-2 border-[var(--pdd-danger)]' : ''}`}
           >
             {currentLevel === plan.key && (
               <div className="absolute top-0 right-0 bg-[var(--pdd-danger)] text-white text-xs px-3 py-1 rounded-bl-lg font-medium">当前方案</div>
@@ -116,10 +116,11 @@ export default function MembershipPage() {
               <motion.button
                 whileHover={{ scale: 1.02 }}
                 whileTap={{ scale: 0.98 }}
+                onClick={() => { if (plan.key !== 'free') upgradeMembership(plan.key as 'pro' | 'enterprise'); }}
                 className="w-full py-2.5 rounded-lg text-white text-sm font-medium transition-colors"
                 style={{ backgroundColor: plan.color }}
               >
-                {plan.key === 'free' ? '当前方案' : '升级'}
+                升级
               </motion.button>
             )}
           </motion.div>

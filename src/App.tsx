@@ -20,8 +20,6 @@ import RiskPage from './pages/RiskPage';
 import MembershipPage from './pages/MembershipPage';
 import SettingsPage from './pages/SettingsPage';
 import ProductLinksPage from './pages/ProductLinksPage';
-import { AdminHomePage, AdminUsersPage, AdminMembersPage, AdminInvitePage, AdminDataPage, AdminAiPage, AdminSettingsPage } from './pages/AdminPages';
-import AdminLayout from './components/AdminLayout';
 import { simpleHash } from './utils';
 import type { TaxConfig, CustomDeduction } from './components/ProductLinkStats';
 import { importSampleData, hasSampleData } from './utils/dataImporter';
@@ -38,7 +36,7 @@ interface AuthContextType {
   login: (username: string, password: string) => boolean;
   signup: (username: string, password: string, phone?: string, inviteCode?: string) => { success: boolean; message: string };
   logout: () => void;
-  isTestUser: boolean;
+  upgradeMembership: (level: 'pro' | 'enterprise') => void;
   isPaid: boolean;
 }
 
@@ -67,13 +65,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const existingUsers = JSON.parse(localStorage.getItem('dianfx_users') || '[]');
     const found = existingUsers.find((u: any) => u.username === username && u.password === hashedPwd);
     if (found) {
-      setUser({ id: found.id, username: found.username, role: 'normal', membershipLevel: 'free' });
+      setUser({ id: found.id, username: found.username, role: 'normal', membershipLevel: found.membershipLevel || 'free' });
       return true;
     }
     return false;
   }, []);
 
   const logout = useCallback(() => setUser(null), []);
+
+  const upgradeMembership = useCallback((level: 'pro' | 'enterprise') => {
+    setUser(prev => {
+      if (!prev) return prev;
+      const updated = { ...prev, membershipLevel: level };
+      const users = JSON.parse(localStorage.getItem('dianfx_users') || '[]');
+      const idx = users.findIndex((u: any) => u.id === prev.id);
+      if (idx !== -1) {
+        users[idx].membershipLevel = level;
+        localStorage.setItem('dianfx_users', JSON.stringify(users));
+      }
+      return updated;
+    });
+  }, []);
 
   const signup = useCallback((username: string, password: string, phone?: string, inviteCode?: string): { success: boolean; message: string } => {
     if (!inviteCode || !inviteCode.trim()) {
@@ -103,8 +115,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, login, signup, logout,
-      isTestUser: user?.role === 'test',
+      user, login, signup, logout, upgradeMembership,
       isPaid: user?.membershipLevel !== 'free',
     }}>
       {children}
@@ -214,6 +225,16 @@ interface CostConfig {
   updatedAt: string;
 }
 
+// 异常订单处理记录
+export interface AbnormalOrderRecord {
+  orderNo: string;
+  status: 'excluded' | 'adjusted';
+  note: string;
+  adjustedFields: { itemCount?: number; merchantAmount?: number; rawCost?: number };
+  alertTypes: string[];
+  processedAt: string;
+}
+
 // 成本历史记录
 export interface CostHistoryEntry {
   id: string;
@@ -260,6 +281,15 @@ interface DataContextType {
   setDefaultCostRatio: (ratio: number) => void;
   shippingFeePerOrder: number;
   setShippingFeePerOrder: (fee: number) => void;
+  platformCommissionRate: number;
+  setPlatformCommissionRate: (rate: number) => void;
+  laborFeePerOrder: number;
+  setLaborFeePerOrder: (fee: number) => void;
+  insuranceFeePerOrder: number;
+  setInsuranceFeePerOrder: (fee: number) => void;
+  abnormalOrders: Record<string, AbnormalOrderRecord>;
+  setAbnormalOrder: (orderNo: string, record: AbnormalOrderRecord) => void;
+  removeAbnormalOrder: (orderNo: string) => void;
   costHistory: CostHistoryEntry[];
   addCostHistory: (entry: Omit<CostHistoryEntry, 'id' | 'updatedAt'>) => void;
   clearAllData: () => void;
@@ -417,6 +447,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const saved = localStorage.getItem('dianfx_shipping_fee');
     return saved ? parseFloat(saved) : 0;
   });
+  const [platformCommissionRate, setPlatformCommissionRate] = useState<number>(() => {
+    const saved = localStorage.getItem('dianfx_platform_commission');
+    return saved ? parseFloat(saved) : 0;
+  });
+  const [laborFeePerOrder, setLaborFeePerOrder] = useState<number>(() => {
+    const saved = localStorage.getItem('dianfx_labor_fee');
+    return saved ? parseFloat(saved) : 0;
+  });
+  const [insuranceFeePerOrder, setInsuranceFeePerOrder] = useState<number>(() => {
+    const saved = localStorage.getItem('dianfx_insurance_fee');
+    return saved ? parseFloat(saved) : 0;
+  });
+  const [abnormalOrders, setAbnormalOrders] = useState<Record<string, AbnormalOrderRecord>>(() => {
+    const saved = localStorage.getItem('dianfx_abnormal_orders');
+    if (!saved) return {};
+    const parsed = JSON.parse(saved);
+    // 迁移旧格式: alertType:string → alertTypes:string[]
+    for (const key of Object.keys(parsed)) {
+      if (parsed[key] && typeof parsed[key].alertType === 'string') {
+        parsed[key].alertTypes = [parsed[key].alertType];
+        delete parsed[key].alertType;
+      }
+      if (parsed[key] && !parsed[key].alertTypes) {
+        parsed[key].alertTypes = [];
+      }
+    }
+    return parsed;
+  });
   // Cost history
   const [costHistory, setCostHistory] = useState<CostHistoryEntry[]>(() => {
     const saved = localStorage.getItem('dianfx_cost_history');
@@ -479,6 +537,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => { localStorage.setItem('dianfx_custom_deductions', JSON.stringify(customDeductions)); }, [customDeductions]);
   useEffect(() => { localStorage.setItem('dianfx_default_cost_ratio', String(defaultCostRatio)); }, [defaultCostRatio]);
   useEffect(() => { localStorage.setItem('dianfx_shipping_fee', String(shippingFeePerOrder)); }, [shippingFeePerOrder]);
+  useEffect(() => { localStorage.setItem('dianfx_platform_commission', String(platformCommissionRate)); }, [platformCommissionRate]);
+  useEffect(() => { localStorage.setItem('dianfx_labor_fee', String(laborFeePerOrder)); }, [laborFeePerOrder]);
+  useEffect(() => { localStorage.setItem('dianfx_insurance_fee', String(insuranceFeePerOrder)); }, [insuranceFeePerOrder]);
+  useEffect(() => { localStorage.setItem('dianfx_abnormal_orders', JSON.stringify(abnormalOrders)); }, [abnormalOrders]);
   useEffect(() => { localStorage.setItem('dianfx_cost_history', JSON.stringify(costHistory)); }, [costHistory]);
 
   const getStoreData = useCallback((storeId: string): StoreDataItem | null => {
@@ -630,6 +692,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCostHistory(prev => [newEntry, ...prev].slice(0, 500)); // Keep last 500 entries
   }, []);
 
+  const setAbnormalOrder = useCallback((orderNo: string, record: AbnormalOrderRecord) => {
+    setAbnormalOrders(prev => ({ ...prev, [orderNo]: record }));
+  }, []);
+  const removeAbnormalOrder = useCallback((orderNo: string) => {
+    setAbnormalOrders(prev => {
+      const next = { ...prev };
+      delete next[orderNo];
+      return next;
+    });
+  }, []);
+
   // 清空所有数据（localStorage + 内存 state）
   const clearAllData = useCallback(() => {
     console.log('[CLEAR] Clearing all data');
@@ -649,6 +722,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCustomDeductions([]);
     setDefaultCostRatio(0);
     setShippingFeePerOrder(0);
+    setPlatformCommissionRate(0);
+    setLaborFeePerOrder(0);
+    setInsuranceFeePerOrder(0);
+    setAbnormalOrders({});
     setCostHistory([]);
   }, []);
 
@@ -690,13 +767,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setCostConfigs({});
     setPackagingFeePerOrder(0);
     setShippingFeePerOrder(0);
+    setPlatformCommissionRate(0);
+    setLaborFeePerOrder(0);
+    setInsuranceFeePerOrder(0);
     setDefaultCostRatio(0);
     setCostHistory([]);
     setCustomDeductions([]);
+    setAbnormalOrders({});
     localStorage.removeItem('dianfx_product_costs');
     localStorage.removeItem('dianfx_cost_configs');
     localStorage.removeItem('dianfx_packaging_fee');
     localStorage.removeItem('dianfx_shipping_fee');
+    localStorage.removeItem('dianfx_platform_commission');
+    localStorage.removeItem('dianfx_labor_fee');
+    localStorage.removeItem('dianfx_insurance_fee');
+    localStorage.removeItem('dianfx_abnormal_orders');
     localStorage.removeItem('dianfx_default_cost_ratio');
     localStorage.removeItem('dianfx_cost_history');
     localStorage.removeItem('dianfx_custom_deductions');
@@ -730,6 +815,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       customDeductions, setCustomDeductions, addCustomDeduction, removeCustomDeduction, updateCustomDeduction,
       defaultCostRatio, setDefaultCostRatio,
       shippingFeePerOrder, setShippingFeePerOrder,
+      platformCommissionRate, setPlatformCommissionRate,
+      laborFeePerOrder, setLaborFeePerOrder,
+      insuranceFeePerOrder, setInsuranceFeePerOrder,
+      abnormalOrders, setAbnormalOrder, removeAbnormalOrder,
       costHistory, addCostHistory,
       clearAllData,
       clearOrderData, clearPromotionData, clearCostData,
@@ -743,13 +832,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
-  return <>{children}</>;
-}
-
-function RequireTestUser({ children }: { children: React.ReactNode }) {
-  const { user, isTestUser } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
-  if (!isTestUser) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
@@ -779,13 +861,6 @@ function App() {
               <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
               <Route path="/cost-management" element={<RequireAuth><MainLayout><CostManagementPage /></MainLayout></RequireAuth>} />
               <Route path="/product-links" element={<RequireAuth><MainLayout><ProductLinksPage /></MainLayout></RequireAuth>} />
-              <Route path="/admin" element={<RequireTestUser><AdminLayout><AdminHomePage /></AdminLayout></RequireTestUser>} />
-              <Route path="/admin/users" element={<RequireTestUser><AdminLayout><AdminUsersPage /></AdminLayout></RequireTestUser>} />
-              <Route path="/admin/members" element={<RequireTestUser><AdminLayout><AdminMembersPage /></AdminLayout></RequireTestUser>} />
-              <Route path="/admin/invite" element={<RequireTestUser><AdminLayout><AdminInvitePage /></AdminLayout></RequireTestUser>} />
-              <Route path="/admin/data" element={<RequireTestUser><AdminLayout><AdminDataPage /></AdminLayout></RequireTestUser>} />
-              <Route path="/admin/ai" element={<RequireTestUser><AdminLayout><AdminAiPage /></AdminLayout></RequireTestUser>} />
-              <Route path="/admin/settings" element={<RequireTestUser><AdminLayout><AdminSettingsPage /></AdminLayout></RequireTestUser>} />
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
           </HashRouter>

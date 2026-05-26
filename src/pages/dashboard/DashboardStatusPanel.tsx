@@ -32,7 +32,7 @@ export default function DashboardStatusPanel({ statusDist, noData, draggedPanel,
       ) : (
         <ResponsiveContainer width="100%" height={200}>
           <PieChart>
-            <Pie data={statusDist} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value" label={({ name, percent }) => `${name.slice(0, 4)} ${(percent * 100).toFixed(0)}%`}>
+            <Pie data={statusDist} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value" label={({ name, percent }) => `${name.length > 6 ? name.slice(0, 6) + '…' : name} ${(percent * 100).toFixed(0)}%`}>
               {statusDist.map((_, i) => <Cell key={i} fill={STATUS_COLORS[i % STATUS_COLORS.length]} />)}
             </Pie>
             <Tooltip

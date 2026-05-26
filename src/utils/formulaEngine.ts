@@ -120,22 +120,15 @@ export function evaluateFormula(formula: string, ctx: FormulaContext): number {
 export function validateFormula(formula: string): boolean {
   if (!formula || !formula.trim()) return false;
   try {
-    const testCtx: FormulaContext = {
-      // 基础交易
-      gmv: 100, revenue: 80, orders: 10, sales: 15,
-      // 成本
-      productCost: 50, packagingFee: 2, shippingFee: 3, promoCost: 5, discount: 10,
-      // 利润
-      profit: 20, grossProfit: 25, netProfit: 18,
-      // 售后
-      refund: 5, refundRate: 5, afterSaleCount: 1, afterSaleRate: 10,
-      // 推广
-      promoOrders: 3, promoTransaction: 60, promoClicks: 50, promoImpressions: 1000,
-      ctr: 5, cvr: 6, roi: 12,
-      // 其他
-      avgOrderValue: 8, activeDays: 30, avgDailySales: 0.5, platformFee: 0, taxes: 2
-    };
-    evaluateFormula(formula, testCtx);
+    const sanitized = formula.trim();
+    // 安全检查
+    const dangerous = /(\balert\b|\beval\b|\bFunction\b|\bimport\b|\brequire\b|\bfetch\b|\bwindow\b|\bdocument\b|\b__proto__\b|\bconstructor\b)/i;
+    if (dangerous.test(sanitized)) return false;
+    // 直接用 new Function 检查语法，让语法错误抛出
+    const varDecls = ALLOWED_VARS.map(v => `const ${v} = 1;`).join('\n');
+    const funcDecls = ALLOWED_FUNCS.map(f => `const ${f} = Math.${f};`).join('\n');
+    const code = `${varDecls}\n${funcDecls}\nreturn (${sanitized});`;
+    new Function(code);
     return true;
   } catch {
     return false;

@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "skills": {
+    "skill-creator": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/skill-creator/SKILL.md",
+      "computedHash": "7e3c9cd74e9e2b4828527a857170e86310f2dab5ea8030a9043df2c7e6c88857"
+    },
+    "ui-design": {
+      "source": "shajith003/awesome-claude-skills",
+      "sourceType": "github",
+      "skillPath": "ui-design/SKILL.md",
+      "computedHash": "44b4e7f6fe923ac179a556feeea1feecf10227fceca0fc890abf921895d6a665"
+    },
+    "karpathy-guidelines": {
+      "source": "forrestchang/andrej-karpathy-skills",
+      "sourceType": "github",
+      "skillPath": "skills/karpathy-guidelines/SKILL.md",
+      "computedHash": "e787761ddd1a416764826cfb3b894161cba62a6fc525a9249ba6cadefe2fc01a"
+    }
+  }
+}

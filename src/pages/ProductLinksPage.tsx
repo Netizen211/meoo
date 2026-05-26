@@ -4,7 +4,7 @@ import { Link, TrendingUp, TrendingDown, DollarSign, ShoppingCart, BarChart3, Ar
 import { useData } from '../App';
 import { useProductStats, useTotalProductStats, ProductStat } from '../components/ProductLinkStats';
 import ProductLinkChart from '../components/ProductLinkChart';
-import TimeFilter, { TimeRange, TimeGranularity, filterByTimeRange, getAllDateGroups, filterPromoByTimeRange } from '../components/TimeFilter';
+import TimeFilter, { TimeRange, TimeGranularity, filterByTimeRange, getAllDateGroups, filterPromoByTimeRange, useTimeFilter } from '../components/TimeFilter';
 
 function fmt(n: number) { return n.toFixed(2); }
 function fmtInt(n: number) { return n.toFixed(0); }
@@ -14,26 +14,24 @@ type RoiFilter = 'all' | 'profit' | 'loss' | 'flat';
 
 export default function ProductLinksPage() {
   const { currentDisplayData } = useData();
-  const [timeRange, setTimeRange] = useState<TimeRange>('7');
-  const [granularity, setGranularity] = useState<TimeGranularity>('day');
-  const [compareEnabled, setCompareEnabled] = useState(false);
-  const tfState = { timeRange, granularity, compareEnabled, setTimeRange, setGranularity, setCompareEnabled };
+  const tf = useTimeFilter('7', 'day');
+  const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
 
   // 构建时间过滤后的 displayData
   const filteredDisplayData = useMemo(() => {
     if (!currentDisplayData) return null;
     const orders = currentDisplayData.orders || [];
     const allDates = getAllDateGroups(orders);
-    const filteredOrders = filterByTimeRange(orders, allDates, timeRange);
+    const filteredOrders = filterByTimeRange(orders, allDates, timeRange, customStart, customEnd, quickRange);
     return {
       ...currentDisplayData,
       orders: filteredOrders,
-      afterSaleRecords: filterPromoByTimeRange(currentDisplayData.afterSaleRecords || [], allDates, timeRange, '申请时间'),
-      promotionProducts: filterPromoByTimeRange(currentDisplayData.promotionProducts || [], allDates, timeRange),
-      promotionSummary: filterPromoByTimeRange(currentDisplayData.promotionSummary || [], allDates, timeRange),
-      shippingInsurance: filterPromoByTimeRange(currentDisplayData.shippingInsurance || [], allDates, timeRange, '日期'),
+      afterSaleRecords: filterPromoByTimeRange(currentDisplayData.afterSaleRecords || [], allDates, timeRange, ['申请时间'], customStart, customEnd, quickRange),
+      promotionProducts: filterPromoByTimeRange(currentDisplayData.promotionProducts || [], allDates, timeRange, undefined, customStart, customEnd, quickRange),
+      promotionSummary: filterPromoByTimeRange(currentDisplayData.promotionSummary || [], allDates, timeRange, undefined, customStart, customEnd, quickRange),
+      shippingInsurance: filterPromoByTimeRange(currentDisplayData.shippingInsurance || [], allDates, timeRange, ['日期'], customStart, customEnd, quickRange),
     };
-  }, [currentDisplayData, timeRange]);
+  }, [currentDisplayData, timeRange, customStart, customEnd, quickRange]);
 
   const productStats = useProductStats(filteredDisplayData);
   const totalStats = useTotalProductStats(productStats);
@@ -61,9 +59,9 @@ export default function ProductLinksPage() {
       result = result.filter(p => p.productName.toLowerCase().includes(q) || p.productId.toLowerCase().includes(q));
     }
     result = result.filter(p => {
-      if (roiFilter === 'profit' && p.roi <= 0) return false;
-      if (roiFilter === 'loss' && p.roi >= 0) return false;
-      if (roiFilter === 'flat' && Math.abs(p.roi) > 5) return false;
+      if (roiFilter === 'profit' && p.roi < 1) return false;
+      if (roiFilter === 'loss' && p.roi >= 1) return false;
+      if (roiFilter === 'flat' && Math.abs(p.roi - 1) > 0.05) return false;
       if (p.orders < minOrders) return false;
       if (p.gmv < minGmv) return false;
       return true;
@@ -141,12 +139,15 @@ export default function ProductLinksPage() {
   ];
 
   const renderStatValue = (s: ProductStat, key: string) => {
-    const isRate = ['roi', 'refundRate', 'afterSaleRate', 'discountRatio', 'promoCostRatio', 'profitRate', 'ctr', 'cvr'].includes(key);
+    const isRate = ['refundRate', 'afterSaleRate', 'discountRatio', 'promoCostRatio', 'profitRate', 'ctr', 'cvr'].includes(key);
     const isMoney = ['gmv', 'revenue', 'promoCost', 'promoTransaction', 'discount', 'totalCost', 'refund', 'netProfit', 'avgOrderValue'].includes(key);
     const isCount = ['orders', 'sales', 'promoImpressions', 'promoClicks'].includes(key);
     const val = s[key as keyof ProductStat] as number;
+    if (key === 'roi') {
+      return <span style={{ color: val >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' }}>{val.toFixed(2)}x</span>;
+    }
     if (isRate) {
-      const color = key === 'roi' || key === 'profitRate' ? (val >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)') : undefined;
+      const color = key === 'profitRate' ? (val >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)') : undefined;
       return <span style={{ color }}>{val.toFixed(1)}%</span>;
     }
     if (isMoney) {
@@ -165,7 +166,7 @@ export default function ProductLinksPage() {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
-      <TimeFilter state={tfState} />
+      <TimeFilter state={tf} />
       <div className="flex items-center justify-between mb-6">
         <div>
           <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-bold mb-1">商品关联分析</motion.h1>
@@ -362,7 +363,7 @@ export default function ProductLinksPage() {
                     </h4>
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">推广花费</span><p className="font-mono font-bold text-[var(--pdd-purple)]">¥{fmt(selectedDetail.promoCost)}</p></div>
-                      <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">推广成交</span><p className="font-mono font-bold">{selectedDetail.promoOrders}</p></div>
+                      <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">成交笔数</span><p className="font-mono font-bold">{selectedDetail.promoOrders}</p></div>
                       <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">点击量</span><p className="font-mono font-bold">{selectedDetail.promoClicks}</p></div>
                       <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">曝光量</span><p className="font-mono font-bold">{selectedDetail.promoImpressions}</p></div>
                       <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">CTR</span><p className="font-mono font-bold">{selectedDetail.ctr.toFixed(2)}%</p></div>

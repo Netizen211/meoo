@@ -3,34 +3,33 @@ import { motion } from 'framer-motion';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine, ComposedChart, Area } from 'recharts';
 import { Truck, Clock, CheckCircle, AlertTriangle, Package, Lock, ArrowUp, ArrowDown, MapPin, TrendingUp, DollarSign, Filter, Download, ChevronDown, BarChart3 as BarChartIcon } from 'lucide-react';
 import { useData, useAuth } from '../App';
-import TimeFilter, { TimeRange, TimeGranularity, safeFloat, filterByTimeRange, getCompareOrders, getAllDateGroups, changePct } from '../components/TimeFilter';
-import { ss, hoursDiff, exportCSV } from '../utils';
+import TimeFilter, { useTimeFilter, TimeRange, TimeGranularity, safeFloat, filterByTimeRange, getCompareOrders, getAllDateGroups, changePct } from '../components/TimeFilter';
+import { ss, hoursDiff, exportCSV, findField } from '../utils';
 
 const COLORS = ['var(--pdd-danger)', 'var(--pdd-primary)', 'var(--pdd-success)', 'var(--pdd-warning)', 'var(--pdd-purple)', '#13c2c2', '#eb2f96', '#fa541c', '#2f54eb', '#a0d911'];
 
 export default function LogisticsPage() {
   const { currentDisplayData } = useData();
   const { isPaid } = useAuth();
-  const [timeRange, setTimeRange] = useState<TimeRange>('7');
-  const [granularity, setGranularity] = useState<TimeGranularity>('day');
-  const [compareEnabled, setCompareEnabled] = useState(false);
+  const tf = useTimeFilter('7', 'day');
+  const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
   const [selectedCourier, setSelectedCourier] = useState<string>('all');
   const [showOverdueOnly, setShowOverdueOnly] = useState(false);
 
   const orders = currentDisplayData?.orders || [];
   const noData = !orders.length;
 
-  const validOrders = useMemo(() => orders.filter((o: any) => ss(o['订单状态']) !== '已取消'), [orders]);
+  const validOrders = useMemo(() => orders.filter((o: any) => ss(findField(o, '订单状态')) !== '已取消'), [orders]);
   const allDates = useMemo(() => getAllDateGroups(validOrders), [validOrders]);
-  const filteredOrders = useMemo(() => filterByTimeRange(validOrders, allDates, timeRange), [validOrders, allDates, timeRange]);
-  const compareOrders = useMemo(() => compareEnabled ? getCompareOrders(validOrders, allDates, timeRange) : [], [validOrders, allDates, timeRange, compareEnabled]);
+  const filteredOrders = useMemo(() => filterByTimeRange(validOrders, allDates, timeRange, customStart, customEnd, quickRange), [validOrders, allDates, timeRange, customStart, customEnd, quickRange]);
+  const compareOrders = useMemo(() => compareEnabled ? getCompareOrders(validOrders, allDates, timeRange, compareStart, compareEnd, customStart, customEnd, quickRange) : [], [validOrders, allDates, timeRange, compareStart, compareEnd, customStart, customEnd, quickRange, compareEnabled]);
 
-  const shippedOrders = useMemo(() => filteredOrders.filter((o: any) => ss(o['发货时间']) !== ''), [filteredOrders]);
-  const pendingOrders = useMemo(() => filteredOrders.filter((o: any) => ss(o['发货时间']) === '' && ss(o['订单状态']) !== '已取消'), [filteredOrders]);
-  const compareShipped = useMemo(() => compareOrders.filter((o: any) => ss(o['发货时间']) !== ''), [compareOrders]);
+  const shippedOrders = useMemo(() => filteredOrders.filter((o: any) => ss(findField(o, '发货时间')) !== ''), [filteredOrders]);
+  const pendingOrders = useMemo(() => filteredOrders.filter((o: any) => ss(findField(o, '发货时间')) === '' && ss(findField(o, '订单状态')) !== '已取消'), [filteredOrders]);
+  const compareShipped = useMemo(() => compareOrders.filter((o: any) => ss(findField(o, '发货时间')) !== ''), [compareOrders]);
 
-  const shipHours = useMemo(() => shippedOrders.map((o: any) => hoursDiff(ss(o['发货时间']), ss(o['支付时间']))).filter(h => h >= 0), [shippedOrders]);
-  const compareShipHours = useMemo(() => compareShipped.map((o: any) => hoursDiff(ss(o['发货时间']), ss(o['支付时间']))).filter(h => h >= 0), [compareShipped]);
+  const shipHours = useMemo(() => shippedOrders.map((o: any) => hoursDiff(ss(findField(o, '发货时间')), ss(findField(o, '支付时间')))).filter(h => h >= 0), [shippedOrders]);
+  const compareShipHours = useMemo(() => compareShipped.map((o: any) => hoursDiff(ss(findField(o, '发货时间')), ss(findField(o, '支付时间')))).filter(h => h >= 0), [compareShipped]);
 
   const avgShipH = useMemo(() => shipHours.length ? shipHours.reduce((a, b) => a + b, 0) / shipHours.length : 0, [shipHours]);
   const rate48 = useMemo(() => shipHours.length ? shipHours.filter(h => h <= 48).length / shipHours.length * 100 : 0, [shipHours]);
@@ -48,13 +47,13 @@ export default function LogisticsPage() {
   const courierData = useMemo(() => {
     const map: Record<string, { count: number; hours: number[]; postage: number }> = {};
     shippedOrders.forEach((o: any) => {
-      const c = ss(o['快递公司']);
+      const c = ss(findField(o, '快递公司'));
       if (!c) return;
       if (!map[c]) map[c] = { count: 0, hours: [], postage: 0 };
       map[c].count++;
-      const h = hoursDiff(ss(o['发货时间']), ss(o['支付时间']));
+      const h = hoursDiff(ss(findField(o, '发货时间')), ss(findField(o, '支付时间')));
       if (h >= 0) map[c].hours.push(h);
-      map[c].postage += safeFloat(o['邮费(元)']);
+      map[c].postage += safeFloat(findField(o, '邮费(元)', '邮费'));
     });
     return Object.entries(map).sort((a, b) => b[1].count - a[1].count).map(([name, d], i) => ({
       name, count: d.count, pct: shippedOrders.length ? (d.count / shippedOrders.length * 100).toFixed(1) : '0',
@@ -68,10 +67,10 @@ export default function LogisticsPage() {
     if (!compareEnabled) return [];
     const map: Record<string, { hours: number[] }> = {};
     compareShipped.forEach((o: any) => {
-      const c = ss(o['快递公司']);
+      const c = ss(findField(o, '快递公司'));
       if (!c) return;
       if (!map[c]) map[c] = { hours: [] };
-      const h = hoursDiff(ss(o['发货时间']), ss(o['支付时间']));
+      const h = hoursDiff(ss(findField(o, '发货时间')), ss(findField(o, '支付时间')));
       if (h >= 0) map[c].hours.push(h);
     });
     return Object.entries(map).map(([name, d]) => ({ name, prevAvgH: d.hours.length ? (d.hours.reduce((a, b) => a + b, 0) / d.hours.length).toFixed(1) : '--' }));
@@ -85,9 +84,9 @@ export default function LogisticsPage() {
   const dailyTrend = useMemo(() => {
     const map: Record<string, { total: number; overdue: number }> = {};
     shippedOrders.forEach((o: any) => {
-      const d = ss(o['支付时间']).split(' ')[0];
+      const d = ss(findField(o, '支付时间')).split(' ')[0];
       if (!d) return;
-      const h = hoursDiff(ss(o['发货时间']), ss(o['支付时间']));
+      const h = hoursDiff(ss(findField(o, '发货时间')), ss(findField(o, '支付时间')));
       if (!map[d]) map[d] = { total: 0, overdue: 0 };
       map[d].total++;
       if (h > 48) map[d].overdue++;
@@ -98,12 +97,12 @@ export default function LogisticsPage() {
   const provinceData = useMemo(() => {
     const map: Record<string, { hours: number[]; postage: number; count: number }> = {};
     shippedOrders.forEach((o: any) => {
-      const p = ss(o['省']);
+      const p = ss(findField(o, '省', '省份'));
       if (!p) return;
       if (!map[p]) map[p] = { hours: [], postage: 0, count: 0 };
-      const h = hoursDiff(ss(o['发货时间']), ss(o['支付时间']));
+      const h = hoursDiff(ss(findField(o, '发货时间')), ss(findField(o, '支付时间')));
       if (h >= 0) map[p].hours.push(h);
-      map[p].postage += safeFloat(o['邮费(元)']);
+      map[p].postage += safeFloat(findField(o, '邮费(元)', '邮费'));
       map[p].count++;
     });
     return Object.entries(map).sort((a, b) => (b[1].hours.reduce((s, v) => s + v, 0) / b[1].hours.length) - (a[1].hours.reduce((s, v) => s + v, 0) / a[1].hours.length)).slice(0, 10).map(([name, d]) => ({
@@ -114,23 +113,23 @@ export default function LogisticsPage() {
   const pendingList = useMemo(() => {
     const now = new Date();
     return pendingOrders.map((o: any) => {
-      const promiseTime = ss(o['承诺发货时间']);
+      const promiseTime = ss(findField(o, '承诺发货时间'));
       const remain = promiseTime ? (new Date(promiseTime).getTime() - now.getTime()) / 3600000 : null;
-      return { id: ss(o['订单号']), product: ss(o['商品']).slice(0, 20), payTime: ss(o['支付时间']).slice(0, 16), promiseTime: promiseTime.slice(0, 16), remain, province: ss(o['省']) };
+      return { id: ss(findField(o, '订单号')), product: ss(findField(o, '商品', '商品名称', '商品名')).slice(0, 20), payTime: ss(findField(o, '支付时间')).slice(0, 16), promiseTime: promiseTime.slice(0, 16), remain, province: ss(findField(o, '省', '省份')) };
     }).filter(p => !showOverdueOnly || (p.remain != null && p.remain < 6)).sort((a, b) => (a.remain ?? 999) - (b.remain ?? 999)).slice(0, 20);
   }, [pendingOrders, showOverdueOnly]);
 
   const overdueOrders = useMemo(() => {
     return shippedOrders.filter((o: any) => {
-      const h = hoursDiff(ss(o['发货时间']), ss(o['支付时间']));
+      const h = hoursDiff(ss(findField(o, '发货时间')), ss(findField(o, '支付时间')));
       return h > 48;
-    }).map((o: any) => ({ id: ss(o['订单号']), product: ss(o['商品']).slice(0, 20), hours: hoursDiff(ss(o['发货时间']), ss(o['支付时间'])).toFixed(1), courier: ss(o['快递公司']) || '未知', province: ss(o['省']) })).slice(0, 15);
+    }).map((o: any) => ({ id: ss(findField(o, '订单号')), product: ss(findField(o, '商品', '商品名称', '商品名')).slice(0, 20), hours: hoursDiff(ss(findField(o, '发货时间')), ss(findField(o, '支付时间'))).toFixed(1), courier: ss(findField(o, '快递公司')) || '未知', province: ss(findField(o, '省', '省份')) })).slice(0, 15);
   }, [shippedOrders]);
 
   const logisticsCost = useMemo(() => {
-    const totalPostage = shippedOrders.reduce((s, o) => s + safeFloat(o['邮费(元)']), 0);
+    const totalPostage = shippedOrders.reduce((s, o) => s + safeFloat(findField(o, '邮费(元)', '邮费')), 0);
     const avgPostage = shippedOrders.length > 0 ? totalPostage / shippedOrders.length : 0;
-    const freeShipCount = shippedOrders.filter(o => safeFloat(o['邮费(元)']) === 0).length;
+    const freeShipCount = shippedOrders.filter(o => safeFloat(findField(o, '邮费(元)', '邮费')) === 0).length;
     const freeShipRate = shippedOrders.length > 0 ? (freeShipCount / shippedOrders.length) * 100 : 0;
     return { totalPostage, avgPostage, freeShipRate };
   }, [shippedOrders]);
@@ -148,7 +147,7 @@ export default function LogisticsPage() {
 
   return (
     <div className="p-4 space-y-3">
-      <TimeFilter state={{ timeRange, granularity, compareEnabled, setTimeRange, setGranularity, setCompareEnabled }} />
+      <TimeFilter state={tf} />
 
       <div className="grid grid-cols-3 gap-3">
         {kpis.map((k, i) => (
@@ -235,7 +234,7 @@ export default function LogisticsPage() {
           {noData ? <div className="h-32 flex items-center justify-center text-xs text-[var(--pdd-text-secondary)]">请先上传数据</div> : (
             <div className="space-y-2">
               <div className="flex items-center justify-between p-2 rounded bg-pdd-danger/10"><span className="text-xs">超时订单</span><span className="text-sm font-bold text-[var(--pdd-danger)]">{overdueCount}单</span></div>
-              <div className="flex items-center justify-between p-2 rounded bg-pdd-warning/10"><span className="text-xs">待发货预警(&lt;6h)</span><span className="text-sm font-bold text-[var(--pdd-warning)]">{pendingOrders.filter((o: any) => { const p = ss(o['承诺发货时间']); return p && (new Date(p).getTime() - Date.now()) / 3600000 < 6; }).length}单</span></div>
+              <div className="flex items-center justify-between p-2 rounded bg-pdd-warning/10"><span className="text-xs">待发货预警(&lt;6h)</span><span className="text-sm font-bold text-[var(--pdd-warning)]">{pendingOrders.filter((o: any) => { const p = ss(findField(o, '承诺发货时间')); return p && (new Date(p).getTime() - Date.now()) / 3600000 < 6; }).length}单</span></div>
               <div className="flex items-center justify-between p-2 rounded bg-pdd-info/10"><span className="text-xs">平均邮费偏高</span><span className="text-sm font-bold text-[var(--pdd-primary)]">{logisticsCost.avgPostage > 8 ? '是' : '否'}</span></div>
             </div>
           )}

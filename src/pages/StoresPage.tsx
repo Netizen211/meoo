@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Store, Plus, Trash2, ShoppingBag, TrendingUp, DollarSign, ShoppingCart, BarChart3, RefreshCw, Eye, FileText, Users, Package, AlertCircle, CheckCircle, Clock, ChevronRight } from 'lucide-react';
 import { useStore, useData } from '../App';
 import { safeFloat } from '../components/TimeFilter';
+import { findField } from '../utils';
 
 export default function StoresPage() {
   const { stores, currentStore, addStore, switchStore, deleteStore } = useStore();
@@ -30,28 +31,35 @@ export default function StoresPage() {
       const storeUploads = uploadRecords.filter(r => r.storeId === s.id);
       const storeData = getStoreData(s.id);
       if (!storeData) {
-        stats[s.id] = { orders: 0, gmv: 0, promoCost: 0, uploadCount: storeUploads.length, avgOrderValue: 0, productCount: 0, userCount: 0, refundRate: 0, logisticsRate: 0, lastUploadTime: storeUploads.length > 0 ? storeUploads[storeUploads.length - 1].uploadedAt : '', dataTypes: [] };
+        stats[s.id] = { orders: 0, gmv: 0, promoCost: 0, uploadCount: storeUploads.length, avgOrderValue: 0, productCount: 0, userCount: 0, refundRate: 0, lastUploadTime: storeUploads.length > 0 ? storeUploads[storeUploads.length - 1].uploadedAt : '', dataTypes: [] };
         return;
       }
       const orders = storeData.orders || [];
       const promotionSummary = storeData.promotionSummary || [];
       const shippingInsurance = storeData.shippingInsurance || [];
-      const gmv = orders.reduce((sum: number, o: any) => sum + safeFloat(o['商家实收金额(元)']), 0);
-      const promoCost = promotionSummary.reduce((sum: number, r: any) => sum + safeFloat(r['总花费(元)'] || r['花费(元)']), 0);
-      const refundOrders = orders.filter((o: any) => o['订单状态'] === '退款' || o['订单状态'] === '退货退款').length;
+      const starStoreSummary = storeData.starStoreSummary || [];
+      const liveStreamSummary = storeData.liveStreamSummary || [];
+      const gmv = orders.reduce((sum: number, o: any) => sum + safeFloat(findField(o, '商品总价(元)', '商品总价')), 0);
+      const promoCost = promotionSummary.reduce((sum: number, r: any) => sum + safeFloat(findField(r, '总花费(元)', '花费(元)')), 0)
+        + starStoreSummary.reduce((sum: number, r: any) => sum + safeFloat(findField(r, '花费(元)', '总花费(元)')), 0)
+        + liveStreamSummary.reduce((sum: number, r: any) => sum + safeFloat(findField(r, '总花费(元)', '花费(元)')), 0);
+      const refundOrders = orders.filter((o: any) => {
+        const st = String(findField(o, '售后状态') || '').trim();
+        return st.includes('退款');
+      }).length;
       const dataTypes: string[] = [];
       if (orders.length > 0) dataTypes.push('订单');
       if (promotionSummary.length > 0) dataTypes.push('推广');
-      if (storeData.starStoreSummary?.length > 0) dataTypes.push('明星店铺');
-      if (storeData.liveStreamSummary?.length > 0) dataTypes.push('直播');
+      if (starStoreSummary.length > 0) dataTypes.push('明星店铺');
+      if (liveStreamSummary.length > 0) dataTypes.push('直播');
       if (shippingInsurance.length > 0) dataTypes.push('运费险');
       stats[s.id] = {
         orders: orders.length, gmv, promoCost, uploadCount: storeUploads.length,
         avgOrderValue: orders.length > 0 ? gmv / orders.length : 0,
-        productCount: new Set(orders.map((o: any) => o['商品id']).filter(Boolean)).size,
-        userCount: new Set(orders.map((o: any) => o['买家姓名']).filter(Boolean)).size,
+        productCount: new Set(orders.map((o: any) => String(findField(o, '商品id', '商品ID') || '').trim()).filter(Boolean)).size,
+        userCount: new Set(orders.map((o: any) => String(findField(o, '用户购买手机号') || '').trim()).filter(Boolean)).size,
         refundRate: orders.length > 0 ? (refundOrders / orders.length) * 100 : 0,
-        logisticsRate: 0, lastUploadTime: storeUploads.length > 0 ? storeUploads[storeUploads.length - 1].uploadedAt : '', dataTypes
+        lastUploadTime: storeUploads.length > 0 ? storeUploads[storeUploads.length - 1].uploadedAt : '', dataTypes
       };
     });
     return stats;
@@ -67,7 +75,7 @@ export default function StoresPage() {
 
   const statCards = [
     { label: '总订单', value: totalStats.totalOrders.toLocaleString(), sub: '累计订单量', icon: ShoppingCart, color: 'var(--pdd-info)', bg: 'rgba(59,130,246,0.1)' },
-    { label: '总GMV', value: `¥${totalStats.totalGMV.toLocaleString()}`, sub: '商家实收金额', icon: DollarSign, color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
+    { label: '总GMV', value: `¥${totalStats.totalGMV.toLocaleString()}`, sub: '商品总价', icon: DollarSign, color: '#6366f1', bg: 'rgba(99,102,241,0.1)' },
     { label: '推广花费', value: `¥${totalStats.totalPromoCost.toLocaleString()}`, sub: '累计推广成本', icon: TrendingUp, color: '#a855f7', bg: 'rgba(168,85,247,0.1)' },
     { label: '商品数', value: String(totalStats.totalProducts), sub: '在售商品', icon: Package, color: 'var(--pdd-success)', bg: 'rgba(34,197,94,0.1)' },
     { label: '买家数', value: String(totalStats.totalUsers), sub: '累计买家', icon: Users, color: 'var(--pdd-warning)', bg: 'rgba(245,158,11,0.1)' },

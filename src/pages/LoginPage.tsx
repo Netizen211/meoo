@@ -15,10 +15,8 @@ export default function LoginPage() {
 
   useEffect(() => {
     const savedUsername = localStorage.getItem('dianfx_remember_username');
-    const savedPassword = localStorage.getItem('dianfx_remember_password');
-    if (savedUsername && savedPassword) {
+    if (savedUsername) {
       setUsername(savedUsername);
-      setPassword(savedPassword);
       setRememberMe(true);
     }
   }, []);
@@ -28,10 +26,8 @@ export default function LoginPage() {
     if (login(username, password)) {
       if (rememberMe) {
         localStorage.setItem('dianfx_remember_username', username);
-        localStorage.setItem('dianfx_remember_password', password);
       } else {
         localStorage.removeItem('dianfx_remember_username');
-        localStorage.removeItem('dianfx_remember_password');
       }
       navigate('/stores');
     }
@@ -103,7 +99,7 @@ export default function LoginPage() {
               ) : (
                 <Square size={16} />
               )}
-              <span>记住密码</span>
+              <span>记住用户名</span>
             </button>
           </div>
 

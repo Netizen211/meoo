@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Link, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpDown, Download, Filter, LayoutGrid, Table, Eye, Percent, Target, RotateCcw, Package, Search, CheckCircle, XCircle } from 'lucide-react';
+import { Link, TrendingUp, TrendingDown, DollarSign, BarChart3, ArrowUpDown, Download, Filter, LayoutGrid, Table, Eye, Percent, Target, RotateCcw, Package, Search, CheckCircle, XCircle, Activity, Shield } from 'lucide-react';
 import { useTotalProductStats, ProductStat } from '../../components/ProductLinkStats';
 import ProductLinkChart from '../../components/ProductLinkChart';
 
@@ -39,9 +39,9 @@ export default function ProductFullLinkTab({ productStats }: Props) {
       result = result.filter(p => p.productName.toLowerCase().includes(q) || p.productId.toLowerCase().includes(q));
     }
     result = result.filter(p => {
-      if (roiFilter === 'profit' && p.roi <= 0) return false;
-      if (roiFilter === 'loss' && p.roi >= 0) return false;
-      if (roiFilter === 'flat' && Math.abs(p.roi) > 5) return false;
+      if (roiFilter === 'profit' && p.roi < 1) return false;
+      if (roiFilter === 'loss' && p.roi >= 1) return false;
+      if (roiFilter === 'flat' && Math.abs(p.roi - 1) > 0.05) return false;
       if (p.orders < minOrders) return false;
       if (p.gmv < minGmv) return false;
       return true;
@@ -88,7 +88,9 @@ export default function ProductFullLinkTab({ productStats }: Props) {
     { label: '总实收', value: `¥${fmtInt(totalStats.revenue)}`, icon: TrendingUp, color: 'var(--pdd-success)' },
     { label: '推广花费', value: `¥${fmtInt(totalStats.promoCost)}`, icon: Target, color: 'var(--pdd-purple)' },
     { label: '总折扣', value: `¥${fmtInt(totalStats.discount)}`, icon: Percent, color: 'var(--pdd-warning)' },
-    { label: '总成本', value: `¥${fmtInt(totalStats.totalCost)}`, icon: TrendingDown, color: 'var(--pdd-danger)' },
+    { label: '毛利润', value: `¥${fmtInt(totalStats.totalGrossProfit)}`, icon: TrendingUp, color: totalStats.totalGrossProfit >= 0 ? 'var(--pdd-info)' : 'var(--pdd-danger)' },
+    { label: '税前利润', value: `¥${fmtInt(totalStats.totalPreTaxProfit)}`, icon: Activity, color: totalStats.totalPreTaxProfit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' },
+    { label: '税费+扣费', value: `¥${fmtInt(totalStats.totalTaxes + totalStats.totalCustomDed)}`, icon: Shield, color: 'var(--pdd-warning)' },
     { label: '净利润', value: `¥${fmtInt(totalStats.netProfit)}`, icon: DollarSign, color: totalStats.netProfit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' },
     { label: '平均ROI', value: `${totalStats.roi.toFixed(2)}x`, icon: BarChart3, color: totalStats.roi >= 1 ? 'var(--pdd-success)' : 'var(--pdd-danger)' },
     { label: '退款率', value: `${totalStats.refundRate.toFixed(1)}%`, icon: RotateCcw, color: '#ff7875' },
@@ -111,11 +113,14 @@ export default function ProductFullLinkTab({ productStats }: Props) {
   ];
 
   const renderStatValue = (s: ProductStat, key: string) => {
-    const isRate = ['roi', 'refundRate', 'afterSaleRate', 'profitRate', 'ctr', 'cvr'].includes(key);
+    const isRate = ['refundRate', 'afterSaleRate', 'profitRate', 'ctr', 'cvr'].includes(key);
     const isMoney = ['gmv', 'revenue', 'promoCost', 'discount', 'totalCost', 'refund', 'netProfit', 'avgOrderValue'].includes(key);
     const val = s[key as keyof ProductStat] as number;
+    if (key === 'roi') {
+      return <span style={{ color: val >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' }}>{val.toFixed(2)}x</span>;
+    }
     if (isRate) {
-      const color = key === 'roi' || key === 'profitRate' ? (val >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)') : undefined;
+      const color = key === 'profitRate' ? (val >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)') : undefined;
       return <span style={{ color }}>{val.toFixed(1)}%</span>;
     }
     if (isMoney) {
@@ -141,7 +146,7 @@ export default function ProductFullLinkTab({ productStats }: Props) {
   return (
     <div className="space-y-3 ml-5">
       {/* KPI Cards */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-5 gap-3">
         {kpiCards.map((k, i) => (
           <motion.div key={k.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="pdd-card p-3">
             <div className="flex items-center gap-2 mb-1"><k.icon size={14} color={k.color} /><span className="text-xs text-pdd-text-secondary">{k.label}</span></div>

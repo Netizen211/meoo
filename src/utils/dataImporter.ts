@@ -245,13 +245,7 @@ function processStarStoreData(existing: StoreDataItem, sheets: Record<string, { 
 
     existing.starStoreSummary = Array.from(starMap.values());
 
-    sheet.data.forEach((item: any) => {
-      if (!isValidDateRow(item)) return;
-      const promoItem = { ...item, _source: 'starStore' };
-      if (!promoItem['商品ID']) promoItem['商品ID'] = item['推广名称'] || item['创意样式'] || '明星店铺';
-      if (!promoItem['商品名称']) promoItem['商品名称'] = item['推广名称'] || item['创意样式'] || '明星店铺';
-      existing.promotionProducts.push(promoItem);
-    });
+    sheet.fields.forEach(f => existing.availableFields.promotion.add(f));
   }
 }
 
@@ -282,13 +276,7 @@ function processLiveStreamData(existing: StoreDataItem, sheets: Record<string, {
 
     existing.liveStreamSummary = Array.from(liveMap.values());
 
-    sheet.data.forEach((item: any) => {
-      if (!isValidDateRow(item)) return;
-      const promoItem = { ...item, _source: 'liveStream' };
-      if (!promoItem['商品ID']) promoItem['商品ID'] = item['直播间'] || '直播推广';
-      if (!promoItem['商品名称']) promoItem['商品名称'] = item['直播间'] || '直播推广';
-      existing.promotionProducts.push(promoItem);
-    });
+    sheet.fields.forEach(f => existing.availableFields.promotion.add(f));
   }
 }
 
@@ -319,7 +307,18 @@ function processAfterSaleData(existing: StoreDataItem, sheets: Record<string, { 
     sheet.data.forEach((item: any) => {
       const key = String(item['售后编号'] || '');
       if (key && !existingKeys.has(key)) {
-        existing.afterSaleRecords!.push(item);
+        // 字段名规范化：统一商品ID字段名
+        const normalized: any = { ...item };
+        const pidFields = ['商品ID', '商品id', '商品编号', '商品Id'];
+        let normalizedPid = '';
+        for (const f of pidFields) {
+          if (item[f] != null && String(item[f]).trim() !== '') {
+            normalizedPid = String(item[f]).trim();
+            break;
+          }
+        }
+        if (normalizedPid) normalized['商品ID'] = normalizedPid;
+        existing.afterSaleRecords!.push(normalized);
         existingKeys.add(key);
       }
     });

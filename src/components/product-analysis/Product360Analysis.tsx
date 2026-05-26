@@ -385,31 +385,36 @@ function GMVDetailContent({ product }: { product: ProductStat }) {
 }
 
 function RevenueDetailContent({ product }: { product: ProductStat }) {
+  const otherFees = product.gmv - product.discount - product.refund - product.revenue;
   return (
     <div className="space-y-4">
       <div className="bg-pdd-success/10 rounded-lg p-3">
-        <div className="text-xs text-pdd-text mb-2">计算公式</div>
+        <div className="text-xs text-pdd-text mb-2">数据来源</div>
         <div className="text-sm font-mono bg-pdd-card rounded p-2 border border-green-100">
-          实收金额 = GMV - 退款金额 - 优惠金额
+          商家实收 = 订单「商家实收金额」字段直接读取
         </div>
       </div>
       <div className="space-y-2">
-        <div className="text-xs font-medium text-pdd-text">计算明细</div>
+        <div className="text-xs font-medium text-pdd-text">费用构成（仅供参考）</div>
         <div className="space-y-2 text-xs">
           <div className="flex justify-between items-center py-1 border-b border-pdd-border">
             <span className="text-pdd-text">GMV</span>
             <span className="font-mono">¥{product.gmv.toFixed(2)}</span>
           </div>
           <div className="flex justify-between items-center py-1 border-b border-pdd-border">
+            <span className="text-pdd-text">- 优惠总额</span>
+            <span className="font-mono text-pdd-danger">-¥{product.discount.toFixed(2)}</span>
+          </div>
+          <div className="flex justify-between items-center py-1 border-b border-pdd-border">
             <span className="text-pdd-text">- 退款金额</span>
             <span className="font-mono text-pdd-danger">-¥{product.refund.toFixed(2)}</span>
           </div>
           <div className="flex justify-between items-center py-1 border-b border-pdd-border">
-            <span className="text-pdd-text">- 优惠金额</span>
-            <span className="font-mono text-pdd-danger">-¥{(product.gmv - product.revenue - product.refund).toFixed(2)}</span>
+            <span className="text-pdd-text">- 平台服务费等</span>
+            <span className="font-mono text-pdd-danger">-¥{otherFees.toFixed(2)}</span>
           </div>
           <div className="flex justify-between items-center py-2 font-medium bg-pdd-success/10 rounded px-2">
-            <span className="text-green-700">= 实收金额</span>
+            <span className="text-green-700">= 商家实收</span>
             <span className="font-mono text-green-700">¥{product.revenue.toFixed(2)}</span>
           </div>
         </div>
@@ -451,14 +456,14 @@ function OrdersDetailContent({ product }: { product: ProductStat }) {
 }
 
 // 销售数据区
-function SalesDataSection({ product }: { product: ProductStat }) {
+function SalesDataSection({ product, gmvTrend, refundRateTrend }: { product: ProductStat; gmvTrend?: number; refundRateTrend?: number }) {
   return (
     <div className="space-y-4 pt-4">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard
           label="GMV"
           value={`¥${product.gmv.toFixed(0)}`}
-          trend={12.5}
+          trend={gmvTrend}
           trendLabel="环比"
           color="var(--pdd-info)"
           icon={<ShoppingCart size={14} />}
@@ -513,7 +518,7 @@ function SalesDataSection({ product }: { product: ProductStat }) {
         <MetricCard
           label="退款率"
           value={`${product.refundRate.toFixed(2)}%`}
-          trend={-2.3}
+          trend={refundRateTrend}
           trendLabel="环比"
           color={product.refundRate > 10 ? 'var(--pdd-danger)' : 'var(--pdd-success)'}
           icon={<AlertTriangle size={14} />}
@@ -704,10 +709,10 @@ function CostProfitSection({ product }: { product: ProductStat }) {
             <div className="space-y-3">
               <div className="bg-pdd-success/10 rounded-lg p-3">
                 <div className="text-xs text-pdd-text">计算公式</div>
-                <div className="text-sm font-mono mt-1">税前利润 = 毛利润 - 推广费</div>
+                <div className="text-sm font-mono mt-1">税前利润 = 毛利润 - 商品成本</div>
               </div>
               <div className="text-xs text-pdd-text">
-                ¥{(product.grossProfit || 0).toFixed(2)} - ¥{(product.costBreakdown?.promoCost || 0).toFixed(2)} = ¥{(product.preTaxProfit || 0).toFixed(2)}
+                ¥{(product.grossProfit || 0).toFixed(2)} - ¥{(product.costBreakdown?.productCost || 0).toFixed(2)} = ¥{(product.preTaxProfit || 0).toFixed(2)}
               </div>
             </div>
           }
@@ -1256,23 +1261,119 @@ function RegionSection({ product }: { product: ProductStat }) {
   );
 }
 
+// 订单字段提取辅助函数（模块级，避免每次渲染重复创建）
+function fv(o: any, fields: string[]): string {
+  for (const f of fields) { const v = o[f]; if (v !== undefined && v !== null && v !== '') return String(v).trim(); }
+  return '-';
+}
+function fn(o: any, fields: string[]): number {
+  for (const f of fields) { const v = o[f]; if (v !== undefined && v !== null && v !== '') { const n = parseFloat(String(v).replace(/[^\d.\-]/g, '')); if (!isNaN(n)) return n; } }
+  return 0;
+}
+
+// 订单明细表格（memoized 避免切换卡顿）
+const OrderDetailTable = React.memo(function OrderDetailTable({
+  orders, costConfig
+}: {
+  orders: any[];
+  costConfig?: { productCosts?: Record<string, number>; defaultCostRatio: number; packagingFeePerOrder: number; shippingFeePerOrder: number };
+}) {
+  const rows = useMemo(() => {
+    return orders.slice(0, 200).map((o, i) => {
+      const orderNo = fv(o, ['订单号']);
+      const date = (fv(o, ['支付时间'])).split(' ')[0];
+      const qty = fn(o, ['商品数量(件)', '商品数量', '数量']);
+      const productTotal = fn(o, ['商品总价(元)', '商品总价']);
+      const merchantReceived = fn(o, ['商家实收金额(元)', '商家实收金额', '商家实收', '实收金额']);
+      const pid = fv(o, ['商品id', '商品ID', 'productId']);
+      const skuId = fv(o, ['规格id', '规格ID', 'sku_id', 'style_id', '商品规格ID']);
+      let unitCost = 0;
+      const pcs = costConfig?.productCosts;
+      if (pcs) {
+        const skuKey = `${pid}_${skuId}`;
+        if (skuId && pcs[skuKey] !== undefined && pcs[skuKey] > 0) {
+          unitCost = pcs[skuKey];
+        } else if (pid && pcs[pid] !== undefined && pcs[pid] > 0) {
+          unitCost = pcs[pid];
+        }
+      }
+      const productCost = unitCost > 0 ? unitCost * qty : productTotal * ((costConfig?.defaultCostRatio ?? 30) / 100);
+      const totalCosts = productCost + (costConfig?.packagingFeePerOrder || 0) + (costConfig?.shippingFeePerOrder || 0);
+      const netProfit = merchantReceived - totalCosts;
+      const profitRate = merchantReceived > 0 ? (netProfit / merchantReceived) * 100 : 0;
+      return { key: i, orderNo, date, qty, productTotal, merchantReceived, totalCosts, netProfit, profitRate };
+    });
+  }, [orders, costConfig]);
+
+  if (orders.length === 0) return <div className="text-center py-8 text-pdd-text-secondary text-xs">暂无订单数据</div>;
+
+  return (
+    <div className="max-h-[400px] overflow-y-auto">
+      <table className="w-full text-[10px]">
+        <thead>
+          <tr className="text-pdd-gray-400 border-b border-pdd-gray-100 sticky top-0 bg-pdd-card">
+            <th className="py-1.5 text-left font-medium">订单号</th>
+            <th className="py-1.5 text-left font-medium">日期</th>
+            <th className="py-1.5 text-right font-medium">数量</th>
+            <th className="py-1.5 text-right font-medium">商品总价</th>
+            <th className="py-1.5 text-right font-medium">实收</th>
+            <th className="py-1.5 text-right font-medium">成本</th>
+            <th className="py-1.5 text-right font-medium">利润</th>
+            <th className="py-1.5 text-right font-medium">利润率</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-pdd-gray-50">
+          {rows.map(r => (
+            <tr key={r.key} className="hover:bg-pdd-gray-50 transition-colors">
+              <td className="py-1 font-mono text-pdd-gray-600 max-w-[80px] truncate" title={r.orderNo}>{r.orderNo.length > 8 ? r.orderNo.slice(-8) : r.orderNo}</td>
+              <td className="py-1 text-pdd-gray-500">{r.date.length > 5 ? r.date.slice(5) : r.date}</td>
+              <td className="py-1 text-right tabular-nums">{r.qty}</td>
+              <td className="py-1 text-right font-mono tabular-nums">¥{r.productTotal.toFixed(0)}</td>
+              <td className="py-1 text-right font-mono tabular-nums">¥{r.merchantReceived.toFixed(0)}</td>
+              <td className="py-1 text-right font-mono tabular-nums">¥{r.totalCosts.toFixed(0)}</td>
+              <td className="py-1 text-right font-mono tabular-nums font-medium" style={{ color: r.netProfit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' }}>¥{r.netProfit.toFixed(0)}</td>
+              <td className="py-1 text-right tabular-nums" style={{ color: r.profitRate >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' }}>{r.profitRate.toFixed(1)}%</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {orders.length > 200 && (
+        <p className="text-[10px] text-pdd-gray-400 text-center mt-2">仅显示前 200 笔，共 {orders.length} 笔订单</p>
+      )}
+    </div>
+  );
+});
+
 // 主组件
 interface Product360AnalysisProps {
   product: ProductStat | null;
   compareProducts?: ProductStat[];
   onExport?: () => void;
   onClose?: () => void;
+  orders?: any[];
+  costConfig?: {
+    productCosts?: Record<string, number>;
+    defaultCostRatio: number;
+    packagingFeePerOrder: number;
+    shippingFeePerOrder: number;
+  };
+  gmvTrend?: number;
+  refundRateTrend?: number;
 }
 
 export default function Product360Analysis({
   product,
   compareProducts = [],
   onExport,
-  onClose
+  onClose,
+  orders = [],
+  costConfig,
+  gmvTrend,
+  refundRateTrend
 }: Product360AnalysisProps) {
   const [activeTab, setActiveTab] = useState<'overview' | 'detail'>('overview');
   const [compareMode, setCompareMode] = useState(false);
-  const [showFullAnalysis, setShowFullAnalysis] = useState(false); // 控制是否显示完整分析
+  const [showFullAnalysis, setShowFullAnalysis] = useState(false);
 
   if (!product) {
     return (
@@ -1301,8 +1402,6 @@ export default function Product360Analysis({
     } else {
       issues.push('缺少成本数据');
     }
-
-    if (product.afterSaleCount > 0) score += 10;
 
     return { score, issues };
   };
@@ -1358,7 +1457,7 @@ export default function Product360Analysis({
           <div className="flex items-center gap-2 shrink-0">
             <div className="flex items-center gap-1 bg-pdd-bg rounded-lg p-1">
               <button
-                onClick={() => setActiveTab('overview')}
+                onClick={() => { setActiveTab('overview'); setShowFullAnalysis(false); }}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                   activeTab === 'overview'
                     ? 'bg-pdd-card text-pdd-text shadow-sm'
@@ -1368,7 +1467,7 @@ export default function Product360Analysis({
                 概览
               </button>
               <button
-                onClick={() => setActiveTab('detail')}
+                onClick={() => { setActiveTab('detail'); setShowFullAnalysis(false); }}
                 className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
                   activeTab === 'detail'
                     ? 'bg-pdd-card text-pdd-text shadow-sm'
@@ -1465,8 +1564,8 @@ export default function Product360Analysis({
         </motion.div>
       )}
 
-      {/* 简洁模式：只展示核心指标卡片 */}
-      {!showFullAnalysis && (
+      {/* 概览模式：只展示核心指标卡片 */}
+      {activeTab === 'overview' && (
         <div className="space-y-3">
           {/* 核心数据概览 */}
           <div className="bg-pdd-card rounded-xl border border-pdd-border p-4">
@@ -1600,6 +1699,19 @@ export default function Product360Analysis({
         </div>
       )}
 
+      {/* 明细模式：订单列表 */}
+      {activeTab === 'detail' && (
+        <div className="bg-pdd-card rounded-xl border border-pdd-border p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-pdd-text flex items-center gap-1.5">
+              <FileText size={14} color="var(--pdd-primary)" />
+              订单明细 ({orders.length}笔)
+            </h4>
+          </div>
+          <OrderDetailTable orders={orders} costConfig={costConfig} />
+        </div>
+      )}
+
       {/* 完整分析弹窗 */}
       {showFullAnalysis && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -1652,7 +1764,7 @@ export default function Product360Analysis({
                 iconColor="#52c41a"
                 defaultExpanded={true}
               >
-                <SalesDataSection product={product} />
+                <SalesDataSection product={product} gmvTrend={gmvTrend} refundRateTrend={refundRateTrend} />
               </CollapsibleCard>
 
               <CollapsibleCard
@@ -1716,7 +1828,7 @@ export default function Product360Analysis({
 
             {/* 弹窗底部 */}
             <div className="shrink-0 bg-pdd-bg border-t border-pdd-border px-6 py-3 flex items-center justify-between">
-              <span className="text-xs text-pdd-text-secondary">数据更新时间: {new Date().toLocaleString('zh-CN')}</span>
+              <span className="text-xs text-pdd-text-secondary">数据截止日期: {product.lastOrderDate || '--'}</span>
               <button
                 onClick={() => setShowFullAnalysis(false)}
                 className="px-4 py-2 rounded-lg bg-pdd-bg text-pdd-text hover:bg-pdd-gray-300 transition-colors text-sm font-medium"
@@ -1732,7 +1844,7 @@ export default function Product360Analysis({
       <div className="flex items-center justify-between text-xs text-pdd-text-secondary px-2">
         <div className="flex items-center gap-1">
           <Clock size={12} />
-          <span>数据更新时间: {new Date().toLocaleString('zh-CN')}</span>
+          <span>数据截止日期: {product.lastOrderDate || '--'}</span>
         </div>
         <div className="flex items-center gap-3">
           <span className="flex items-center gap-1">

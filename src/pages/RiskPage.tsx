@@ -3,27 +3,32 @@ import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
 import { AlertTriangle, RotateCcw, Truck, Star, Package, TrendingUp, Lock, Crown, Shield } from 'lucide-react';
 import { useData, useAuth } from '../App';
-import { sf, ss } from '../utils';
-import TimeFilter, { TimeRange, TimeGranularity, filterByTimeRange, getAllDateGroups, filterPromoByTimeRange } from '../components/TimeFilter';
+import { sf, ss, findField } from '../utils';
+import TimeFilter, { useTimeFilter, TimeRange, TimeGranularity, filterByTimeRange, getAllDateGroups, filterPromoByTimeRange } from '../components/TimeFilter';
 
 const COLORS = ['var(--pdd-danger)', 'var(--pdd-warning)', 'var(--pdd-primary)', 'var(--pdd-success)', 'var(--pdd-purple)', 'var(--pdd-danger)', 'var(--pdd-cyan)'];
 
 export default function RiskPage() {
   const { currentDisplayData } = useData();
   const { isPaid } = useAuth();
-  const [timeRange, setTimeRange] = useState<TimeRange>('7');
-  const [granularity, setGranularity] = useState<TimeGranularity>('day');
-  const [compareEnabled, setCompareEnabled] = useState(false);
-  const tfState = { timeRange, granularity, compareEnabled, setTimeRange, setGranularity, setCompareEnabled };
+  const tf = useTimeFilter('7', 'day');
+  const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
 
   const orders = useMemo(() => {
     if (!currentDisplayData?.orders?.length) return [];
-    return currentDisplayData.orders.filter((o: any) => ss(o['订单状态']) !== '已取消');
+    return currentDisplayData.orders.filter((o: any) => ss(findField(o, '订单状态')) !== '已取消');
   }, [currentDisplayData]);
 
   const allDates = useMemo(() => getAllDateGroups(orders), [orders]);
-  const filteredOrders = useMemo(() => filterByTimeRange(orders, allDates, timeRange), [orders, allDates, timeRange]);
-  const filteredAfterSaleRecords = useMemo(() => filterPromoByTimeRange(currentDisplayData?.afterSaleRecords || [], allDates, timeRange, '申请时间'), [currentDisplayData, allDates, timeRange]);
+  const filteredOrders = useMemo(() => filterByTimeRange(orders, allDates, timeRange, customStart, customEnd, quickRange), [orders, allDates, timeRange, customStart, customEnd, quickRange]);
+  const filteredAfterSaleRecords = useMemo(() => {
+    const records = filterPromoByTimeRange(currentDisplayData?.afterSaleRecords || [], allDates, timeRange, ['申请时间'], customStart, customEnd, quickRange);
+    const orderIds = new Set(filteredOrders.map(o => String(findField(o, '订单号') || '').trim()).filter(Boolean));
+    return records.filter((r: any) => {
+      const oid = String(findField(r, '订单编号') || '').trim();
+      return !oid || orderIds.has(oid);
+    });
+  }, [currentDisplayData, allDates, timeRange, customStart, customEnd, quickRange, filteredOrders]);
 
   const noData = !filteredOrders.length;
 
@@ -31,12 +36,12 @@ export default function RiskPage() {
     if (!filteredOrders.length) return [];
     const map: Record<string, { name: string; orders: number; afterSale: number; refund: number; overdue: number }> = {};
     filteredOrders.forEach((o: any) => {
-      const key = ss(o['商品id'] || o['商品']);
+      const key = ss(findField(o, '商品id', '商品'));
       if (!key) return;
-      if (!map[key]) map[key] = { name: ss(o['商品']).slice(0, 20), orders: 0, afterSale: 0, refund: 0, overdue: 0 };
+      if (!map[key]) map[key] = { name: ss(findField(o, '商品', '商品名称')).slice(0, 20), orders: 0, afterSale: 0, refund: 0, overdue: 0 };
       map[key].orders++;
-      const payT = ss(o['支付时间']);
-      const shipT = ss(o['发货时间']);
+      const payT = ss(findField(o, '支付时间'));
+      const shipT = ss(findField(o, '发货时间'));
       if (payT && shipT) {
         const h = (new Date(shipT).getTime() - new Date(payT).getTime()) / 3600000;
         if (h > 48) map[key].overdue++;
@@ -44,17 +49,17 @@ export default function RiskPage() {
     });
     if (filteredAfterSaleRecords.length > 0) {
       filteredAfterSaleRecords.forEach((r: any) => {
-        const pid = ss(r['商品ID']);
+        const pid = ss(findField(r, '商品ID'));
         if (!pid) return;
-        if (!map[pid]) map[pid] = { name: ss(r['sku信息']).slice(0, 20) || pid, orders: 0, afterSale: 0, refund: 0, overdue: 0 };
+        if (!map[pid]) map[pid] = { name: ss(findField(r, 'sku信息')).slice(0, 20) || pid, orders: 0, afterSale: 0, refund: 0, overdue: 0 };
         map[pid].afterSale++;
-        if (String(r['售后状态'] || '').includes('退款')) map[pid].refund++;
+        if (String(findField(r, '售后状态') || '').includes('退款')) map[pid].refund++;
       });
     } else {
       filteredOrders.forEach((o: any) => {
-        const key = ss(o['商品id'] || o['商品']);
+        const key = ss(findField(o, '商品id', '商品'));
         if (!key || !map[key]) return;
-        const as = ss(o['售后状态']);
+        const as = ss(findField(o, '售后状态'));
         if (as && as !== '无售后或售后取消' && as !== '无') map[key].afterSale++;
         if (as.includes('退款')) map[key].refund++;
       });
@@ -72,8 +77,8 @@ export default function RiskPage() {
   const highAfterSale = productRisk.filter(p => p.afterSaleRate > 30).length;
   const overdueOrders = useMemo(() => {
     return filteredOrders.filter((o: any) => {
-      const payT = ss(o['支付时间']);
-      const shipT = ss(o['发货时间']);
+      const payT = ss(findField(o, '支付时间'));
+      const shipT = ss(findField(o, '发货时间'));
       if (!payT || !shipT) return false;
       return (new Date(shipT).getTime() - new Date(payT).getTime()) / 3600000 > 48;
     }).length;
@@ -81,14 +86,14 @@ export default function RiskPage() {
 
   const zeroSales = useMemo(() => {
     const salesMap: Record<string, number> = {};
-    filteredOrders.forEach((o: any) => { const id = ss(o['商品id']); salesMap[id] = (salesMap[id] || 0) + sf(o['商品数量(件)']); });
+    filteredOrders.forEach((o: any) => { const id = ss(findField(o, '商品id')); salesMap[id] = (salesMap[id] || 0) + sf(findField(o, '商品数量(件)', '商品数量')); });
     return Object.values(salesMap).filter(v => v <= 0).length;
   }, [filteredOrders]);
 
   const riskScore = useMemo(() => {
     if (!filteredOrders.length) return 0;
-    const asRate = filteredOrders.filter(o => { const s = ss(o['售后状态']); return s && s !== '无售后或售后取消' && s !== '无'; }).length / filteredOrders.length * 100;
-    const rfRate = filteredOrders.filter(o => ss(o['售后状态']).includes('退款')).length / filteredOrders.length * 100;
+    const asRate = filteredOrders.filter(o => { const s = ss(findField(o, '售后状态')); return s && s !== '无售后或售后取消' && s !== '无'; }).length / filteredOrders.length * 100;
+    const rfRate = filteredOrders.filter(o => ss(findField(o, '售后状态')).includes('退款')).length / filteredOrders.length * 100;
     const ovRate = overdueOrders / filteredOrders.length * 100;
     return Math.min(100, asRate * 1.5 + rfRate * 2 + ovRate * 1.2);
   }, [filteredOrders, overdueOrders]);
@@ -96,7 +101,7 @@ export default function RiskPage() {
   const riskTypePie = useMemo(() => [
     { name: '售后风险', value: highAfterSale },
     { name: '物流超时', value: overdueOrders },
-    { name: '退款异常', value: filteredOrders.filter(o => ss(o['售后状态']).includes('退款')).length },
+    { name: '退款异常', value: filteredOrders.filter(o => ss(findField(o, '售后状态')).includes('退款')).length },
     { name: '动销风险', value: zeroSales },
   ], [highAfterSale, overdueOrders, filteredOrders, zeroSales]);
 
@@ -104,15 +109,15 @@ export default function RiskPage() {
     if (!filteredOrders.length) return [];
     const byDate: Record<string, { total: number; as: number; rf: number; ov: number }> = {};
     filteredOrders.forEach((o: any) => {
-      const d = ss(o['支付时间']).split(' ')[0];
+      const d = ss(findField(o, '支付时间')).split(' ')[0];
       if (!d) return;
       if (!byDate[d]) byDate[d] = { total: 0, as: 0, rf: 0, ov: 0 };
       byDate[d].total++;
-      const s = ss(o['售后状态']);
+      const s = ss(findField(o, '售后状态'));
       if (s && s !== '无售后或售后取消' && s !== '无') byDate[d].as++;
       if (s.includes('退款')) byDate[d].rf++;
-      const payT = ss(o['支付时间']);
-      const shipT = ss(o['发货时间']);
+      const payT = ss(findField(o, '支付时间'));
+      const shipT = ss(findField(o, '发货时间'));
       if (payT && shipT && (new Date(shipT).getTime() - new Date(payT).getTime()) / 3600000 > 48) byDate[d].ov++;
     });
     return Object.entries(byDate).sort((a, b) => a[0].localeCompare(b[0])).slice(-7).map(([d, v]) => ({
@@ -125,37 +130,37 @@ export default function RiskPage() {
 
   const abnormalOrders = useMemo(() => {
     return filteredOrders.filter((o: any) => {
-      const s = ss(o['售后状态']);
-      const payT = ss(o['支付时间']);
-      const shipT = ss(o['发货时间']);
+      const s = ss(findField(o, '售后状态'));
+      const payT = ss(findField(o, '支付时间'));
+      const shipT = ss(findField(o, '发货时间'));
       const isRefundAbnormal = s.includes('退款');
       const isOverdue = payT && shipT && (new Date(shipT).getTime() - new Date(payT).getTime()) / 3600000 > 48;
-      const isHighDisc = (sf(o['店铺优惠折扣(元)']) + sf(o['平台优惠折扣(元)']) + sf(o['多多支付立减金额(元)'])) / sf(o['商品总价(元)']) > 0.2;
+      const isHighDisc = (sf(findField(o, '店铺优惠折扣(元)', '店铺优惠')) + sf(findField(o, '平台优惠折扣(元)', '平台优惠')) + sf(findField(o, '多多支付立减金额(元)', '支付立减'))) / sf(findField(o, '商品总价(元)', '商品总价')) > 0.2;
       return isRefundAbnormal || isOverdue || isHighDisc;
     }).slice(0, 20).map((o: any) => {
-      const s = ss(o['售后状态']);
-      const payT = ss(o['支付时间']);
-      const shipT = ss(o['发货时间']);
+      const s = ss(findField(o, '售后状态'));
+      const payT = ss(findField(o, '支付时间'));
+      const shipT = ss(findField(o, '发货时间'));
       const types: string[] = [];
       if (s.includes('退款')) types.push('退款异常');
       if (payT && shipT && (new Date(shipT).getTime() - new Date(payT).getTime()) / 3600000 > 48) types.push('发货超时');
-      if ((sf(o['店铺优惠折扣(元)']) + sf(o['平台优惠折扣(元)']) + sf(o['多多支付立减金额(元)'])) / sf(o['商品总价(元)']) > 0.2) types.push('高优惠');
-      return { id: ss(o['订单号']).slice(-8), product: ss(o['商品']).slice(0, 18), type: types.join('/'), amount: sf(o['用户实付金额(元)']), time: ss(o['支付时间']).slice(0, 16) };
+      if ((sf(findField(o, '店铺优惠折扣(元)', '店铺优惠')) + sf(findField(o, '平台优惠折扣(元)', '平台优惠')) + sf(findField(o, '多多支付立减金额(元)', '支付立减'))) / sf(findField(o, '商品总价(元)', '商品总价')) > 0.2) types.push('高优惠');
+      return { id: ss(findField(o, '订单号')).slice(-8), product: ss(findField(o, '商品', '商品名称')).slice(0, 18), type: types.join('/'), amount: sf(findField(o, '用户实付金额(元)', '用户实付')), time: ss(findField(o, '支付时间')).slice(0, 16) };
     });
   }, [filteredOrders]);
 
   const rules = useMemo(() => {
     if (!filteredOrders.length) return [];
-    const asRate = filteredOrders.filter(o => { const s = ss(o['售后状态']); return s && s !== '无售后或售后取消' && s !== '无'; }).length / filteredOrders.length * 100;
-    const rfRate = filteredOrders.filter(o => ss(o['售后状态']).includes('退款')).length / filteredOrders.length * 100;
+    const asRate = filteredOrders.filter(o => { const s = ss(findField(o, '售后状态')); return s && s !== '无售后或售后取消' && s !== '无'; }).length / filteredOrders.length * 100;
+    const rfRate = filteredOrders.filter(o => ss(findField(o, '售后状态')).includes('退款')).length / filteredOrders.length * 100;
     const ship48Rate = (() => {
-      const shipped = filteredOrders.filter(o => ss(o['发货时间']) !== '');
-      const in48 = shipped.filter(o => (new Date(ss(o['发货时间'])).getTime() - new Date(ss(o['支付时间'])).getTime()) / 3600000 <= 48);
+      const shipped = filteredOrders.filter(o => ss(findField(o, '发货时间')) !== '');
+      const in48 = shipped.filter(o => (new Date(ss(findField(o, '发货时间'))).getTime() - new Date(ss(findField(o, '支付时间'))).getTime()) / 3600000 <= 48);
       return shipped.length > 0 ? (in48.length / shipped.length) * 100 : 100;
     })();
     const zeroRate = (() => {
       const salesMap: Record<string, number> = {};
-      filteredOrders.forEach(o => { const id = ss(o['商品id']); salesMap[id] = (salesMap[id] || 0) + sf(o['商品数量(件)']); });
+      filteredOrders.forEach(o => { const id = ss(findField(o, '商品id')); salesMap[id] = (salesMap[id] || 0) + sf(findField(o, '商品数量(件)', '商品数量')); });
       const total = Object.keys(salesMap).length;
       const zero = Object.values(salesMap).filter(v => v <= 0).length;
       return total > 0 ? (zero / total) * 100 : 0;
@@ -181,7 +186,7 @@ export default function RiskPage() {
 
   return (
     <div className="p-4 space-y-3">
-      <TimeFilter state={tfState} />
+      <TimeFilter state={tf} />
       <div className="grid grid-cols-5 gap-2">
         {kpis.map((k, i) => (
           <motion.div key={k.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}

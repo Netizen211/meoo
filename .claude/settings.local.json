@@ -14,7 +14,17 @@
       "Bash(python fix_batch.py)",
       "Bash(python verify_fixes.py)",
       "Bash(rm -f fix_batch.py verify_fixes.py)",
-      "Bash(npm run *)"
+      "Bash(npm run *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git remote *)",
+      "Bash(git push *)",
+      "Bash(gh auth *)",
+      "Bash(GIT_SSH_COMMAND=\"ssh -o StrictHostKeyChecking=no\" git push -u origin master)",
+      "Bash(grep -i \"repository\\\\|github\\\\|git\" package.json)",
+      "Bash(cat .git/config)",
+      "Bash(git checkout *)",
+      "Bash(git commit *)"
     ]
   }
 }

@@ -1,3 +1,20 @@
+export function findField(row: any, ...keywords: string[]): any {
+  if (!row || typeof row !== 'object') return undefined;
+  const keys = Object.keys(row);
+  for (const kw of keywords) {
+    const kwClean = kw.toLowerCase().replace(/[\s\-_\(\)（）\[\]【】]/g, '');
+    for (const k of keys) {
+      const kClean = k.replace(/[﻿ \t\r\n\s\-_\(\)（）\[\]【】]/g, '').toLowerCase();
+      if (kClean === kwClean) return row[k];
+    }
+    for (const k of keys) {
+      const kClean = k.replace(/[﻿ \t\r\n\s\-_\(\)（）\[\]【】]/g, '').toLowerCase();
+      if (kClean.includes(kwClean)) return row[k];
+    }
+  }
+  return undefined;
+}
+
 export function sf(v: any): number {
   if (v == null) return 0;
   const s = String(v).trim().replace(/[^\d.\-]/g, '');

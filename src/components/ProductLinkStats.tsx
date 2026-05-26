@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { evaluateFormula, FormulaContext } from '../utils/formulaEngine';
+import { findField } from '../utils';
 
 interface DailySalesPoint {
   date: string;
@@ -108,6 +109,7 @@ interface ProductStat {
   sales: number;
   revenue: number;
   refund: number;
+  refundCount: number;
   discount: number;
   afterSaleCount: number;
   afterSaleRate: number;
@@ -205,27 +207,6 @@ function safeNum(v: any): number {
   return isNaN(n) ? 0 : n;
 }
 
-// 智能字段查找：支持模糊匹配字段名（处理BOM、空格、大小写、括号差异）
-function findField(row: any, ...keywords: string[]): any {
-  if (!row || typeof row !== 'object') return undefined;
-  const keys = Object.keys(row);
-  for (const kw of keywords) {
-    // 清理关键字：移除空格、连字符、下划线、括号
-    const kwLower = kw.toLowerCase().replace(/[\s\-_\(\)（）\[\]【】]/g, '');
-    // 精确匹配（清理后）
-    for (const k of keys) {
-      const kClean = k.replace(/[\uFEFF\u00A0\t\r\n\s\-_\(\)（）\[\]【】]/g, '').toLowerCase();
-      if (kClean === kwLower) return row[k];
-    }
-    // 包含匹配
-    for (const k of keys) {
-      const kClean = k.replace(/[\uFEFF\u00A0\t\r\n\s\-_\(\)（）\[\]【】]/g, '').toLowerCase();
-      if (kClean.includes(kwLower)) return row[k];
-    }
-  }
-  return undefined;
-}
-
 // 获取商品ID（统一处理各种字段名变体）
 function getProductId(row: any): string {
   const v = findField(row, '商品id', '商品ID', 'productId', 'product_id', '商品编号');
@@ -260,6 +241,7 @@ export function useProductStats(
     const promoSummary = currentDisplayData?.promotionSummary || [];
     const stats: Record<string, ProductStat> = {};
 
+    let maxOrderDate = '';
     const productNames: Record<string, string> = {};
     const productCodes: Record<string, string> = {};
     // Temporary storage for raw data needed for derived metrics
@@ -268,6 +250,8 @@ export function useProductStats(
     const buyerProducts: Record<string, Set<string>> = {};
     // Daily sales built during initial pass to avoid O(N*M) re-iteration
     const dailySalesMap: Record<string, Record<string, DailySalesPoint>> = {};
+    // Per-SKU sales tracking for accurate cost calculation
+    const skuSalesMap: Record<string, Record<string, number>> = {};
 
     orders.forEach((o: any) => {
       // 使用智能字段匹配获取商品ID
@@ -285,7 +269,7 @@ export function useProductStats(
           afterSaleCount: 0, afterSaleRate: 0, avgOrderValue: 0,
           promoCost: 0, promoClicks: 0, promoImpressions: 0, promoOrders: 0, promoTransaction: 0,
           ctr: 0, cvr: 0, totalCost: 0, netProfit: 0, profitRate: 0, roi: 0,
-          refundRate: 0, discountRatio: 0, promoCostRatio: 0,
+          refundRate: 0, refundCount: 0, discountRatio: 0, promoCostRatio: 0,
           hasOrderData: true, hasPromoData: false,
           promoSourceDetails: [],
           dailySales: [], priceDistribution: [], afterSaleBreakdown: {}, relatedProducts: [],
@@ -304,12 +288,18 @@ export function useProductStats(
       }
       const s = stats[pid];
       s.hasOrderData = true;
-      // GMV = 用户实付金额（真实交易额）
+      // GMV = 商品总价（优先），用户实付（备用）
       const actualPay = safeNum(findField(o, '用户实付金额(元)', '用户实付', '实付金额'));
       const productTotal = safeNum(findField(o, '商品总价(元)', '商品总价'));
-      s.gmv += actualPay || productTotal;
+      s.gmv += productTotal || actualPay;
       s.orders += 1;
-      s.sales += safeNum(findField(o, '商品数量(件)', '商品数量', '数量')) || 1;
+      const qty = safeNum(findField(o, '商品数量(件)', '商品数量', '数量')) || 1;
+      s.sales += qty;
+      // Track per-SKU sales
+      const skuId = cleanStr(findField(o, '规格id', '规格ID', 'sku_id', 'skuId'));
+      const skuKey = skuId ? `${pid}_${skuId}` : pid;
+      if (!skuSalesMap[pid]) skuSalesMap[pid] = {};
+      skuSalesMap[pid][skuKey] = (skuSalesMap[pid][skuKey] || 0) + qty;
       s.revenue += safeNum(findField(o, '商家实收金额(元)', '商家实收', '实收金额'));
       const shopDiscount = safeNum(findField(o, '店铺优惠折扣(元)', '店铺优惠'));
       const platDiscount = safeNum(findField(o, '平台优惠折扣(元)', '平台优惠'));
@@ -319,10 +309,12 @@ export function useProductStats(
 
       const st = cleanStr(findField(o, '售后状态'));
       if (st && st !== '无售后或售后取消' && st !== '无') s.afterSaleCount += 1;
+      if (st && st.includes('退款')) s.refundCount += 1;
 
       // Collect raw data for derived metrics
       const payTimeRaw = cleanStr(findField(o, '支付时间'));
       const payTime = payTimeRaw ? payTimeRaw.split(' ')[0] : '';
+      if (payTime && payTime > maxOrderDate) maxOrderDate = payTime;
       const price = actualPay;
       const orderNo = cleanStr(findField(o, '订单号'));
       const buyerKey = orderNo.length >= 4 ? orderNo.slice(-4) : orderNo;
@@ -341,7 +333,7 @@ export function useProductStats(
         if (!dailySalesMap[pid][payTime]) dailySalesMap[pid][payTime] = { date: payTime, sales: 0, gmv: 0, orders: 0 };
         dailySalesMap[pid][payTime].orders += 1;
         dailySalesMap[pid][payTime].sales += safeNum(findField(o, '商品数量(件)', '商品数量', '数量')) || 1;
-        dailySalesMap[pid][payTime].gmv += actualPay || productTotal;
+        dailySalesMap[pid][payTime].gmv += productTotal || actualPay;
       }
     });
 
@@ -359,7 +351,7 @@ export function useProductStats(
             afterSaleCount: 0, afterSaleRate: 0, avgOrderValue: 0,
             promoCost: 0, promoClicks: 0, promoImpressions: 0, promoOrders: 0, promoTransaction: 0,
             ctr: 0, cvr: 0, totalCost: 0, netProfit: 0, profitRate: 0, roi: 0,
-            refundRate: 0, discountRatio: 0, promoCostRatio: 0,
+            refundRate: 0, refundCount: 0, discountRatio: 0, promoCostRatio: 0,
             hasOrderData: false, hasPromoData: false,
             promoSourceDetails: [],
             dailySales: [], priceDistribution: [], afterSaleBreakdown: {}, relatedProducts: [],
@@ -427,7 +419,7 @@ export function useProductStats(
       if (!dateKey || !/^\d{4}-\d{2}-\d{2}$/.test(dateKey)) return;
       const actualPay = safeNum(findField(o, '用户实付金额(元)', '用户实付', '实付金额'));
       const productTotal = safeNum(findField(o, '商品总价(元)', '商品总价'));
-      const gmv = actualPay || productTotal;
+      const gmv = productTotal || actualPay;
       if (!dailyGmvMap[dateKey]) dailyGmvMap[dateKey] = [];
       dailyGmvMap[dateKey].push({ pid, gmv });
     });
@@ -546,18 +538,25 @@ export function useProductStats(
           productCost = productCosts[pid] * s.sales;
           costSourceType = 'real';
         } else {
-          // 尝试匹配SKU格式 (${pid}_${skuId})，汇总所有该商品的SKU成本
-          let skuCostTotal = 0;
-          let skuCostCount = 0;
-          for (const [key, cost] of Object.entries(productCosts)) {
-            if (key.startsWith(`${pid}_`) && cost > 0) {
-              skuCostTotal += cost;
-              skuCostCount++;
+          // 尝试匹配SKU格式 (${pid}_${skuId})，按各SKU实际销量×单价汇总
+          let skuTotalCost = 0;
+          let matchedSales = 0;
+          const pidSkuSales = skuSalesMap[pid] || {};
+          for (const [key, unitCost] of Object.entries(productCosts)) {
+            if (key.startsWith(`${pid}_`) && unitCost > 0) {
+              const skuSales = pidSkuSales[key] || 0;
+              skuTotalCost += unitCost * skuSales;
+              matchedSales += skuSales;
             }
           }
-          if (skuCostCount > 0) {
-            // 使用平均SKU成本 * 销量
-            productCost = (skuCostTotal / skuCostCount) * s.sales;
+          if (skuTotalCost > 0) {
+            // 有SKU成本匹配：未匹配到的销量按已匹配SKU的平均成本估算
+            if (matchedSales < s.sales) {
+              const unmatchedSales = s.sales - matchedSales;
+              const avgCost = skuTotalCost / matchedSales;
+              skuTotalCost += avgCost * unmatchedSales;
+            }
+            productCost = skuTotalCost;
             costSourceType = 'real';
           } else if (s.productCode && productCosts[s.productCode] !== undefined && productCosts[s.productCode] > 0) {
             productCost = productCosts[s.productCode] * s.sales;
@@ -636,6 +635,7 @@ export function useProductStats(
           netProfit: preTaxProfit - totalTax, // 扣费前，用于条件判断
           // 售后
           refund: s.refund,
+          refundCount: s.refundCount,
           refundRate: s.refundRate,
           afterSaleCount: s.afterSaleCount,
           afterSaleRate: s.afterSaleRate,
@@ -662,14 +662,14 @@ export function useProductStats(
             console.log(`[扣费跳过] ${ded.name}: 商品范围不匹配`);
             return;
           }
-          // Check time range
-          const now = new Date().toISOString().slice(0, 10);
-          if (ded.effectiveFrom && now < ded.effectiveFrom) {
-            console.log(`[扣费跳过] ${ded.name}: 未到达生效日期`);
+          // Check time range against max order date (not today)
+          const analysisDate = maxOrderDate || new Date().toISOString().slice(0, 10);
+          if (ded.effectiveFrom && analysisDate < ded.effectiveFrom) {
+            console.log(`[扣费跳过] ${ded.name}: 未到达生效日期 (分析日期=${analysisDate})`);
             return;
           }
-          if (ded.effectiveTo && now > ded.effectiveTo) {
-            console.log(`[扣费跳过] ${ded.name}: 已过期`);
+          if (ded.effectiveTo && analysisDate > ded.effectiveTo) {
+            console.log(`[扣费跳过] ${ded.name}: 已过期 (分析日期=${analysisDate})`);
             return;
           }
           // Check condition
@@ -728,8 +728,8 @@ export function useProductStats(
         s.roi = 0; // 无推广数据，不计算ROI
       }
 
-      // 退款率 = 退款金额 / 实收金额（退款对应的是已收款项）
-      s.refundRate = s.revenue > 0 ? (s.refund / s.revenue) * 100 : 0;
+      // 退款率 = 退款订单数 / 总订单数（比率不会超过100%）
+      s.refundRate = s.orders > 0 ? (s.refundCount / s.orders) * 100 : 0;
       s.avgOrderValue = s.orders > 0 ? s.gmv / s.orders : 0;
       s.afterSaleRate = s.orders > 0 ? (s.afterSaleCount / s.orders) * 100 : 0;
       s.ctr = s.promoImpressions > 0 ? (s.promoClicks / s.promoImpressions) * 100 : 0;
@@ -808,13 +808,14 @@ export function useProductStats(
 
 export function useTotalProductStats(productStats: Record<string, ProductStat>) {
   return useMemo(() => {
-    let gmv = 0, orders = 0, sales = 0, revenue = 0, refund = 0, discount = 0;
+    let gmv = 0, orders = 0, sales = 0, revenue = 0, refund = 0, refundCount = 0, discount = 0;
     let promoCost = 0, promoClicks = 0, promoImpressions = 0, promoOrders = 0, promoTransaction = 0;
     let afterSaleCount = 0;
     let totalTaxes = 0, totalCustomDed = 0, totalGrossProfit = 0, totalPreTaxProfit = 0, totalNetProfitAfterTax = 0;
+    let totalCostAcc = 0;
     Object.values(productStats).forEach(s => {
       gmv += s.gmv; orders += s.orders; sales += s.sales;
-      revenue += s.revenue; refund += s.refund; discount += s.discount;
+      revenue += s.revenue; refund += s.refund; refundCount += s.refundCount || 0; discount += s.discount;
       promoCost += s.promoCost; promoClicks += s.promoClicks;
       promoImpressions += s.promoImpressions; promoOrders += s.promoOrders;
       promoTransaction += s.promoTransaction; afterSaleCount += s.afterSaleCount;
@@ -823,19 +824,20 @@ export function useTotalProductStats(productStats: Record<string, ProductStat>) 
       totalGrossProfit += s.grossProfit || 0;
       totalPreTaxProfit += s.preTaxProfit || 0;
       totalNetProfitAfterTax += s.netProfitAfterTax || 0;
+      totalCostAcc += s.totalCost || 0;
     });
-    const netProfit = revenue - (promoCost + discount);
+    const netProfit = totalNetProfitAfterTax;
     // 汇总ROI = 总推广成交金额 / 总推广花费（标准电商ROI）
     const roi = promoCost > 0 ? promoTransaction / promoCost : 0;
-    // 退款率 = 退款 / 实收
-    const refundRate = revenue > 0 ? (refund / revenue) * 100 : 0;
+    // 退款率 = 退款订单数 / 总订单数
+    const refundRate = orders > 0 ? (refundCount / orders) * 100 : 0;
     const avgOrderValue = orders > 0 ? gmv / orders : 0;
     const afterSaleRate = orders > 0 ? (afterSaleCount / orders) * 100 : 0;
     const ctr = promoImpressions > 0 ? (promoClicks / promoImpressions) * 100 : 0;
     const cvr = promoClicks > 0 ? (promoOrders / promoClicks) * 100 : 0;
     const profitRate = revenue > 0 ? (netProfit / revenue) * 100 : 0;
     const productCount = Object.keys(productStats).length;
-    const totalCostVal = promoCost + (revenue - netProfit);
+    const totalCostVal = totalCostAcc;
     return {
       productCount, gmv, orders, sales, revenue, refund, discount,
       promoCost, promoClicks, promoImpressions, promoOrders, promoTransaction,

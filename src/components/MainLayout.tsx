@@ -22,7 +22,7 @@ const NAV_ITEMS = [
   { path: '/cost', label: '优惠成本', icon: DollarSign, category: 'finance' },
   { path: '/after-sale', label: '售后质量', icon: ShieldCheck, category: 'operations' },
   { path: '/shipping-insurance', label: '运费险', icon: Shield, category: 'finance' },
-  { path: '/promotion', label: '推广利润', icon: TrendingUp, category: 'marketing', paid: true },
+  { path: '/promotion', label: '推广数据', icon: TrendingUp, category: 'marketing', paid: true },
   { path: '/risk', label: '风险预警', icon: AlertTriangle, category: 'operations', paid: true },
   { path: '/cost-management', label: '成本管理', icon: Calculator, category: 'finance' },
   { path: '/membership', label: '会员中心', icon: Crown, category: 'system' },
@@ -39,7 +39,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 };
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
-  const { user, isTestUser, logout } = useAuth();
+  const { user, logout } = useAuth();
   const { stores, currentStore, switchStore, addStore } = useStore();
   const { dataFilter, setDataFilter } = useData();
   const [storeDropdown, setStoreDropdown] = useState(false);
@@ -381,16 +381,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           <button onClick={() => { const next = !darkMode; setDarkMode(next); localStorage.setItem('dianfx_dark_mode', String(next)); }} className="p-2 text-pdd-text-secondary hover:text-pdd-text hover:bg-pdd-bg rounded-lg transition-all">
             {darkMode ? <Sun size={18} /> : <Moon size={18} />}
           </button>
-
-          {/* Admin link */}
-          {isTestUser && (
-            <NavLink to="/admin">
-              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
-                className="hidden md:flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-pdd-primary to-pdd-primary-dark text-white text-sm font-medium hover:shadow-lg hover:shadow-pdd-primary/25 transition-all">
-                <Settings size={14} /> 后台
-              </motion.button>
-            </NavLink>
-          )}
 
           {/* User info */}
           <div className="flex items-center gap-2 pl-3 border-l border-pdd-border">

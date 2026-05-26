@@ -1,8 +1,8 @@
 import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Trash2, AlertTriangle, RefreshCw, ChevronRight, Database, Shield, FileText, TrendingUp, DollarSign, Upload, Store, Check } from 'lucide-react';
+import { Trash2, AlertTriangle, ChevronRight, Database, Shield, FileText, TrendingUp, DollarSign, Upload, Store, Check } from 'lucide-react';
 import { useAuth, useData } from '../App';
-import { useNavigate, NavLink } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -37,7 +37,6 @@ export default function SettingsPage() {
   } = useData();
 
   const [confirmModal, setConfirmModal] = useState<string | null>(null); // 存储要执行的操作ID
-  const [refreshing, setRefreshing] = useState(false);
   const [clearedIds, setClearedIds] = useState<Set<string>>(new Set());
 
   const storageInfo = useMemo(() => {
@@ -119,12 +118,8 @@ export default function SettingsPage() {
 
   const handleClearAll = () => {
     clearAllData();
-    setRefreshing(true);
-    setTimeout(() => {
-      setRefreshing(false);
-      logout();
-      navigate('/login');
-    }, 500);
+    logout();
+    navigate('/login');
   };
 
   return (
@@ -138,16 +133,15 @@ export default function SettingsPage() {
             精细化管理您的本地缓存数据
           </motion.p>
         </div>
-        <NavLink to="/dashboard">
-          <motion.button
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-pdd-border text-sm text-pdd-text-secondary hover:text-pdd-primary hover:border-pdd-primary transition-colors"
-          >
-            <ChevronRight size={16} className="rotate-180" />
-            返回首页
-          </motion.button>
-        </NavLink>
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={() => navigate('/dashboard')}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg border border-pdd-border text-sm text-pdd-text-secondary hover:text-pdd-primary hover:border-pdd-primary transition-colors"
+        >
+          <ChevronRight size={16} className="rotate-180" />
+          返回首页
+        </motion.button>
       </div>
 
       {/* 存储概览 */}
@@ -391,19 +385,6 @@ export default function SettingsPage() {
         )}
       </AnimatePresence>
 
-      {/* 刷新遮罩 */}
-      {refreshing && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="fixed inset-0 bg-black/20 z-40 flex items-center justify-center"
-        >
-          <div className="bg-pdd-card rounded-lg p-4 shadow-xl border border-pdd-border flex items-center gap-3">
-            <RefreshCw size={20} className="animate-spin text-pdd-primary" />
-            <span className="text-sm text-pdd-text">正在清理并退出...</span>
-          </div>
-        </motion.div>
-      )}
     </div>
   );
 }

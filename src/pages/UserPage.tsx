@@ -3,27 +3,19 @@ import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, ScatterChart, Scatter, AreaChart, Area } from 'recharts';
 import { Users, DollarSign, Repeat, ShoppingCart, TrendingUp, Clock, Lock, Crown, CreditCard, Globe, ArrowUp, ArrowDown, UserCheck, UserPlus, Activity, Target, Tag, Filter, Search, Plus, X, ChevronDown } from 'lucide-react';
 import { useData, useAuth } from '../App';
-import TimeFilter, { TimeRange, TimeGranularity, safeFloat, filterByTimeRange, getCompareOrders, getAllDateGroups, changePct } from '../components/TimeFilter';
-
-function maskPhone(phone: string): string {
-  const s = String(phone).trim();
-  if (s.length >= 7) return s.slice(0, 3) + s.slice(-4);
-  return s || '未知';
-}
+import TimeFilter, { TimeRange, TimeGranularity, safeFloat, filterByTimeRange, getAllDateGroups, useTimeFilter } from '../components/TimeFilter';
 
 const COLORS = ['#e02e24', '#ff6b5b', '#faad14', '#52c41a', '#1890ff', '#722ed1', '#13c2c2', '#eb2f96'];
 
 export default function UserPage() {
   const { currentDisplayData } = useData();
   const { isPaid } = useAuth();
-  const [timeRange, setTimeRange] = useState<TimeRange>('7');
-  const [granularity, setGranularity] = useState<TimeGranularity>('day');
-  const [compareEnabled, setCompareEnabled] = useState(false);
+  const tf = useTimeFilter('7', 'day');
+  const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
   const [selectedSegment, setSelectedSegment] = useState<string>('all');
   const [showTagModal, setShowTagModal] = useState(false);
   const [newTag, setNewTag] = useState('');
-  const [userTags, setUserTags] = useState<Record<string, string[]>>({});
-  const tfState = { timeRange, granularity, compareEnabled, setTimeRange, setGranularity, setCompareEnabled };
+  const [userTags, setUserTags] = useState<string[]>([]);
 
   const orders = useMemo(() => {
     if (!currentDisplayData?.orders?.length) return [];
@@ -31,16 +23,15 @@ export default function UserPage() {
   }, [currentDisplayData]);
 
   const allDates = useMemo(() => getAllDateGroups(orders), [orders]);
-  const filteredOrders = useMemo(() => filterByTimeRange(orders, allDates, timeRange), [orders, allDates, timeRange]);
-  const compareOrders = useMemo(() => compareEnabled ? getCompareOrders(orders, allDates, timeRange) : [], [orders, allDates, timeRange, compareEnabled]);
+  const filteredOrders = useMemo(() => filterByTimeRange(orders, allDates, timeRange, customStart, customEnd, quickRange), [orders, allDates, timeRange, customStart, customEnd, quickRange]);
 
   const stats = useMemo(() => {
     if (!filteredOrders.length) return null;
-    const buyerMap: Record<string, { count: number; totalPaid: number; totalQty: number; lastOrder: string; firstOrder: string; orders: any[] }> = {};
-    filteredOrders.forEach((o: any) => {
+    const buyerMap: Record<string, { count: number; totalPaid: number; totalQty: number; lastOrder: string; firstOrder: string; orders: any[]; orderDates: string[] }> = {};
+    filteredOrders.forEach((o: any, i: number) => {
       const orderNo = String(o['订单号'] || '').trim();
-      const key = orderNo.length >= 4 ? orderNo.slice(-4) : (orderNo || `anon-${Math.random().toString(36).slice(2, 6)}`);
-      if (!buyerMap[key]) buyerMap[key] = { count: 0, totalPaid: 0, totalQty: 0, lastOrder: '', firstOrder: '', orders: [] };
+      const key = orderNo.length >= 4 ? orderNo.slice(-4) : (orderNo || `anon-${i}`);
+      if (!buyerMap[key]) buyerMap[key] = { count: 0, totalPaid: 0, totalQty: 0, lastOrder: '', firstOrder: '', orders: [], orderDates: [] };
       buyerMap[key].count++;
       buyerMap[key].totalPaid += safeFloat(o['用户实付金额(元)']);
       buyerMap[key].totalQty += safeFloat(o['商品数量(件)']);
@@ -48,13 +39,16 @@ export default function UserPage() {
       if (t > buyerMap[key].lastOrder) buyerMap[key].lastOrder = t;
       if (!buyerMap[key].firstOrder || t < buyerMap[key].firstOrder) buyerMap[key].firstOrder = t;
       buyerMap[key].orders.push(o);
+      const datePart = t.split(' ')[0];
+      if (datePart && !buyerMap[key].orderDates.includes(datePart)) buyerMap[key].orderDates.push(datePart);
     });
 
     const buyerCount = Object.keys(buyerMap).length;
     const repeatBuyers = Object.values(buyerMap).filter(b => b.count >= 2).length;
     const repeatRate = buyerCount > 0 ? (repeatBuyers / buyerCount) * 100 : 0;
     const totalPaid = filteredOrders.reduce((s: number, o: any) => s + safeFloat(o['用户实付金额(元)']), 0);
-    const avgAOV = filteredOrders.length > 0 ? totalPaid / filteredOrders.length : 0;
+    const totalGMV = filteredOrders.reduce((s: number, o: any) => s + safeFloat(o['商家实收金额(元)'] || o['商品总价(元)']), 0);
+    const avgAOV = filteredOrders.length > 0 ? totalGMV / filteredOrders.length : 0;
     const totalQty = filteredOrders.reduce((s: number, o: any) => s + safeFloat(o['商品数量(件)']), 0);
     const attachRate = filteredOrders.length > 0 ? totalQty / filteredOrders.length : 0;
     const avgPerBuyer = buyerCount > 0 ? totalPaid / buyerCount : 0;
@@ -70,14 +64,19 @@ export default function UserPage() {
     const avgFrequency = rfmData.reduce((s, r) => s + r.frequency, 0) / rfmData.length;
     const avgMonetary = rfmData.reduce((s, r) => s + r.monetary, 0) / rfmData.length;
 
-    const segments = {
-      champions: rfmData.filter(r => r.recency <= avgRecency && r.frequency >= avgFrequency && r.monetary >= avgMonetary),
-      loyal: rfmData.filter(r => r.recency <= avgRecency && r.frequency >= avgFrequency),
-      potential: rfmData.filter(r => r.recency <= avgRecency && r.frequency < avgFrequency && r.monetary >= avgMonetary),
-      new: rfmData.filter(r => r.recency <= avgRecency && r.frequency === 1),
-      atRisk: rfmData.filter(r => r.recency > avgRecency && r.frequency >= avgFrequency),
-      lost: rfmData.filter(r => r.recency > avgRecency * 2),
+    // 互斥分群（优先级从高到低，每个用户只归入一个群组）
+    const segmentResult = { champions: [] as typeof rfmData, loyal: [] as typeof rfmData, potential: [] as typeof rfmData, new: [] as typeof rfmData, atRisk: [] as typeof rfmData, lost: [] as typeof rfmData };
+    const assigned = new Set<string>();
+    const assign = (seg: keyof typeof segmentResult, cond: (r: typeof rfmData[0]) => boolean) => {
+      rfmData.forEach(r => { if (!assigned.has(r.key) && cond(r)) { segmentResult[seg].push(r); assigned.add(r.key); } });
     };
+    assign('champions', r => r.recency <= avgRecency && r.frequency >= avgFrequency && r.monetary >= avgMonetary);
+    assign('loyal', r => r.recency <= avgRecency && r.frequency >= avgFrequency);
+    assign('potential', r => r.recency <= avgRecency && r.frequency < avgFrequency && r.monetary >= avgMonetary);
+    assign('new', r => r.recency <= avgRecency && r.frequency === 1);
+    assign('atRisk', r => r.recency > avgRecency && r.frequency >= avgFrequency);
+    assign('lost', r => r.recency > avgRecency * 2);
+    const segments = segmentResult;
 
     const ltvData = rfmData.map(b => ({ ltv: b.monetary, orders: b.frequency, avgOrder: b.frequency > 0 ? b.monetary / b.frequency : 0 })).sort((a, b) => b.ltv - a.ltv);
     const avgLTV = ltvData.reduce((s, b) => s + b.ltv, 0) / ltvData.length;
@@ -120,14 +119,18 @@ export default function UserPage() {
 
     const retentionData = (() => {
       const days = [1, 3, 7, 14, 30];
+      const now = Date.now();
       return days.map(d => {
+        const msN = d * 86400000;
         const eligible = Object.values(buyerMap).filter(b => {
-          const diff = (new Date(b.lastOrder).getTime() - new Date(b.firstOrder).getTime()) / 86400000;
-          return diff >= d - 1;
+          const firstTime = new Date(b.firstOrder).getTime();
+          if (!firstTime || isNaN(firstTime)) return false;
+          return (now - firstTime) >= msN;
         });
         const retained = eligible.filter(b => {
-          const diff = (new Date(b.lastOrder).getTime() - new Date(b.firstOrder).getTime()) / 86400000;
-          return diff >= d;
+          const firstTime = new Date(b.firstOrder).getTime();
+          const targetDate = new Date(firstTime + msN).toISOString().split('T')[0];
+          return b.orderDates.some(date => date >= targetDate);
         });
         const rate = eligible.length > 0 ? (retained.length / eligible.length) * 100 : 0;
         return { day: `${d}天`, rate: Math.round(rate) };
@@ -172,6 +175,33 @@ export default function UserPage() {
     };
   }, [filteredOrders]);
 
+  // 根据选中的RFM分群过滤用户，用于图表数据筛选
+  const segmentUserKeys = useMemo(() => {
+    if (!stats || selectedSegment === 'all') return null;
+    const segMap: Record<string, typeof stats.rfmData> = {
+      champions: stats.segments.champions,
+      loyal: stats.segments.loyal,
+      potential: stats.segments.potential,
+      new: stats.segments.new,
+      atRisk: stats.segments.atRisk,
+      lost: stats.segments.lost,
+    };
+    return new Set((segMap[selectedSegment] || []).map(u => u.key));
+  }, [stats, selectedSegment]);
+
+  const filteredValuePrediction = useMemo(() => {
+    if (!stats) return [];
+    if (!segmentUserKeys) return stats.valuePrediction;
+    const segKey = selectedSegment as keyof typeof stats.segments;
+    const segmentData = stats.segments[segKey];
+    if (!segmentData) return stats.valuePrediction;
+    return segmentData.slice(0, 10).map((u, i) => ({
+      user: `用户${i + 1}`,
+      current: u.monetary,
+      predicted: u.monetary * (1 + Math.random() * 0.5),
+    }));
+  }, [stats, selectedSegment, segmentUserKeys]);
+
   const noData = !filteredOrders.length;
   const rangeLabel = timeRange === '7' ? '近7天' : timeRange === '30' ? '近30天' : '近90天';
 
@@ -186,14 +216,14 @@ export default function UserPage() {
 
   const addTag = () => {
     if (!newTag.trim()) return;
-    setUserTags(prev => ({ ...prev, [Date.now().toString()]: [newTag.trim()] }));
+    setUserTags(prev => [...prev, newTag.trim()]);
     setNewTag('');
     setShowTagModal(false);
   };
 
   return (
     <div className="p-4 space-y-3">
-      <TimeFilter state={tfState} />
+      <TimeFilter state={tf} />
 
       <div className="grid grid-cols-6 gap-2">
         {kpis.map((k, i) => (
@@ -225,15 +255,15 @@ export default function UserPage() {
           {noData ? <div className="h-32 flex items-center justify-center text-xs text-[var(--pdd-text-secondary)]">请先上传数据</div> : (
             <div className="grid grid-cols-3 gap-2">
               {[
-                { name: '重要价值', count: stats?.segments.champions.length, color: 'var(--pdd-primary)' },
-                { name: '重要保持', count: stats?.segments.loyal.length, color: '#1890ff' },
-                { name: '重要发展', count: stats?.segments.potential.length, color: 'var(--pdd-success)' },
-                { name: '新用户', count: stats?.segments.new.length, color: 'var(--pdd-warning)' },
-                { name: '重要挽留', count: stats?.segments.atRisk.length, color: '#722ed1' },
-                { name: '流失用户', count: stats?.segments.lost.length, color: '#8c8c8c' },
+                { key: 'champions', name: '重要价值', count: stats?.segments.champions.length, color: 'var(--pdd-primary)' },
+                { key: 'loyal', name: '重要保持', count: stats?.segments.loyal.length, color: '#1890ff' },
+                { key: 'potential', name: '重要发展', count: stats?.segments.potential.length, color: 'var(--pdd-success)' },
+                { key: 'new', name: '新用户', count: stats?.segments.new.length, color: 'var(--pdd-warning)' },
+                { key: 'atRisk', name: '重要挽留', count: stats?.segments.atRisk.length, color: '#722ed1' },
+                { key: 'lost', name: '流失用户', count: stats?.segments.lost.length, color: '#8c8c8c' },
               ].map(s => (
-                <div key={s.name} className={`text-center p-2 rounded border cursor-pointer transition-all ${selectedSegment === s.name ? 'border-[var(--pdd-primary)] bg-[var(--pdd-bg)]' : 'border-[var(--pdd-border)]'}`}
-                  onClick={() => setSelectedSegment(selectedSegment === s.name ? 'all' : s.name)}>
+                <div key={s.key} className={`text-center p-2 rounded border cursor-pointer transition-all ${selectedSegment === s.key ? 'border-[var(--pdd-primary)] bg-[var(--pdd-bg)]' : 'border-[var(--pdd-border)]'}`}
+                  onClick={() => setSelectedSegment(selectedSegment === s.key ? 'all' : s.key)}>
                   <span className="text-xs text-[var(--pdd-text-secondary)]">{s.name}</span>
                   <span className="text-lg font-bold block" style={{ color: s.color }}>{s.count || 0}</span>
                 </div>
@@ -246,16 +276,18 @@ export default function UserPage() {
           <h3 className="text-sm font-semibold mb-2 flex items-center gap-1"><Activity size={14} className="text-pdd-primary" /> 用户行为路径</h3>
           {noData ? <div className="h-32 flex items-center justify-center text-xs text-[var(--pdd-text-secondary)]">请先上传数据</div> : (
             <div className="space-y-2">
-              {stats?.behaviorPath.map((step, i) => (
+              {stats?.behaviorPath.map((step, i) => {
+                const maxUsers = stats?.behaviorPath[0]?.users || 1;
+                return (
                 <div key={step.step} className="flex items-center gap-2">
                   <div className="w-20 text-xs text-[var(--pdd-text-secondary)]">{step.step}</div>
                   <div className="flex-1 h-6 bg-pdd-bg rounded overflow-hidden">
-                    <div className="h-full bg-pdd-primary rounded" style={{ width: `${(step.users / 1000) * 100}%` }} />
+                    <div className="h-full bg-pdd-primary rounded" style={{ width: `${(step.users / maxUsers) * 100}%` }} />
                   </div>
                   <div className="w-16 text-right text-xs">{step.users}人</div>
                   {step.drop > 0 && <div className="text-xs text-pdd-danger">↓{step.drop}%</div>}
                 </div>
-              ))}
+                )})}
             </div>
           )}
         </motion.div>
@@ -270,7 +302,7 @@ export default function UserPage() {
             <div className="h-32 flex items-center justify-center text-xs text-[var(--pdd-text-secondary)]">请先上传数据</div>
           ) : (
             <ResponsiveContainer width="100%" height={140}>
-              <BarChart data={stats?.valuePrediction}>
+              <BarChart data={filteredValuePrediction}>
                 <XAxis dataKey="user" tick={{ fontSize: 9 }} interval={0} /><YAxis tick={{ fontSize: 10 }} />
                 <Tooltip /><Bar dataKey="current" fill="var(--pdd-border)" name="当前价值" /><Bar dataKey="predicted" fill="var(--pdd-primary)" name="预测价值" />
               </BarChart>
@@ -310,7 +342,7 @@ export default function UserPage() {
                 <React.Fragment key={day.day}>
                   <div className="text-xs text-[var(--pdd-text-secondary)] text-right pr-2">{day.day}</div>
                   {day.hours.map((h, i) => (
-                    <div key={i} className="h-4 rounded-sm" style={{ backgroundColor: `rgba(var(--pdd-primary-rgb), ${h.value / 100})` }} />
+                    <div key={i} className="h-4 rounded-sm" style={{ backgroundColor: h.value > 0 ? `rgba(224, 46, 36, ${Math.min(h.value / 50, 1)})` : 'transparent' }} />
                   ))}
                 </React.Fragment>
               ))}
@@ -319,7 +351,37 @@ export default function UserPage() {
         )}
       </motion.div>
 
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }} className="pdd-card p-3">
+      <div className="grid grid-cols-2 gap-3">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.42 }} className="pdd-card p-3">
+          <h3 className="text-sm font-semibold mb-2 flex items-center gap-1"><DollarSign size={14} className="text-pdd-primary" /> 消费分层分布</h3>
+          {noData ? <div className="h-32 flex items-center justify-center text-xs text-[var(--pdd-text-secondary)]">请先上传数据</div> : (
+            <ResponsiveContainer width="100%" height={140}>
+              <BarChart data={stats?.tierData}>
+                <XAxis dataKey="name" tick={{ fontSize: 9 }} interval={0} />
+                <YAxis tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(v: number) => [v, '人数']} />
+                <Bar dataKey="value" fill="var(--pdd-primary)" name="人数" />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </motion.div>
+
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.44 }} className="pdd-card p-3">
+          <h3 className="text-sm font-semibold mb-2 flex items-center gap-1"><CreditCard size={14} className="text-pdd-primary" /> 支付方式分布</h3>
+          {noData ? <div className="h-32 flex items-center justify-center text-xs text-[var(--pdd-text-secondary)]">请先上传数据</div> : (
+            <ResponsiveContainer width="100%" height={140}>
+              <PieChart>
+                <Pie data={stats?.payData} cx="50%" cy="50%" outerRadius={50} fill="#8884d8" dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                  {stats?.payData.map((_: any, i: number) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          )}
+        </motion.div>
+      </div>
+
+      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.48 }} className="pdd-card p-3">
         <div className="flex items-center justify-between mb-2">
           <h3 className="text-sm font-semibold flex items-center gap-1"><Tag size={14} className="text-pdd-primary" /> 用户标签管理</h3>
           <button onClick={() => setShowTagModal(true)} className="flex items-center gap-1 px-2 py-1 text-xs bg-pdd-primary text-white rounded"><Plus size={12} />添加标签</button>
@@ -332,11 +394,11 @@ export default function UserPage() {
                 {tag.name} {tag.count}
               </span>
             ))}
-            {Object.entries(userTags).map(([id, tags]) => tags.map((tag, i) => (
-              <span key={`${id}-${i}`} className="px-3 py-1.5 rounded-full text-xs font-medium bg-[var(--pdd-bg)] text-[var(--pdd-text-secondary)] border border-[var(--pdd-border)]">
-                {tag} <button onClick={() => setUserTags(prev => { const n = { ...prev }; n[id] = n[id].filter((_, idx) => idx !== i); return n; })}><X size={10} /></button>
+            {userTags.map((tag, i) => (
+              <span key={`${tag}-${i}`} className="px-3 py-1.5 rounded-full text-xs font-medium bg-[var(--pdd-bg)] text-[var(--pdd-text-secondary)] border border-[var(--pdd-border)]">
+                {tag} <button onClick={() => setUserTags(prev => prev.filter((_, idx) => idx !== i))}><X size={10} /></button>
               </span>
-            )))}
+            ))}
           </div>
         )}
       </motion.div>

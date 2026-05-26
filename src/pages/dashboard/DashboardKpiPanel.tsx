@@ -1,8 +1,8 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Settings, Move, ArrowUp, ArrowDown } from 'lucide-react';
-import AmountFilterPanel, { DEFAULT_AMOUNT_FIELDS, FilterValues } from '../../components/AmountFilterPanel';
-import { safeFloat } from '../../components/TimeFilter';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
+import { ArrowUp, ArrowDown, TrendingUp } from 'lucide-react';
+import { KPI_LINES, ChartTooltip } from '../../utils/trendData';
 
 const cv = { hidden: { opacity: 0, y: 20 }, visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.06 } }) };
 
@@ -22,80 +22,40 @@ interface Props {
   setVisibleKpis: (s: Set<string>) => void;
   showKpiSelector: boolean;
   setShowKpiSelector: (v: boolean) => void;
-  amountFilters: FilterValues;
-  setAmountFilters: (v: FilterValues) => void;
   filteredOrders: any[];
   noData: boolean;
   draggedPanel: string | null;
   onDragStart: (p: string) => void;
   onDragOver: (e: React.DragEvent, p: string) => void;
   onDragEnd: () => void;
-  onCardClick: (label: string, data: any[], columns: { key: string; label: string }[]) => void;
+  onCardClick: (label: string) => void;
+  onDetailClick?: (label: string) => void;
   onCardReorder?: (newOrder: KpiCardItem[]) => void;
+  // 折线图相关
+  dailyKpiData: Record<string, any>[];
+  compareData: Record<string, any>[];
+  selectedTrendKpis: Set<string>;
+  rangeLabel: string;
+  compareEnabled: boolean;
 }
 
 export default function DashboardKpiPanel({
   kpiCards, allKpiCards, visibleKpis, setVisibleKpis, showKpiSelector, setShowKpiSelector,
-  amountFilters, setAmountFilters, filteredOrders, noData,
-  draggedPanel, onDragStart, onDragOver, onDragEnd, onCardClick, onCardReorder
+  filteredOrders, noData,
+  draggedPanel, onDragStart, onDragOver, onDragEnd, onCardClick, onDetailClick, onCardReorder,
+  dailyKpiData, compareData, selectedTrendKpis, rangeLabel, compareEnabled
 }: Props) {
   const [draggedCard, setDraggedCard] = React.useState<string | null>(null);
-  const getFilteredData = (label: string) => {
-    const baseColumns = [
-      { key: '订单号', label: '订单号' },
-      { key: '商品', label: '商品名称' },
-      { key: '商家实收金额(元)', label: '商家实收' },
-      { key: '支付时间', label: '支付时间' },
-      { key: '订单状态', label: '订单状态' },
-      { key: '省', label: '省份' },
-    ];
-    switch (label) {
-      case '商家实收GMV':
-        return { data: filteredOrders.filter(o => parseFloat(o['商家实收金额(元)'] || 0) > 0), columns: baseColumns };
-      case '有效订单量':
-        return { data: filteredOrders.filter(o => o['订单状态'] && !o['订单状态'].includes('取消') && !o['订单状态'].includes('关闭')), columns: baseColumns };
-      case '客单价':
-        return { data: filteredOrders.filter(o => parseFloat(o['商家实收金额(元)'] || 0) > 0), columns: baseColumns };
-      case '售后率':
-        return { data: filteredOrders.filter(o => o['订单状态'] && (o['订单状态'].includes('售后') || o['订单状态'].includes('退款'))), columns: baseColumns };
-      case '退款率':
-        return { data: filteredOrders.filter(o => o['订单状态'] && o['订单状态'].includes('退款')), columns: baseColumns };
-      case '邮费总额':
-        return { data: filteredOrders.filter(o => parseFloat(o['邮费(元)'] || 0) > 0), columns: [...baseColumns, { key: '邮费(元)', label: '邮费' }] };
-      case '买家数':
-        return { data: filteredOrders, columns: [...baseColumns, { key: '买家ID', label: '买家ID' }] };
-      case '商品数':
-        return { data: filteredOrders.filter(o => safeFloat(o['商品数量']) > 0), columns: [...baseColumns, { key: '商品数量', label: '数量' }] };
-      case '退款金额':
-        return { data: filteredOrders.filter(o => String(o['售后状态'] || '').includes('退款')), columns: baseColumns };
-      case '优惠总额':
-        return { data: filteredOrders.filter(o => safeFloat(o['店铺优惠折扣(元)']) + safeFloat(o['平台优惠折扣(元)']) > 0), columns: [...baseColumns, { key: '店铺优惠折扣(元)', label: '店铺优惠' }, { key: '平台优惠折扣(元)', label: '平台优惠' }] };
-      case '发货率':
-        return { data: filteredOrders.filter(o => String(o['发货时间'] || '').trim() !== ''), columns: [...baseColumns, { key: '发货时间', label: '发货时间' }] };
-      case '平均发货时长':
-        return { data: filteredOrders.filter(o => String(o['发货时间'] || '').trim() !== ''), columns: [...baseColumns, { key: '发货时间', label: '发货时间' }] };
-      case '用户实付':
-        return { data: filteredOrders.filter(o => parseFloat(o['用户实付金额(元)'] || 0) > 0), columns: [...baseColumns, { key: '用户实付金额(元)', label: '用户实付' }] };
-      default:
-        return { data: filteredOrders, columns: baseColumns };
-    }
-  };
+  const [dragOrder, setDragOrder] = React.useState<KpiCardItem[] | null>(null);
+  const displayCards = dragOrder || kpiCards;
 
   return (
     <motion.div key="kpi" layoutId="kpi" draggable onDragStart={() => onDragStart('kpi')} onDragOver={e => onDragOver(e, 'kpi')} onDragEnd={onDragEnd}
       className={`cursor-move transition-all ${draggedPanel === 'kpi' ? 'opacity-50 scale-95' : ''}`}>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold text-pdd-text">核心指标</h3>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowKpiSelector(!showKpiSelector)} className="text-xs text-pdd-primary-light hover:text-indigo-300 flex items-center gap-1">
-            <Settings size={12} /> 选择指标
-          </button>
-          <Move size={14} className="text-pdd-text-secondary" />
-        </div>
-      </div>
+      <div className="flex items-center justify-between mb-2" />
       {showKpiSelector && (
         <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="bg-pdd-card rounded-xl border border-pdd-border p-3 mb-2">
-          <div className="mb-3 pb-2 border-b border-pdd-border">
+          <div>
             <div className="text-xs font-medium text-pdd-text-secondary mb-2">指标显示</div>
             <div className="grid grid-cols-4 gap-1">
               {allKpiCards.map(k => (
@@ -112,11 +72,8 @@ export default function DashboardKpiPanel({
           </div>
         </motion.div>
       )}
-      <AmountFilterPanel fields={DEFAULT_AMOUNT_FIELDS} filters={amountFilters} onFiltersChange={setAmountFilters} />
       <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
-        {kpiCards.map((c, i) => {
-          const filtered = getFilteredData(c.label);
-          return (
+        {displayCards.map((c, i) => (
             <motion.div
               key={c.label}
               custom={i}
@@ -124,23 +81,29 @@ export default function DashboardKpiPanel({
               initial="hidden"
               animate="visible"
               draggable
-              onDragStart={() => setDraggedCard(c.label)}
+              onDragStart={() => { setDraggedCard(c.label); setDragOrder([...displayCards]); }}
               onDragOver={(e) => {
                 e.preventDefault();
-                if (draggedCard && draggedCard !== c.label && onCardReorder) {
-                  const newCards = [...kpiCards];
-                  const fromIndex = newCards.findIndex(card => card.label === draggedCard);
-                  const toIndex = newCards.findIndex(card => card.label === c.label);
-                  if (fromIndex !== -1 && toIndex !== -1) {
+                if (draggedCard && draggedCard !== c.label) {
+                  setDragOrder(prev => {
+                    if (!prev) return null;
+                    const fromIndex = prev.findIndex(card => card.label === draggedCard);
+                    const toIndex = prev.findIndex(card => card.label === c.label);
+                    if (fromIndex === -1 || toIndex === -1) return prev;
+                    const newCards = [...prev];
                     const [movedCard] = newCards.splice(fromIndex, 1);
                     newCards.splice(toIndex, 0, movedCard);
-                    onCardReorder(newCards);
-                  }
+                    return newCards;
+                  });
                 }
               }}
-              onDragEnd={() => setDraggedCard(null)}
-              onClick={() => onCardClick(c.label, filtered.data, filtered.columns)}
-              className={`bg-pdd-card rounded-xl border border-pdd-border px-3 py-2 flex items-center gap-2 cursor-move hover:border-pdd-border transition-all ${draggedCard === c.label ? 'opacity-50 scale-95' : ''}`}>
+              onDragEnd={() => {
+                if (dragOrder && onCardReorder) onCardReorder(dragOrder);
+                setDraggedCard(null);
+                setDragOrder(null);
+              }}
+              onClick={() => onCardClick(c.label)}
+              className={`bg-pdd-card rounded-xl border border-pdd-border px-3 py-2 flex items-center gap-2 cursor-pointer hover:border-pdd-primary/30 transition-all relative ${draggedCard === c.label ? 'opacity-50 scale-95' : ''}`}>
               <c.icon size={14} color={c.color} />
               <div className="flex-1 min-w-0">
                 <span className="text-xs text-pdd-text-secondary">{c.label}</span>
@@ -151,10 +114,59 @@ export default function DashboardKpiPanel({
                   )}
                 </div>
               </div>
+              {onDetailClick && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); onDetailClick(c.label); }}
+                  className="absolute top-0.5 right-0.5 px-1 py-0.5 rounded text-[10px] text-pdd-text-secondary hover:text-pdd-primary hover:bg-pdd-primary/10 transition-colors"
+                  title="查看详情"
+                >详情</button>
+              )}
             </motion.div>
-          );
-        })}
+          ))}
       </div>
+
+      {/* KPI趋势图 */}
+      {dailyKpiData.length > 0 && (() => {
+        const hasPercentKpi = [...selectedTrendKpis].some(k => KPI_LINES.find(l => l.key === k)?.type === 'percent');
+        const selectedLines = KPI_LINES.filter(l => selectedTrendKpis.has(l.key));
+        const chartData = (() => {
+          if (!compareEnabled || !compareData.length) return dailyKpiData;
+          const cmpMap: Record<string, any> = {};
+          compareData.forEach((d: any) => { cmpMap[d._fullDate || d.date] = d; });
+          return dailyKpiData.map((d: any) => {
+            const cmp = cmpMap[d._fullDate || d.date];
+            if (!cmp) return d;
+            const merged = { ...d };
+            Object.keys(cmp).forEach(k => {
+              if (k !== 'date' && k !== '_fullDate') merged[k + '_prev'] = cmp[k];
+            });
+            return merged;
+          });
+        })();
+        return (
+          <div className="mt-3 bg-pdd-card rounded-xl border border-pdd-border p-3">
+            <h3 className="text-sm font-semibold text-pdd-text flex items-center gap-1.5 mb-2">
+              <TrendingUp size={14} color="var(--pdd-primary)" />指标趋势({rangeLabel})
+            </h3>
+            <ResponsiveContainer width="100%" height={250}>
+              <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
+                <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }} axisLine={{ stroke: 'var(--pdd-border)' }} tickLine={false} />
+                <YAxis yAxisId="value" tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }} axisLine={{ stroke: 'var(--pdd-border)' }} tickLine={false} />
+                {hasPercentKpi && <YAxis yAxisId="percent" orientation="right" tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }} axisLine={{ stroke: 'var(--pdd-border)' }} tickLine={false} unit="%" />}
+                <Tooltip content={<ChartTooltip />} />
+                <Legend wrapperStyle={{ fontSize: '10px', paddingTop: '6px' }} />
+                {selectedLines.map(l => (
+                  <Line key={l.key} yAxisId={l.type === 'percent' ? 'percent' : 'value'} type="monotone" dataKey={l.key} name={l.label} stroke={l.color} strokeWidth={2} dot={{ r: 2, fill: l.color }} activeDot={{ r: 4 }} />
+                ))}
+                {compareEnabled && selectedLines.map(l => (
+                  <Line key={l.key + '_prev'} yAxisId={l.type === 'percent' ? 'percent' : 'value'} type="monotone" dataKey={l.key + '_prev'} name={l.label + '(上期)'} stroke={l.color} strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
+                ))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        );
+      })()}
     </motion.div>
   );
 }

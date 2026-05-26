@@ -154,6 +154,11 @@ export default function ProfitTooltip({
               <span>实收金额</span>
               <span className="font-mono font-medium">¥{fmt(revenue)}</span>
             </div>
+            {costBreakdown.discount > 0 && (
+              <div className="text-[10px] text-pdd-gray-400 mt-0.5">
+                已含折扣: ¥{fmt(costBreakdown.discount)}（已从实收中扣除）
+              </div>
+            )}
           </div>
 
           {/* 直接成本 */}
@@ -197,13 +202,6 @@ export default function ProfitTooltip({
                 </span>
                 <span className="font-mono">¥{fmt(costBreakdown.promoCost)}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="flex items-center gap-1">
-                  折扣
-                  <span className="text-[10px] text-pdd-gray-400">(订单优惠合计)</span>
-                </span>
-                <span className="font-mono">¥{fmt(costBreakdown.discount)}</span>
-              </div>
             </div>
           </div>
 
@@ -218,15 +216,21 @@ export default function ProfitTooltip({
             </div>
           )}
 
-          {/* 自定义扣费合计 */}
+          {/* 自定义扣费明细 */}
           {deductionDetails.length > 0 && (
             <div>
               <div className="text-[10px] text-pdd-gray-400 font-semibold uppercase tracking-wide mb-1.5">
-                其他扣费合计
+                其他扣费明细
                 <span className="text-[10px] text-pdd-gray-400 font-normal">({deductionDetails.length}项)</span>
               </div>
-              <div className="flex justify-between text-xs text-pdd-gray-600">
-                <span className="truncate max-w-[200px]">{deductionDetails.map(d => d.name).join(' + ')}</span>
+              {deductionDetails.map((d, i) => (
+                <div key={i} className="flex justify-between text-[11px] text-pdd-gray-500 py-0.5">
+                  <span className="truncate max-w-[150px]">&middot; {d.name}</span>
+                  <span className="font-mono">¥{fmt(d.amount)}</span>
+                </div>
+              ))}
+              <div className="flex justify-between text-xs text-pdd-gray-600 border-t border-pdd-gray-100 pt-1 mt-0.5">
+                <span className="font-medium">扣费合计</span>
                 <span className="font-mono">¥{fmt(costBreakdown.customDeductions)}</span>
               </div>
             </div>

@@ -66,7 +66,7 @@ export default function ProductLinkChart({ linkStats }: Props) {
           const costPct = Math.min((stat.cost / maxVal) * 100, 100);
           const revenuePct = Math.min((stat.revenue / maxVal) * 100, 100);
           const profitPct = Math.min((Math.abs(stat.netProfit) / maxVal) * 100, 100);
-          const isProfit = stat.roi >= 0;
+          const isProfit = stat.roi >= 1;
           const rankBadge = getRankBadge(idx);
 
           return (
@@ -149,8 +149,8 @@ export default function ProductLinkChart({ linkStats }: Props) {
       <div className="mt-4 pt-3 border-t border-pdd-border flex items-center justify-between text-xs text-pdd-text-secondary">
         <span className="font-mono">共 {linkStats.length} 个商品 · 按 ROI 降序排列</span>
         <span className="flex items-center gap-1">
-          <span className="w-2 h-2 rounded-full bg-pdd-success" /> 盈利 {sorted.filter(s => s.roi >= 0).length}
-          <span className="w-2 h-2 rounded-full bg-pdd-danger ml-1" /> 亏损 {sorted.filter(s => s.roi < 0).length}
+          <span className="w-2 h-2 rounded-full bg-pdd-success" /> 盈利 {sorted.filter(s => s.roi >= 1).length}
+          <span className="w-2 h-2 rounded-full bg-pdd-danger ml-1" /> 亏损 {sorted.filter(s => s.roi < 1).length}
         </span>
       </div>
     </div>
