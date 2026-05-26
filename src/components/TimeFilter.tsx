@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Calendar, ChevronDown, Clock, Save, X } from 'lucide-react';
+import { findField } from '../utils/fieldAccess';
 
 export type TimeRange = '7' | '30' | '90' | 'all' | 'custom';
 export type TimeGranularity = 'day' | 'week' | 'month';
@@ -15,6 +16,12 @@ export interface TimeFilterState {
   compareEnd?: string;
   quickRange?: QuickRange;
 }
+
+export type TimeFilterStateWithSetters = TimeFilterState & {
+  setTimeRange: (r: TimeRange) => void;
+  setGranularity: (g: TimeGranularity) => void;
+  setCompareEnabled: (v: boolean) => void;
+};
 
 export function useTimeFilter(defaultRange: TimeRange = '7', defaultGranularity: TimeGranularity = 'day'): TimeFilterState & {
   setTimeRange: (r: TimeRange) => void;
@@ -55,7 +62,19 @@ export function useTimeFilter(defaultRange: TimeRange = '7', defaultGranularity:
 
   const setQuickRange = (q: QuickRange) => {
     setQuickRangeState(q);
+    setCustomStart('');
+    setCustomEnd('');
     setTimeRange('custom');
+  };
+
+  // 包装 setTimeRange：切换到非自定义范围时自动清除自定义日期和快速范围
+  const handleSetTimeRange = (r: TimeRange) => {
+    setTimeRange(r);
+    if (r !== 'custom') {
+      setCustomStart('');
+      setCustomEnd('');
+      setQuickRangeState(undefined);
+    }
   };
 
   const saveCurrentRange = (name: string) => {
@@ -89,7 +108,7 @@ export function useTimeFilter(defaultRange: TimeRange = '7', defaultGranularity:
 
   return {
     timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange,
-    setTimeRange, setGranularity, setCompareEnabled, setCustomRange, setCompareRange, setQuickRange,
+    setTimeRange: handleSetTimeRange, setGranularity, setCompareEnabled, setCustomRange, setCompareRange, setQuickRange,
     savedRanges, saveCurrentRange, deleteSavedRange, applySavedRange,
   };
 }
@@ -191,9 +210,9 @@ export function filterByTimeRange(orders: any[], allDates: [string, any[]][], ti
     const dates = getQuickRangeDates(quickRange);
     startDate = dates.start;
     endDate = dates.end;
-  } else if (timeRange === 'custom' && customStart && customEnd) {
+  } else if (timeRange === 'custom' && customStart) {
     startDate = customStart;
-    endDate = customEnd;
+    endDate = customEnd || customStart; // 单天选择
   } else {
     const lastDate = allDates[allDates.length - 1][0];
     const lastD = new Date(lastDate);
@@ -205,76 +224,119 @@ export function filterByTimeRange(orders: any[], allDates: [string, any[]][], ti
   }
 
   return orders.filter(o => {
-    const d = String(o['支付时间'] || '').split(' ')[0];
+    const d = String(findField(o, '支付时间') || '').split(' ')[0];
     return d >= startDate && d <= endDate;
   });
 }
 
 // 按时间范围过滤推广/售后等带"日期"字段的数据
-export function filterPromoByTimeRange(records: any[], allDates: [string, any[]][], timeRange: TimeRange, dateField: string = '日期'): any[] {
-  if (!allDates.length || !records.length) return records;
-  // "全部"选项：不进行时间过滤，返回所有数据
+// 用记录自身的日期范围做时间锚点，而非订单日期（推广数据日期可能与订单不一致）
+export function filterPromoByTimeRange(records: any[], allDates: [string, any[]][], timeRange: TimeRange, dateFields: string[] = ['日期', 'date'], customStart?: string, customEnd?: string, quickRange?: QuickRange): any[] {
+  if (!records.length) return records;
   if (timeRange === 'all') return records;
-  const lastDate = allDates[allDates.length - 1][0];
-  const lastD = new Date(lastDate);
-  const rangeDays = parseInt(timeRange);
-  const cutoff = new Date(lastD);
-  cutoff.setDate(cutoff.getDate() - rangeDays + 1);
-  const startDate = cutoff.toISOString().split('T')[0];
-  const endDate = lastDate;
+
+  let startDate: string;
+  let endDate: string;
+
+  if (timeRange === 'custom' && quickRange) {
+    const dates = getQuickRangeDates(quickRange);
+    startDate = dates.start;
+    endDate = dates.end;
+  } else if (timeRange === 'custom' && customStart) {
+    startDate = customStart;
+    endDate = customEnd || customStart; // 单天选择
+  } else if (timeRange === 'custom' || isNaN(parseInt(timeRange))) {
+    return records;
+  } else {
+    // 从记录自身找最大日期作为锚点，回退到订单日期
+    let maxDate = '';
+    for (const r of records) {
+      const d = String(findField(r, ...dateFields) || '').trim().replace(/\//g, '-');
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d) && d > maxDate) maxDate = d;
+    }
+    if (!maxDate && allDates.length) maxDate = allDates[allDates.length - 1][0];
+    if (!maxDate) return records;
+    const lastD = new Date(maxDate);
+    const rangeDays = parseInt(timeRange);
+    const cutoff = new Date(lastD);
+    cutoff.setDate(cutoff.getDate() - rangeDays + 1);
+    startDate = cutoff.toISOString().split('T')[0];
+    endDate = maxDate;
+  }
+
   return records.filter(r => {
-    const d = String(r[dateField] || '').trim();
+    let d = String(findField(r, ...dateFields) || '').trim();
+    d = d.replace(/\//g, '-');
     return d >= startDate && d <= endDate;
   });
 }
 
-export function getCompareOrders(orders: any[], allDates: [string, any[]][], timeRange: TimeRange, compareStart?: string, compareEnd?: string): any[] {
+export function getCompareOrders(orders: any[], allDates: [string, any[]][], timeRange: TimeRange, compareStart?: string, compareEnd?: string, customStart?: string, customEnd?: string, quickRange?: QuickRange): any[] {
   if (!allDates.length) return [];
 
   if (compareStart && compareEnd) {
     return orders.filter(o => {
-      const d = String(o['支付时间'] || '').split(' ')[0];
+      const d = String(findField(o, '支付时间') || '').split(' ')[0];
       return d >= compareStart && d <= compareEnd;
     });
   }
 
-  // 处理 'all' 或其他非数字时间范围
-  if (timeRange === 'all' || isNaN(parseInt(timeRange))) {
+  let startDate: string;
+  let endDate: string;
+  let isCurrentPeriod = false; // 标记是否为当前周期（需要再偏移到上一周期）
+
+  // 自定义日期或快速范围：先获取当前周期日期
+  if (timeRange === 'custom' && quickRange) {
+    const dates = getQuickRangeDates(quickRange);
+    startDate = dates.start;
+    endDate = dates.end;
+    isCurrentPeriod = true;
+  } else if (timeRange === 'custom' && customStart) {
+    startDate = customStart;
+    endDate = customEnd || customStart; // 单天选择
+    isCurrentPeriod = true;
+  } else if (timeRange === 'custom') {
+    return []; // 无日期无法计算
+  } else if (timeRange === 'all' || isNaN(parseInt(timeRange))) {
     return [];
+  } else {
+    const lastDate = allDates[allDates.length - 1][0];
+    const lastD = new Date(lastDate);
+    if (isNaN(lastD.getTime())) return [];
+    const rangeDays = parseInt(timeRange);
+    const currentStart = new Date(lastD);
+    currentStart.setDate(currentStart.getDate() - rangeDays + 1);
+    const compareS = new Date(currentStart);
+    compareS.setDate(compareS.getDate() - rangeDays);
+    const compareE = new Date(currentStart);
+    compareE.setDate(compareE.getDate() - 1);
+    if (isNaN(compareS.getTime()) || isNaN(compareE.getTime())) return [];
+    startDate = compareS.toISOString().split('T')[0];
+    endDate = compareE.toISOString().split('T')[0];
   }
 
-  const lastDate = allDates[allDates.length - 1][0];
-  const lastD = new Date(lastDate);
-  // 检查日期是否有效
-  if (isNaN(lastD.getTime())) {
-    return [];
+  // 自定义/快速范围需要从当前周期计算等长上一周期
+  if (isCurrentPeriod) {
+    const currentStartD = new Date(startDate);
+    const currentEndD = new Date(endDate);
+    const periodDays = Math.ceil((currentEndD.getTime() - currentStartD.getTime()) / 86400000) + 1;
+    const prevEndD = new Date(currentStartD);
+    prevEndD.setDate(prevEndD.getDate() - 1);
+    const prevStartD = new Date(prevEndD);
+    prevStartD.setDate(prevStartD.getDate() - periodDays + 1);
+    startDate = prevStartD.toISOString().split('T')[0];
+    endDate = prevEndD.toISOString().split('T')[0];
   }
-
-  const rangeDays = parseInt(timeRange);
-  const currentStart = new Date(lastD);
-  currentStart.setDate(currentStart.getDate() - rangeDays + 1);
-  const compareS = new Date(currentStart);
-  compareS.setDate(compareS.getDate() - rangeDays);
-  const compareE = new Date(currentStart);
-  compareE.setDate(compareE.getDate() - 1);
-
-  // 检查计算的日期是否有效
-  if (isNaN(compareS.getTime()) || isNaN(compareE.getTime())) {
-    return [];
-  }
-
-  const csStr = compareS.toISOString().split('T')[0];
-  const ceStr = compareE.toISOString().split('T')[0];
 
   return orders.filter(o => {
-    const d = String(o['支付时间'] || '').split(' ')[0];
-    return d >= csStr && d <= ceStr;
+    const d = String(findField(o, '支付时间') || '').split(' ')[0];
+    return d >= startDate && d <= endDate;
   });
 }
 
 export function getAllDateGroups(orders: any[]): [string, any[]][] {
   const m: Record<string, any[]> = {};
-  orders.forEach(o => { const d = String(o['支付时间'] || '').split(' ')[0]; if (d) (m[d] = m[d] || []).push(o); });
+  orders.forEach(o => { const d = String(findField(o, '支付时间') || '').split(' ')[0]; if (d) (m[d] = m[d] || []).push(o); });
   return Object.entries(m).sort((a, b) => a[0].localeCompare(b[0]));
 }
 
@@ -286,7 +348,7 @@ export function changePct(cur: number, prev: number): number | null {
 export function aggregateByGranularity(ords: any[], gran: TimeGranularity, fields: { income?: string; postage?: string; discount?: string | string[]; paid?: string; qty?: string; asCheck?: (o: any) => boolean; rfCheck?: (o: any) => boolean }): Record<string, any> {
   const m: Record<string, any> = {};
   ords.forEach(o => {
-    const d = String(o['支付时间'] || '').split(' ')[0];
+    const d = String(findField(o, '支付时间') || '').split(' ')[0];
     if (!d) return;
     let key: string;
     if (gran === 'day') key = d;
@@ -308,7 +370,7 @@ export function aggregateByGranularity(ords: any[], gran: TimeGranularity, field
   return m;
 }
 
-export default function TimeFilter({ state }: { state: TimeFilterState & {
+export default function TimeFilter({ state, compact }: { state: TimeFilterState & {
   setTimeRange: (r: TimeRange) => void;
   setGranularity: (g: TimeGranularity) => void;
   setCompareEnabled: (v: boolean) => void;
@@ -319,7 +381,7 @@ export default function TimeFilter({ state }: { state: TimeFilterState & {
   saveCurrentRange?: (name: string) => void;
   deleteSavedRange?: (id: string) => void;
   applySavedRange?: (range: SavedRange) => void;
-} }) {
+}; compact?: boolean }) {
   const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange, setTimeRange, setGranularity, setCompareEnabled, setCustomRange, setCompareRange, setQuickRange, savedRanges, saveCurrentRange, deleteSavedRange, applySavedRange } = state;
   const [showCustom, setShowCustom] = useState(false);
   const [showCompare, setShowCompare] = useState(false);
@@ -329,26 +391,45 @@ export default function TimeFilter({ state }: { state: TimeFilterState & {
   const [tempEnd, setTempEnd] = useState(customEnd || '');
   const [tempCompareStart, setTempCompareStart] = useState(compareStart || '');
   const [tempCompareEnd, setTempCompareEnd] = useState(compareEnd || '');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const customRef = useRef<HTMLDivElement>(null);
+  const compareRef = useRef<HTMLDivElement>(null);
+  const savedRef = useRef<HTMLDivElement>(null);
+
+  // 点击外部关闭弹窗
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (showCustom && customRef.current && !customRef.current.contains(e.target as Node)) setShowCustom(false);
+      if (showCompare && compareRef.current && !compareRef.current.contains(e.target as Node)) setShowCompare(false);
+      if (showSaved && savedRef.current && !savedRef.current.contains(e.target as Node)) setShowSaved(false);
+    };
+    if (showCustom || showCompare || showSaved) {
+      document.addEventListener('mousedown', handler);
+      return () => document.removeEventListener('mousedown', handler);
+    }
+  }, [showCustom, showCompare, showSaved]);
 
   const rangeLabel = useMemo(() => {
     if (timeRange === 'custom' && quickRange) {
       const labels: Record<QuickRange, string> = { today: '今日', yesterday: '昨日', thisWeek: '本周', lastWeek: '上周', thisMonth: '本月', lastMonth: '上月', thisQuarter: '本季度', lastQuarter: '上季度', thisYear: '本年', lastYear: '去年' };
       return labels[quickRange];
     }
-    if (timeRange === 'custom' && customStart && customEnd) return `${customStart} 至 ${customEnd}`;
+    if (timeRange === 'custom' && customStart && customEnd) return customStart === customEnd ? customStart : `${customStart} 至 ${customEnd}`;
     return timeRange === '7' ? '近7天' : timeRange === '30' ? '近30天' : timeRange === '90' ? '近90天' : timeRange === 'all' ? '全部' : '自定义';
   }, [timeRange, quickRange, customStart, customEnd]);
 
   const applyCustomRange = () => {
-    if (setCustomRange && tempStart && tempEnd) {
-      setCustomRange(tempStart, tempEnd);
+    if (setCustomRange && tempStart) {
+      const end = tempEnd || tempStart; // 未填结束日期则默认单天
+      setCustomRange(tempStart, end);
       setShowCustom(false);
     }
   };
 
   const applyCompareRange = () => {
-    if (setCompareRange && tempCompareStart && tempCompareEnd) {
-      setCompareRange(tempCompareStart, tempCompareEnd);
+    if (setCompareRange && tempCompareStart) {
+      const end = tempCompareEnd || tempCompareStart; // 未填结束日期则默认单天
+      setCompareRange(tempCompareStart, end);
       setShowCompare(false);
     }
   };
@@ -361,11 +442,11 @@ export default function TimeFilter({ state }: { state: TimeFilterState & {
   };
 
   return (
-    <div className="flex items-center gap-2 flex-wrap">
+    <div ref={containerRef} className="flex items-center gap-2 flex-wrap relative">
       {/* Quick ranges */}
       <div className="flex items-center gap-1 bg-[var(--pdd-card)] rounded-lg px-1 py-0.5 border border-[var(--pdd-border)]">
         {(['7', '30', '90', 'all'] as TimeRange[]).map(r => (
-          <button key={r} onClick={() => { setTimeRange(r); setQuickRange && setQuickRange(undefined as any); }}
+          <button key={r} onClick={() => setTimeRange(r)}
             className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${timeRange === r && !quickRange ? 'bg-pdd-primary text-white' : 'text-[var(--pdd-text-secondary)] hover:text-[var(--pdd-text)]'}`}>
             {r === 'all' ? '全部' : `近${r}天`}
           </button>
@@ -378,7 +459,7 @@ export default function TimeFilter({ state }: { state: TimeFilterState & {
 
       {/* Quick select dropdown */}
       {showCustom && (
-        <div className="absolute z-50 mt-1 bg-[var(--pdd-card)] border border-[var(--pdd-border)] rounded-lg shadow-lg p-2" style={{ top: '40px' }}>
+        <div ref={customRef} className="absolute z-50 top-full left-0 mt-1 bg-[var(--pdd-card)] border border-[var(--pdd-border)] rounded-lg shadow-lg p-2 min-w-[320px]">
           <div className="grid grid-cols-2 gap-1 mb-2">
             {(['today', 'yesterday', 'thisWeek', 'lastWeek', 'thisMonth', 'lastMonth', 'thisQuarter', 'lastQuarter', 'thisYear', 'lastYear'] as QuickRange[]).map(q => {
               const labels: Record<QuickRange, string> = { today: '今日', yesterday: '昨日', thisWeek: '本周', lastWeek: '上周', thisMonth: '本月', lastMonth: '上月', thisQuarter: '本季度', lastQuarter: '上季度', thisYear: '本年', lastYear: '去年' };
@@ -391,11 +472,11 @@ export default function TimeFilter({ state }: { state: TimeFilterState & {
             })}
           </div>
           <div className="border-t border-[var(--pdd-border)] pt-2">
-            <p className="text-xs text-[var(--pdd-text-secondary)] mb-1">自定义日期</p>
+            <p className="text-xs text-[var(--pdd-text-secondary)] mb-1">自定义日期（仅选开始日期为单天）</p>
             <div className="flex items-center gap-1">
               <input type="date" value={tempStart} onChange={e => setTempStart(e.target.value)} className="px-2 py-1 rounded border border-[var(--pdd-border)] text-xs w-28" />
-              <span className="text-xs">至</span>
-              <input type="date" value={tempEnd} onChange={e => setTempEnd(e.target.value)} className="px-2 py-1 rounded border border-[var(--pdd-border)] text-xs w-28" />
+              <span className="text-xs text-[var(--pdd-text-muted)]">至</span>
+              <input type="date" value={tempEnd} onChange={e => setTempEnd(e.target.value)} placeholder="可选" className="px-2 py-1 rounded border border-[var(--pdd-border)] text-xs w-28" />
               <button onClick={applyCustomRange} className="px-2 py-1 bg-pdd-primary text-white rounded text-xs">确定</button>
             </div>
           </div>
@@ -403,14 +484,16 @@ export default function TimeFilter({ state }: { state: TimeFilterState & {
       )}
 
       {/* Granularity */}
-      <div className="flex items-center gap-1 bg-[var(--pdd-card)] rounded-lg px-1 py-0.5 border border-[var(--pdd-border)]">
-        {(['day', 'week', 'month'] as TimeGranularity[]).map(g => (
-          <button key={g} onClick={() => setGranularity(g)}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${granularity === g ? 'bg-pdd-info text-white' : 'text-[var(--pdd-text-secondary)] hover:text-[var(--pdd-text)]'}`}>
-            {g === 'day' ? '按日' : g === 'week' ? '按周' : '按月'}
-          </button>
-        ))}
-      </div>
+      {!compact && (
+        <div className="flex items-center gap-1 bg-[var(--pdd-card)] rounded-lg px-1 py-0.5 border border-[var(--pdd-border)]">
+          {(['day', 'week', 'month'] as TimeGranularity[]).map(g => (
+            <button key={g} onClick={() => setGranularity(g)}
+              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${granularity === g ? 'bg-pdd-info text-white' : 'text-[var(--pdd-text-secondary)] hover:text-[var(--pdd-text)]'}`}>
+              {g === 'day' ? '按日' : g === 'week' ? '按周' : '按月'}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Compare toggle */}
       <button onClick={() => setCompareEnabled(!compareEnabled)}
@@ -420,21 +503,22 @@ export default function TimeFilter({ state }: { state: TimeFilterState & {
 
       {/* Compare range selector */}
       {compareEnabled && (
-        <button onClick={() => setShowCompare(!showCompare)}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border border-[var(--pdd-border)] hover:border-pdd-primary-light">
-          <ChevronDown size={12} />对比时段
-        </button>
-      )}
-
-      {showCompare && compareEnabled && (
-        <div className="absolute z-50 mt-1 bg-[var(--pdd-card)] border border-[var(--pdd-border)] rounded-lg shadow-lg p-2" style={{ top: '40px', left: '300px' }}>
-          <p className="text-xs text-[var(--pdd-text-secondary)] mb-1">选择对比时间段</p>
-          <div className="flex items-center gap-1">
-            <input type="date" value={tempCompareStart} onChange={e => setTempCompareStart(e.target.value)} className="px-2 py-1 rounded border border-[var(--pdd-border)] text-xs w-28" />
-            <span className="text-xs">至</span>
-            <input type="date" value={tempCompareEnd} onChange={e => setTempCompareEnd(e.target.value)} className="px-2 py-1 rounded border border-[var(--pdd-border)] text-xs w-28" />
-            <button onClick={applyCompareRange} className="px-2 py-1 bg-pdd-primary-dark text-white rounded text-xs">确定</button>
-          </div>
+        <div className="relative">
+          <button onClick={() => setShowCompare(!showCompare)}
+            className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border border-[var(--pdd-border)] hover:border-pdd-primary-light">
+            <ChevronDown size={12} />对比时段
+          </button>
+          {showCompare && (
+            <div ref={compareRef} className="absolute z-50 top-full left-0 mt-1 bg-[var(--pdd-card)] border border-[var(--pdd-border)] rounded-lg shadow-lg p-2">
+              <p className="text-xs text-[var(--pdd-text-secondary)] mb-1">对比时段（仅选开始日期为单天）</p>
+              <div className="flex items-center gap-1">
+                <input type="date" value={tempCompareStart} onChange={e => setTempCompareStart(e.target.value)} className="px-2 py-1 rounded border border-[var(--pdd-border)] text-xs w-28" />
+                <span className="text-xs text-[var(--pdd-text-muted)]">至</span>
+                <input type="date" value={tempCompareEnd} onChange={e => setTempCompareEnd(e.target.value)} placeholder="可选" className="px-2 py-1 rounded border border-[var(--pdd-border)] text-xs w-28" />
+                <button onClick={applyCompareRange} className="px-2 py-1 bg-pdd-primary-dark text-white rounded text-xs">确定</button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -447,7 +531,7 @@ export default function TimeFilter({ state }: { state: TimeFilterState & {
       )}
 
       {showSaved && savedRanges && (
-        <div className="absolute z-50 mt-1 bg-[var(--pdd-card)] border border-[var(--pdd-border)] rounded-lg shadow-lg p-2" style={{ top: '40px', left: '400px' }}>
+        <div ref={savedRef} className="absolute z-50 top-full left-0 mt-1 bg-[var(--pdd-card)] border border-[var(--pdd-border)] rounded-lg shadow-lg p-2 min-w-[200px]">
           {savedRanges.map(r => (
             <div key={r.id} className="flex items-center justify-between py-1 hover:bg-[var(--pdd-bg)] rounded px-2">
               <button onClick={() => { applySavedRange && applySavedRange(r); setShowSaved(false); }} className="text-xs text-left flex-1">{r.name}</button>
@@ -464,8 +548,8 @@ export default function TimeFilter({ state }: { state: TimeFilterState & {
       )}
 
       {/* Current range display */}
-      <span className="text-xs text-[var(--pdd-text-secondary)]">{rangeLabel}</span>
-      {compareEnabled && <span className="text-xs text-pdd-primary-dark">vs 对比</span>}
+      {!compact && <span className="text-xs text-[var(--pdd-text-secondary)]">{rangeLabel}</span>}
+      {!compact && compareEnabled && <span className="text-xs text-pdd-primary-dark">vs 对比</span>}
     </div>
   );
 }
