@@ -730,6 +730,46 @@ function checkDataConsistency(
 
 }
 
+// ===== 去重工具函数 =====
+
+/** 获取订单行的唯一标识（使用 findField 做模糊匹配，兼容不同 PDD 导出格式） */
+function getOrderRowKey(row: any): string {
+  return String(findField(row, '订单号') || '').trim();
+}
+
+/** 获取货款明细行的唯一标识（商户订单号 + 发生时间） */
+function getFinancialRowKey(row: any): string {
+  return `${String(findField(row, '商户订单号') || '').trim()}_${String(findField(row, '发生时间') || '').trim()}`;
+}
+
+/** 获取运费险行的唯一标识 */
+function getInsuranceRowKey(row: any): string {
+  return String(findField(row, '订单编号') || '').trim();
+}
+
+/** 获取售后行的唯一标识 */
+function getAfterSaleRowKey(row: any): string {
+  return String(findField(row, '售后编号') || '').trim();
+}
+
+/** 通用去重合并：根据 getKey 去重，返回合并后的数组及统计 */
+function dedupMerge<T>(existing: T[], incoming: T[], getKey: (item: T) => string): { merged: T[]; newCount: number; dupCount: number } {
+  const existingKeys = new Set(existing.map(getKey).filter(Boolean));
+  let newCount = 0, dupCount = 0;
+  const newItems: T[] = [];
+  incoming.forEach(item => {
+    const key = getKey(item);
+    if (key && existingKeys.has(key)) {
+      dupCount++;
+    } else {
+      newItems.push(item);
+      if (key) existingKeys.add(key);
+      newCount++;
+    }
+  });
+  return { merged: [...existing, ...newItems], newCount, dupCount };
+}
+
 
 export default function UploadPage() {
 
@@ -886,9 +926,9 @@ export default function UploadPage() {
       let approxDuplicateCount = 0;
       let approxNewCount = 0;
       if (detectedType === '订单数据') {
-        const snapshotOrderIds = new Set((existingSnapshot.orders || []).map((o: any) => String(o['订单号'] || '').trim()));
+        const snapshotOrderIds = new Set((existingSnapshot.orders || []).map(getOrderRowKey).filter(Boolean));
         data.forEach((row: any) => {
-          const orderId = String(row['订单号'] || '').trim();
+          const orderId = getOrderRowKey(row);
           if (orderId && snapshotOrderIds.has(orderId)) approxDuplicateCount++;
           else if (orderId) { approxNewCount++; snapshotOrderIds.add(orderId); }
         });
@@ -917,41 +957,16 @@ export default function UploadPage() {
             return cleaned;
           };
           const cleanedData = data.map(cleanCsvRow);
-const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订单号'] || '').trim()));
-
-          const newOrders: any[] = [];
-
-          cleanedData.forEach((row: any) => {
-
-            const orderId = String(row['订单号'] || '').trim();
-
-            if (orderId && !existingOrderIds.has(orderId)) {
-
-              newOrders.push(row);
-
-              existingOrderIds.add(orderId);
-
-            }
-
-          });
-
-          existing.orders = [...existing.orders, ...newOrders];
+          const { merged: mergedOrders } = dedupMerge(existing.orders, cleanedData, getOrderRowKey);
+          existing.orders = mergedOrders;
 
           existing.availableFields.csv = new Set(fields);
 
         } else if (detectedType === '货款明细') {
 
           if (!existing.financialRecords) existing.financialRecords = [];
-          const existingKeys = new Set(existing.financialRecords.map((r: any) => `${r['商户订单号'] || ''}_${r['发生时间'] || ''}`));
-          const newRecords: any[] = [];
-          data.forEach((row: any) => {
-            const key = `${row['商户订单号'] || ''}_${row['发生时间'] || ''}`;
-            if (key.trim() && !existingKeys.has(key)) {
-              newRecords.push(row);
-              existingKeys.add(key);
-            }
-          });
-          existing.financialRecords = [...existing.financialRecords, ...newRecords];
+          const { merged: mergedFinancial } = dedupMerge(existing.financialRecords, data, getFinancialRowKey);
+          existing.financialRecords = mergedFinancial;
 
         }
 
@@ -1189,31 +1204,20 @@ const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订�
               });
               processedTypes.add(info.type);
             } else if (info.type === '运费险数据') {
-              const existingKeys = new Set(merged.shippingInsurance.map((r: any) => String(r['订单编号'] || '')));
-              info.data.forEach((item: any) => {
-                const key = String(item['订单编号'] || '');
-                if (key && !existingKeys.has(key)) { merged.shippingInsurance.push(item); existingKeys.add(key); }
-              });
+              const { merged: mergedIns } = dedupMerge(merged.shippingInsurance, info.data, getInsuranceRowKey);
+              merged.shippingInsurance = mergedIns;
               merged.availableFields.insurance = new Set(info.fields);
               processedTypes.add(info.type);
             } else if (info.type === '售后数据') {
               if (!merged.afterSaleRecords) merged.afterSaleRecords = [];
-              const existingKeys = new Set(merged.afterSaleRecords.map((r: any) => String(r['售后编号'] || '')));
-              info.data.forEach((item: any) => {
-                const key = String(item['售后编号'] || '');
-                if (key && !existingKeys.has(key)) { merged.afterSaleRecords!.push(item); existingKeys.add(key); }
-              });
+              const { merged: mergedAS } = dedupMerge(merged.afterSaleRecords, info.data, getAfterSaleRowKey);
+              merged.afterSaleRecords = mergedAS;
               if (!merged.availableFields.afterSale) merged.availableFields.afterSale = new Set();
               merged.availableFields.afterSale = new Set(info.fields);
               processedTypes.add(info.type);
             } else if (info.type === '订单数据') {
-              const existingOrderIds = new Set(merged.orders.map((o: any) => String(o['订单号'] || '')));
-              const newOrders: any[] = [];
-              info.data.forEach((row: any) => {
-                const orderId = String(row['订单号'] || '');
-                if (orderId && !existingOrderIds.has(orderId)) { newOrders.push(row); existingOrderIds.add(orderId); }
-              });
-              merged.orders = [...merged.orders, ...newOrders];
+              const { merged: mergedOrdersX, newCount: orderNew, dupCount: orderDup } = dedupMerge(merged.orders, info.data, getOrderRowKey);
+              merged.orders = mergedOrdersX;
               merged.availableFields.csv = new Set(info.fields);
               processedTypes.add(info.type);
             }
@@ -1283,6 +1287,15 @@ const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订�
     const targetStoreId = currentStore.id;
 
     const targetStoreName = currentStore.name;
+
+    // 文件指纹检测：同名文件再次上传时弹窗确认
+    const existingRecord = uploadRecords.find((r: any) => r.fileName === file.name && r.storeId === targetStoreId);
+    if (existingRecord) {
+      const confirmed = window.confirm(
+        `文件 "${file.name}" 已上传过（${new Date(existingRecord.uploadedAt).toLocaleString()}）。\n\n是否继续上传？重复数据将自动去重。`
+      );
+      if (!confirmed) return;
+    }
 
     const isZip = file.name.toLowerCase().endsWith('.zip');
     const ext = file.name.toLowerCase().endsWith('.csv') ? 'csv' : isZip ? 'zip' : 'xlsx';
