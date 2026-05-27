@@ -18,6 +18,12 @@ jobs:
         with:
           node-version: 18
 
+      - name: 配置 SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
       - name: 安装依赖 & 构建前端
         run: |
           npm install
@@ -29,45 +35,18 @@ jobs:
           npm install
           npx tsc
 
-      - name: 部署到服务器
-        uses: easingthemes/ssh-deploy@main
-        with:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
-          REMOTE_USER: ${{ secrets.REMOTE_USER }}
-          SOURCE: "dist/"
-          TARGET: "/www/wwwroot/meoo/dist/"
-          ARGS: "-rlgoDzvc --delete"
+      - name: 部署前端到服务器
+        run: |
+          cd dist && tar czf /tmp/dist.tar.gz . && cd ..
+          scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key /tmp/dist.tar.gz ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/tmp/
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p /www/wwwroot/meoo/dist && rm -rf /www/wwwroot/meoo/dist/* && tar xzf /tmp/dist.tar.gz -C /www/wwwroot/meoo/dist/ && rm /tmp/dist.tar.gz && echo 'frontend ok'"
 
       - name: 部署后端到服务器
-        uses: easingthemes/ssh-deploy@main
-        with:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
-          REMOTE_USER: ${{ secrets.REMOTE_USER }}
-          SOURCE: "server/dist/"
-          TARGET: "/www/wwwroot/meoo/server/dist/"
-          ARGS: "-rlgoDzvc --delete"
-
-      - name: 部署后端 package.json 到服务器
-        uses: easingthemes/ssh-deploy@main
-        with:
-          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
-          REMOTE_USER: ${{ secrets.REMOTE_USER }}
-          SOURCE: "server/package.json"
-          TARGET: "/www/wwwroot/meoo/server/package.json"
-          ARGS: "-rlgoDzvc"
+        run: |
+          cd server && tar czf /tmp/server-dist.tar.gz dist/ package.json && cd ..
+          scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key /tmp/server-dist.tar.gz ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/tmp/
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p /www/wwwroot/meoo/server && tar xzf /tmp/server-dist.tar.gz -C /www/wwwroot/meoo/server/ && rm /tmp/server-dist.tar.gz && echo 'backend ok'"
 
       - name: 安装后端依赖 & 重启服务
-        uses: appleboy/ssh-action@v1
-        with:
-          host: ${{ secrets.REMOTE_HOST }}
-          username: ${{ secrets.REMOTE_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /www/wwwroot/meoo/server
-            npm install --production
-            kill $(lsof -t -i:3007) 2>/dev/null
-            nohup node dist/index.js > /www/wwwlogs/meoo-server.log 2>&1 &
-            echo "部署完成！"
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "cd /www/wwwroot/meoo/server && npm install --production 2>&1 && fuser -k 3007/tcp 2>/dev/null; sleep 1; nohup node dist/index.js > /www/wwwlogs/meoo-server.log 2>&1 & sleep 2; netstat -tlnp 2>/dev/null | grep :3007 && echo '部署完成！'"
