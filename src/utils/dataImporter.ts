@@ -12,6 +12,7 @@ export interface StoreDataItem {
   liveStreamSummary: any[];
   shippingInsurance: any[];
   afterSaleRecords: any[];
+  financialRecords: any[];
   availableFields: { csv: Set<string>; promotion: Set<string>; insurance: Set<string>; afterSale: Set<string> };
 }
 
@@ -23,6 +24,7 @@ const EMPTY_STORE_DATA: StoreDataItem = {
   liveStreamSummary: [],
   shippingInsurance: [],
   afterSaleRecords: [],
+  financialRecords: [],
   availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() }
 };
 
@@ -52,7 +54,13 @@ function detectFileTypeByContent(fields: string[], sheetName?: string, fileName?
     return keywords.some(kw => lowerName.includes(kw.toLowerCase()));
   };
 
-  // ========== 1. 售后数据检测 ==========
+  // ========== 1. 货款明细检测 ==========
+  // 拼多多货款明细CSV，字段：商户订单号、收入金额（+元）、支出金额（-元）、账务类型
+  if (fieldSet.has('商户订单号') && hasAny('收入金额（+元）', '收入金额(元)', '收入金额') && hasAny('支出金额（-元）', '支出金额(元)', '支出金额') && fieldSet.has('账务类型')) {
+    return '货款明细';
+  }
+
+  // ========== 2. 售后数据检测 ==========
   // 固定字段：售后编号、订单编号、售后状态
   if (hasAll('售后编号', '订单编号', '售后状态')) {
     return '售后数据';
@@ -327,6 +335,45 @@ function processAfterSaleData(existing: StoreDataItem, sheets: Record<string, { 
   }
 }
 
+// 处理货款明细数据（GBK编码的CSV，含元数据头）
+function processFinancialData(existing: StoreDataItem, rawContent: string): number {
+  // 货款明细CSV前几行是元数据：标题行、日期范围行、分隔线行
+  // 需要找到含"商户订单号"的表头行
+  const allRows = Papa.parse(rawContent, { skipEmptyLines: true }).data as string[][];
+
+  let headerIndex = -1;
+  for (let i = 0; i < Math.min(allRows.length, 20); i++) {
+    if (allRows[i].some((cell: string) => cell && cell.includes('商户订单号'))) {
+      headerIndex = i;
+      break;
+    }
+  }
+
+  if (headerIndex < 0) return 0;
+
+  const headers = allRows[headerIndex].map((h: string) => String(h || '').replace(/[﻿ \t\r\n]+/g, '').trim());
+  const dataRows = allRows.slice(headerIndex + 1).filter(r => r.length >= 4 && r.some((c: string) => String(c || '').trim()));
+
+  if (!existing.financialRecords) existing.financialRecords = [];
+  const existingKeys = new Set(existing.financialRecords.map((r: any) => `${r['商户订单号'] || ''}_${r['发生时间'] || ''}`));
+
+  const newRecords: any[] = [];
+  dataRows.forEach((row: string[]) => {
+    const record: any = {};
+    headers.forEach((h, i) => {
+      record[h] = (row[i] || '').trim();
+    });
+    const key = `${record['商户订单号'] || ''}_${record['发生时间'] || ''}`;
+    if (key.trim() && !existingKeys.has(key)) {
+      newRecords.push(record);
+      existingKeys.add(key);
+    }
+  });
+
+  existing.financialRecords = [...existing.financialRecords, ...newRecords];
+  return newRecords.length;
+}
+
 // 导入单个文件
 async function importFile(filePath: string, existing: StoreDataItem): Promise<{ success: boolean; type: string; rowCount: number }> {
   try {
@@ -336,12 +383,33 @@ async function importFile(filePath: string, existing: StoreDataItem): Promise<{ 
     }
 
     if (filePath.endsWith('.csv')) {
-      const content = await response.text();
-      const { fields, data } = await parseCSV(content);
-      const type = detectFileTypeByContent(fields, undefined, filePath);
+      // 先用UTF-8尝试，如果字段检测不到再尝试GBK
+      const arrayBuffer = await response.arrayBuffer();
+      let content = new TextDecoder('utf-8').decode(arrayBuffer);
+      let fields: string[] = [];
+      let data: any[] = [];
+
+      const parsed = Papa.parse(content, { header: true, skipEmptyLines: true });
+      fields = parsed.meta.fields || [];
+      data = parsed.data as any[];
+
+      let type = detectFileTypeByContent(fields, undefined, filePath);
+
+      // 如果UTF-8解析失败（字段为空或乱码），尝试GBK
+      if (type === '未知类型' || fields.length === 0 || fields.some(f => f.includes('��'))) {
+        content = new TextDecoder('gbk').decode(arrayBuffer);
+        const gbkParsed = Papa.parse(content, { header: true, skipEmptyLines: true });
+        fields = gbkParsed.meta.fields || [];
+        data = gbkParsed.data as any[];
+        type = detectFileTypeByContent(fields, undefined, filePath);
+      }
 
       if (type === '订单数据') {
         processOrderData(existing, data, fields);
+        return { success: true, type, rowCount: data.length };
+      } else if (type === '货款明细') {
+        const rowCount = processFinancialData(existing, content);
+        return { success: true, type, rowCount };
       }
 
       return { success: true, type, rowCount: data.length };
@@ -470,7 +538,25 @@ export function clearSampleData(): void {
   const stores = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
   const demoStore = stores.find((s: any) => s.name === '示例店铺');
   if (demoStore) {
-    localStorage.removeItem(`dianfx_store_data_${demoStore.id}`);
-    localStorage.setItem('dianfx_stores', JSON.stringify(stores.filter((s: any) => s.id !== demoStore.id)));
+    const id = demoStore.id;
+    const keysToRemove = [
+      'dianfx_store_data_',
+      'dianfx_product_costs_',
+      'dianfx_cost_configs_',
+      'dianfx_packaging_fee_',
+      'dianfx_shipping_fee_',
+      'dianfx_platform_commission_',
+      'dianfx_labor_fee_',
+      'dianfx_insurance_fee_',
+      'dianfx_default_cost_ratio_',
+      'dianfx_tax_configs_',
+      'dianfx_custom_deductions_',
+      'dianfx_abnormal_orders_',
+      'dianfx_cost_history_',
+      'dianfx_pricing_presets_',
+    ];
+    keysToRemove.forEach(prefix => localStorage.removeItem(`${prefix}${id}`));
+    localStorage.removeItem(`dianfx_store_${id}`);
+    localStorage.setItem('dianfx_stores', JSON.stringify(stores.filter((s: any) => s.id !== id)));
   }
 }

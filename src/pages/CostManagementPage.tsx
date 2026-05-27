@@ -10,6 +10,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import { useData } from '../App';
 import type { TaxConfig, CustomDeduction } from '../components/ProductLinkStats';
 import { findField } from '../utils';
+import { getBestPlatformFee, getBestInsuranceFee, getPenaltyFees, matchLateShipmentPenalties, calcLateShipmentPenalty, isLateShipment } from '../utils/financialActuals';
 import { evaluateFormula, validateFormula, FormulaContext } from '../utils/formulaEngine';
 import TimeFilter, { TimeRange, TimeGranularity, filterByTimeRange, getAllDateGroups, useTimeFilter } from '../components/TimeFilter';
 
@@ -183,7 +184,9 @@ export default function CostManagementPage() {
     setAbnormalOrder,
     removeAbnormalOrder,
     costHistory,
-    addCostHistory
+    addCostHistory,
+    orderFinancialActuals,
+    unlinkedFinancials
   } = useData();
 
   const allOrders = currentDisplayData?.orders || [];
@@ -214,6 +217,28 @@ export default function CostManagementPage() {
     });
     return maxDate || new Date().toISOString().slice(0, 10);
   }, [filteredOrders]);
+
+  // ========== 延迟发货罚款匹配 ==========
+
+  const lateShipmentMatch = useMemo(() => {
+    return matchLateShipmentPenalties(
+      filteredOrders,
+      orderFinancialActuals,
+      unlinkedFinancials || { penalties: 0, marketingFees: 0, shippingInsurance: 0, records: [] },
+      findField
+    );
+  }, [filteredOrders, orderFinancialActuals, unlinkedFinancials]);
+
+  const latePenaltyMap = useMemo(() => {
+    const map: Record<string, { amount: number; confirmed: boolean }> = {};
+    lateShipmentMatch.confirmedOrders.forEach(m => {
+      map[m.orderNo] = { amount: m.actualPenalty, confirmed: true };
+    });
+    lateShipmentMatch.estimatedOrders.forEach(m => {
+      map[m.orderNo] = { amount: m.expectedPenalty, confirmed: false };
+    });
+    return map;
+  }, [lateShipmentMatch]);
 
   const productGroups = useMemo(() => {
     const groups = new Map<string, ProductGroup>();
@@ -650,10 +675,46 @@ export default function CostManagementPage() {
     const totalPackaging = packagingFeePerOrder * uniqueOrderCnt;
     const totalLabor = laborFeePerOrder * uniqueOrderCnt;
     const totalShipping = (shippingFeePerOrder || 0) * uniqueOrderCnt;
-    const totalInsurance = (insuranceFeePerOrder || 0) * sku.insuredOrderCount;
-    // 平台扣点：每单实收 × 平台扣点比例
-    const totalPlatformCommission = sku.prices.filter(p => p > 0).reduce((sum, p) => sum + p * (platformCommissionRate / 100), 0);
-    const subtotal = totalRawCost + totalPackaging + totalLabor + totalShipping + totalInsurance + totalPlatformCommission;
+
+    // 实际财务数据覆盖：以公式为基准，有货款明细的订单用实际值替换
+    const positivePrices = sku.prices.filter(p => p > 0);
+    const totalRevenue = positivePrices.reduce((a, b) => a + b, 0);
+    const avgRevenue = uniqueOrderCnt > 0 ? totalRevenue / uniqueOrderCnt : 0;
+
+    let totalPlatformCommission = totalRevenue * (platformCommissionRate / 100);
+    let totalInsurance = (insuranceFeePerOrder || 0) * sku.insuredOrderCount;
+    let totalPenalties = 0;
+    let totalMarketingFees = 0;
+    let actualOrderCount = 0;
+    let confirmedPenaltyCount = 0;
+    let estimatedPenaltyCount = 0;
+
+    sku.uniqueOrderNos.forEach(orderNo => {
+      const actual = orderFinancialActuals[orderNo];
+      const lateMatch = latePenaltyMap[orderNo];
+
+      // 实际财务数据覆盖（平台佣金、运费险等）
+      if (actual?.hasData) {
+        actualOrderCount++;
+        if (actual.baseTechFee > 0 || actual.subTechFee > 0) {
+          totalPlatformCommission += (actual.baseTechFee + actual.subTechFee) - avgRevenue * (platformCommissionRate / 100);
+        }
+        if (actual.shippingInsurance > 0) {
+          totalInsurance += actual.shippingInsurance - (insuranceFeePerOrder || 0);
+        }
+        totalPenalties += actual.penalties;
+        totalMarketingFees += actual.marketingFees;
+      }
+
+      // 延迟发货罚款匹配（独立于 financialActuals 索引）
+      if (lateMatch) {
+        totalPenalties += lateMatch.amount;
+        if (lateMatch.confirmed) confirmedPenaltyCount++;
+        else estimatedPenaltyCount++;
+      }
+    });
+
+    const subtotal = totalRawCost + totalPackaging + totalLabor + totalShipping + totalInsurance + totalPlatformCommission + totalPenalties + totalMarketingFees;
 
     // 自定义扣费：使用统一的安全公式引擎，含范围/条件/有效期检查
     const deductionDetails = (customDeductions || []).filter(d => d.enabled).sort((a, b) => a.sortOrder - b.sortOrder).map(d => {
@@ -713,6 +774,11 @@ export default function CostManagementPage() {
       totalShipping, shippingOrderCount: sku.shippingOrderCount,
       totalInsurance, insuredOrderCount: sku.insuredOrderCount,
       totalPlatformCommission,
+      totalPenalties,
+      totalMarketingFees,
+      actualOrderCount,
+      confirmedPenaltyCount,
+      estimatedPenaltyCount,
       subtotal,
       deductionDetails,
       total,
@@ -799,12 +865,26 @@ export default function CostManagementPage() {
           ? knownCost * qty
           : (productTotal * (defaultCostRatio / 100));
         if (estimatedRawCost <= 0 && knownCost <= 0 && defaultCostRatio <= 0) return false;
+        const orderActual = orderFinancialActuals[orderNo];
+        const platformCost = (orderActual?.hasData && (orderActual.baseTechFee > 0 || orderActual.subTechFee > 0))
+          ? orderActual.baseTechFee + orderActual.subTechFee
+          : merchant * (platformCommissionRate / 100);
+        let insuranceCost = 0;
+        if (orderActual?.hasData && orderActual.shippingInsurance > 0) {
+          insuranceCost = orderActual.shippingInsurance;
+        } else if (hasInsurance) {
+          insuranceCost = insuranceFeePerOrder || 0;
+        }
+        const latePenalty = latePenaltyMap[orderNo];
+        const penaltyFees = (orderActual?.penalties ?? 0) + (latePenalty?.amount ?? 0);
         const estimatedCost = estimatedRawCost
           + packagingFeePerOrder
           + (laborFeePerOrder || 0)
           + (shippingFeePerOrder || 0)
-          + (hasInsurance ? (insuranceFeePerOrder || 0) : 0)
-          + merchant * (platformCommissionRate / 100);
+          + insuranceCost
+          + platformCost
+          + penaltyFees
+          + (orderActual?.marketingFees ?? 0);
         return merchant < estimatedCost;
       })
       .map((o: any) => {
@@ -824,17 +904,31 @@ export default function CostManagementPage() {
         const estimatedRawCost = knownCost > 0
           ? knownCost * qty
           : (productTotal * (defaultCostRatio / 100));
+        const orderActual2 = orderFinancialActuals[orderNo];
+        const platformCost2 = (orderActual2?.hasData && (orderActual2.baseTechFee > 0 || orderActual2.subTechFee > 0))
+          ? orderActual2.baseTechFee + orderActual2.subTechFee
+          : merchant * (platformCommissionRate / 100);
+        let insuranceCost2 = 0;
+        if (orderActual2?.hasData && orderActual2.shippingInsurance > 0) {
+          insuranceCost2 = orderActual2.shippingInsurance;
+        } else if (hasInsurance) {
+          insuranceCost2 = insuranceFeePerOrder || 0;
+        }
+        const latePenalty2 = latePenaltyMap[orderNo];
+        const penaltyFees2 = (orderActual2?.penalties ?? 0) + (latePenalty2?.amount ?? 0);
         const estimatedCost = estimatedRawCost
           + packagingFeePerOrder
           + (laborFeePerOrder || 0)
           + (shippingFeePerOrder || 0)
-          + (hasInsurance ? (insuranceFeePerOrder || 0) : 0)
-          + merchant * (platformCommissionRate / 100);
+          + insuranceCost2
+          + platformCost2
+          + penaltyFees2
+          + (orderActual2?.marketingFees ?? 0);
         const loss = merchant - estimatedCost;
         return { orderNo, product, merchant, qty, cost: knownCost > 0 ? knownCost : 0, estimatedCost, loss, skuKey, costEstimated: knownCost <= 0, _raw: o };
       })
       .sort((a, b) => a.loss - b.loss);
-  }, [filteredOrders, productCosts, packagingFeePerOrder, shippingFeePerOrder, laborFeePerOrder, insuranceFeePerOrder, platformCommissionRate, defaultCostRatio, currentDisplayData, abnormalOrders]);
+  }, [filteredOrders, productCosts, packagingFeePerOrder, shippingFeePerOrder, laborFeePerOrder, insuranceFeePerOrder, platformCommissionRate, defaultCostRatio, currentDisplayData, abnormalOrders, orderFinancialActuals, latePenaltyMap]);
 
   // 统计因无成本数据被跳过的订单数（defaultCostRatio=0 且 knownCost=0 时）
   const skippedNoCostCount = useMemo(() => {
@@ -1221,7 +1315,7 @@ export default function CostManagementPage() {
               )}
               {insuranceFeePerOrder > 0 && (
                 <div className="flex items-center justify-between py-0.5">
-                  <span className="text-pdd-text-secondary">运费险</span>
+                  <span className="text-pdd-text-secondary">运费险{costInfo.actualOrderCount > 0 ? ' (含实际)' : ''}</span>
                   <span className="font-mono text-pdd-text">
                     ¥{insuranceFeePerOrder.toFixed(2)} × {costInfo.insuredOrderCount}单 = <b>¥{costInfo.totalInsurance.toFixed(2)}</b>
                   </span>
@@ -1232,10 +1326,33 @@ export default function CostManagementPage() {
               )}
               {platformCommissionRate > 0 && (
                 <div className="flex items-center justify-between py-0.5">
-                  <span className="text-pdd-text-secondary">平台扣点</span>
+                  <span className="text-pdd-text-secondary">平台扣点{costInfo.actualOrderCount > 0 ? ' (含实际)' : ''}</span>
                   <span className="font-mono text-pdd-text">
                     实收×{platformCommissionRate}% = <b>¥{costInfo.totalPlatformCommission.toFixed(2)}</b>
                   </span>
+                </div>
+              )}
+              {costInfo.totalPenalties > 0 && (
+                <div className="flex items-center justify-between py-0.5">
+                  <span className="text-pdd-text-secondary">
+                    罚款/扣款
+                    {costInfo.confirmedPenaltyCount > 0 && costInfo.estimatedPenaltyCount > 0
+                      ? ` (${costInfo.confirmedPenaltyCount}确认 + ${costInfo.estimatedPenaltyCount}预估)`
+                      : costInfo.confirmedPenaltyCount > 0 ? ' (已确认)' : ' (预估)'}
+                  </span>
+                  <span className="font-mono font-medium" style={{
+                    color: costInfo.estimatedPenaltyCount > 0 && costInfo.confirmedPenaltyCount === 0
+                      ? 'var(--pdd-warning)' : 'var(--pdd-danger)'
+                  }}>¥{costInfo.totalPenalties.toFixed(2)}</span>
+                </div>
+              )}
+              {costInfo.estimatedPenaltyCount > 0 && (
+                <div className="text-[10px] text-pdd-warning ml-2">&middot; {costInfo.estimatedPenaltyCount} 单超时发货扣款为公式估算（未匹配到财务扣款记录）</div>
+              )}
+              {costInfo.totalMarketingFees > 0 && (
+                <div className="flex items-center justify-between py-0.5">
+                  <span className="text-pdd-text-secondary">营销费用 (实际)</span>
+                  <span className="font-mono text-pdd-danger font-medium">¥{costInfo.totalMarketingFees.toFixed(2)}</span>
                 </div>
               )}
               <div className="border-t border-pdd-border my-1.5" />

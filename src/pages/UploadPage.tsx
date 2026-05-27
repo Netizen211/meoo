@@ -9,6 +9,7 @@ import { useData, useStore } from '../App';
 import Papa from 'papaparse';
 
 import * as XLSX from 'xlsx';
+import JSZip from 'jszip';
 
 
 interface DataMismatchWarning {
@@ -26,7 +27,7 @@ interface UploadedFile {
 
   name: string;
 
-  type: 'csv' | 'xlsx';
+  type: 'csv' | 'xlsx' | 'zip';
 
   size: number;
 
@@ -261,6 +262,12 @@ function detectFileTypeByContent(fields: string[], sheetName?: string, fileName?
 
   };
 
+
+  // ========== 0. 货款明细检测 ==========
+  // 拼多多货款明细CSV，字段：商户订单号、收入金额（+元）、支出金额（-元）、账务类型、业务描述
+  if (fieldSet.has('商户订单号') && hasAny('收入金额（+元）', '收入金额(元)', '收入金额') && hasAny('支出金额（-元）', '支出金额(元)', '支出金额') && fieldSet.has('账务类型')) {
+    return '货款明细';
+  }
 
   // ========== 1. 售后数据检测 ==========
 
@@ -519,6 +526,24 @@ function checkRequiredFields(fields: string[], type: string): string[] {
 }
 
 
+/** 扫描前5行找到真实表头行（跳过描述文本/空行），返回表头行索引 */
+function findHeaderRow(rawRows: any[][]): number {
+  const headerKeywords = /[订单|售后|金额|日期|时间|商品|推广|运费|编号|名称|数量|快递|退款|花费|成交|曝光|投产|店铺|支出|收入]/;
+  for (let i = 0; i < Math.min(5, rawRows.length); i++) {
+    const row = rawRows[i];
+    if (!row || row.length === 0) continue;
+    let matchCount = 0;
+    for (const cell of row) {
+      const s = String(cell ?? '').trim();
+      if (s && headerKeywords.test(s)) matchCount++;
+    }
+    if (matchCount >= 2) return i;
+  }
+  return 0;
+}
+
+
+
 function detectFileType(filename: string): string {
 
   for (const rule of FILE_TYPE_RULES) {
@@ -707,7 +732,7 @@ function checkDataConsistency(
 
 export default function UploadPage() {
 
-  const { getStoreData, setStoreData, uploadRecords, addUploadRecord, deleteUploadRecord, setDataFilter } = useData();
+  const { getStoreData, setStoreData, uploadRecords, addUploadRecord, deleteUploadRecord, setDataFilter, dataFilter } = useData();
 
   const { currentStore } = useStore();
 
@@ -728,6 +753,30 @@ export default function UploadPage() {
 
   const currentStoreUploads = uploadRecords.filter(r => r.storeId === currentStore?.id);
 
+
+  /** 解析货款明细CSV原始内容：跳过元数据头，找到含"商户订单号"的真实表头行 */
+  function parseFinancialCSV(rawContent: string): { fields: string[]; data: any[] } | null {
+    const parsed = Papa.parse(rawContent, { header: false, skipEmptyLines: true });
+    const rawRows = parsed.data as string[][];
+    let headerIdx = -1;
+    for (let i = 0; i < Math.min(rawRows.length, 20); i++) {
+      if (rawRows[i].some((cell: string) => cell && cell.includes('商户订单号'))) {
+        headerIdx = i;
+        break;
+      }
+    }
+    if (headerIdx < 0) return null;
+    const headers = rawRows[headerIdx].map(h => String(h || '').replace(/[﻿ \t\r\n]+/g, '').trim());
+    const dataRows = rawRows.slice(headerIdx + 1).filter(r =>
+      r.length >= 4 && r.some(c => String(c || '').trim())
+    );
+    const data = dataRows.map((row: string[]) => {
+      const obj: any = {};
+      headers.forEach((h, i) => { obj[h] = (row[i] || '').trim(); });
+      return obj;
+    });
+    return { fields: headers, data };
+  }
 
   const processCsvFile = useCallback((file: File, targetStoreId: string, targetStoreName: string) => {
 
@@ -801,9 +850,26 @@ export default function UploadPage() {
       }
 
 
-      const detectedType = resolveType(detectFileTypeByContent(fields, undefined, file.name), file.name);
+      let detectedType = resolveType(detectFileTypeByContent(fields, undefined, file.name), file.name);
 
-      const missing = checkRequiredFields(fields, detectedType);
+      // 如果检测结果是未知类型或字段异常少，尝试按货款明细CSV重新解析（跳过元数据头）
+      if (detectedType === '未知类型' || fields.length <= 2) {
+        try {
+          const buf = await file.arrayBuffer();
+          let rawContent = new TextDecoder('utf-8').decode(buf);
+          if (rawContent.includes('�')) {
+            rawContent = new TextDecoder('gbk').decode(buf);
+          }
+          const financialResult = parseFinancialCSV(rawContent);
+          if (financialResult) {
+            fields = financialResult.fields;
+            data = financialResult.data;
+            detectedType = '货款明细';
+          }
+        } catch (_) { /* 非文本文件，忽略 */ }
+      }
+
+      let missing = checkRequiredFields(fields, detectedType);
 
 
       // 数据一致性检测（使用当前快照，仅用于展示警告）
@@ -813,14 +879,26 @@ export default function UploadPage() {
       const mismatchWarning = checkDataConsistency(data, detectedType, existingSnapshot);
 
 
-      setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, fieldCount: fields.length, rowCount: data.length, detectedType, missingFields: missing, mismatchWarning } : f));
+      // 用快照估算去重计数（仅用于UI展示，实际去重由 functional updater 保证数据正确）
+      let approxDuplicateCount = 0;
+      let approxNewCount = 0;
+      if (detectedType === '订单数据') {
+        const snapshotOrderIds = new Set((existingSnapshot.orders || []).map((o: any) => String(o['订单号'] || '').trim()));
+        data.forEach((row: any) => {
+          const orderId = String(row['订单号'] || '').trim();
+          if (orderId && snapshotOrderIds.has(orderId)) approxDuplicateCount++;
+          else if (orderId) { approxNewCount++; snapshotOrderIds.add(orderId); }
+        });
+      }
+
+      setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, fieldCount: fields.length, rowCount: data.length, detectedType, missingFields: missing, mismatchWarning, duplicateCount: approxDuplicateCount, newCount: approxNewCount } : f));
 
 
       // 使用函数式更新避免闭包陷阱，确保基于最新状态合并
 
       setStoreData(targetStoreId, ((prevExisting: any) => {
 
-        const existing = prevExisting || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() } };
+        const existing = prevExisting || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() } };
 
 
         if (detectedType === '订单数据') {
@@ -840,8 +918,6 @@ const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订�
 
           const newOrders: any[] = [];
 
-          let duplicateCount = 0;
-
           cleanedData.forEach((row: any) => {
 
             const orderId = String(row['订单号'] || '').trim();
@@ -852,10 +928,6 @@ const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订�
 
               existingOrderIds.add(orderId);
 
-            } else if (orderId) {
-
-              duplicateCount++;
-
             }
 
           });
@@ -864,7 +936,19 @@ const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订�
 
           existing.availableFields.csv = new Set(fields);
 
-          setFiles(prev => prev.map(f => f.name === file.name ? { ...f, duplicateCount, newCount: newOrders.length } : f));
+        } else if (detectedType === '货款明细') {
+
+          if (!existing.financialRecords) existing.financialRecords = [];
+          const existingKeys = new Set(existing.financialRecords.map((r: any) => `${r['商户订单号'] || ''}_${r['发生时间'] || ''}`));
+          const newRecords: any[] = [];
+          data.forEach((row: any) => {
+            const key = `${row['商户订单号'] || ''}_${row['发生时间'] || ''}`;
+            if (key.trim() && !existingKeys.has(key)) {
+              newRecords.push(row);
+              existingKeys.add(key);
+            }
+          });
+          existing.financialRecords = [...existing.financialRecords, ...newRecords];
 
         }
 
@@ -921,8 +1005,12 @@ const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订�
         const sheets: Record<string, any[]> = {};
 
         wb.SheetNames.forEach(sn => {
-
-          const rawData = XLSX.utils.sheet_to_json(wb.Sheets[sn]);
+          // 先获取原始行数组，自动检测偏移表头（跳过描述文本/空行）
+          const rawRows: any[][] = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1 });
+          const headerRow = findHeaderRow(rawRows);
+          const rawData = headerRow > 0
+            ? XLSX.utils.sheet_to_json(wb.Sheets[sn], { range: headerRow })
+            : XLSX.utils.sheet_to_json(wb.Sheets[sn]);
 
           // 保持原始中文字段名（页面组件和findField依赖中文key），仅清理值中的不可见字符
 
@@ -947,368 +1035,193 @@ const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订�
         });
 
 
-        // 使用函数式更新避免闭包陷阱，确保基于最新状态合并
+        // 预计算所有sheet的类型和统计（不依赖store状态）
+        const sheetInfos: { name: string; type: string; fields: string[]; data: any[] }[] = [];
+        let totalRows = 0;
+        let allFields: string[] = [];
+        let primaryType = '未知类型';
+        const isValidDateRow = (item: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(item['日期'] || '').trim());
 
-        setStoreData(targetStoreId, ((prevExisting: any) => {
+        for (const sn of wb.SheetNames) {
+          const sheetData = sheets[sn];
+          if (!sheetData || sheetData.length === 0) continue;
+          const sheetFields = Object.keys(sheetData[0]);
+          let sheetType = detectFileTypeByContent(sheetFields, sn, file.name);
 
-          const existing = prevExisting || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() } };
+          if (sheetType === '未知类型') {
+            if (sn.includes('商品')) sheetType = '商品推广数据';
+            else if (sn.includes('品牌词') || sn.includes('创意')) sheetType = '明星店铺数据';
+            else if (sn.includes('直播间')) sheetType = '直播推广数据';
+            else sheetType = detectFileType(file.name);
+          }
 
+          if (allFields.length === 0) allFields = sheetFields;
+          if (sheetType !== '未知类型') totalRows += sheetData.length;
+          if (primaryType === '未知类型' && sheetType !== '未知类型') primaryType = sheetType;
 
-          // 对每个sheet独立识别类型并处理，支持一个文件包含多种数据类型
+          sheetInfos.push({ name: sn, type: sheetType, fields: sheetFields, data: sheetData });
+        }
 
-          let totalRows = 0;
+        if (primaryType === '未知类型') primaryType = detectFileType(file.name);
+        const missing = checkRequiredFields(allFields, primaryType);
 
-          let allFields: string[] = [];
+        // 数据一致性检测（使用快照，仅用于展示警告）
+        const existingSnapshot = getStoreData(targetStoreId) || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() } };
+        let mismatchWarning: DataMismatchWarning | undefined;
+        if (primaryType === '商品推广数据') {
+          const allPromoProducts = sheetInfos
+            .filter(info => info.type === '商品推广数据')
+            .flatMap(info => info.data)
+            .filter(isValidDateRow);
+          mismatchWarning = checkDataConsistency(allPromoProducts, '商品推广数据', existingSnapshot);
+        }
 
-          let primaryType = '未知类型';
+        setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, fieldCount: allFields.length, rowCount: totalRows, detectedType: primaryType, missingFields: missing, mismatchWarning } : f));
+
+        // 使用 functional updater 合并数据，避免并发上传时的竞态覆盖
+        setStoreData(targetStoreId, (prev) => {
+          const base = prev || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() } };
+          const merged = {
+            ...base,
+            orders: [...(base.orders || [])],
+            promotionSummary: [...(base.promotionSummary || [])],
+            promotionProducts: [...(base.promotionProducts || [])],
+            starStoreSummary: [...(base.starStoreSummary || [])],
+            liveStreamSummary: [...(base.liveStreamSummary || [])],
+            shippingInsurance: [...(base.shippingInsurance || [])],
+            afterSaleRecords: [...(base.afterSaleRecords || [])],
+            financialRecords: [...(base.financialRecords || [])],
+            availableFields: {
+              csv: new Set(base.availableFields?.csv || []),
+              promotion: new Set(base.availableFields?.promotion || []),
+              insurance: new Set(base.availableFields?.insurance || []),
+              afterSale: new Set(base.availableFields?.afterSale || []),
+            },
+          };
 
           const processedTypes = new Set<string>();
 
+          for (const info of sheetInfos) {
+            if (processedTypes.has(info.type) && info.type !== '商品推广数据') continue;
 
-          for (const sn of wb.SheetNames) {
-
-            const sheetData = sheets[sn];
-
-            if (!sheetData || sheetData.length === 0) continue;
-
-            const sheetFields = Object.keys(sheetData[0]);
-
-            let sheetType = detectFileTypeByContent(sheetFields, sn, file.name);
-
-
-            // 如果内容检测不到类型，用文件名辅助判断（但仅作为该sheet的fallback）
-
-            if (sheetType === '未知类型') {
-
-              // 对于子sheet（如"商品_xxx"、"品牌词_xxx"），尝试从sheet名推断
-
-              if (sn.includes('商品')) sheetType = '商品推广数据';
-
-              else if (sn.includes('品牌词') || sn.includes('创意')) sheetType = '明星店铺数据';
-
-              else if (sn.includes('直播间')) sheetType = '直播推广数据';
-
-              else sheetType = detectFileType(file.name);
-
-            }
-
-
-            if (allFields.length === 0) allFields = sheetFields;
-
-            // 只统计已知数据类型的sheet行数，避免配置表/空表被计入
-
-            if (sheetType !== '未知类型') {
-
-              totalRows += sheetData.length;
-
-            }
-
-            if (primaryType === '未知类型' && sheetType !== '未知类型') primaryType = sheetType;
-
-
-            // 避免同一类型被多个sheet重复处理（汇总sheet优先）
-
-            if (processedTypes.has(sheetType) && sheetType !== '商品推广数据') continue;
-
-
-            // 过滤掉"总计"/"合计"等汇总行（日期字段不是标准日期格式）
-
-            const isValidDateRow = (item: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(item['日期'] || '').trim());
-
-
-            if (sheetType === '商品推广数据') {
-
-              // 区分汇总sheet和商品明细sheet
-
-              const hasProductId = sheetFields.includes('商品ID');
-
+            if (info.type === '商品推广数据') {
+              const hasProductId = info.fields.includes('商品ID');
               if (hasProductId) {
-
-                // 商品明细sheet → promotionProducts（仅用于TOP商品展示，不参与KPI汇总）
-
-                // 注意：商品sheet和汇总sheet是同一份数据的不同视角，花费不能重复累加
-
-                // 每次上传新文件时，清空旧的商品明细再重新导入
-
                 if (!processedTypes.has('商品推广_产品')) {
-
-                  existing.promotionProducts = [];
-
+                  merged.promotionProducts = [];
                 }
-
                 const seenKeys = new Set<string>();
-
-                sheetData.forEach((item: any) => {
-
+                info.data.forEach((item: any) => {
                   if (!isValidDateRow(item)) return;
-
-                  // 同一商品同一天可能有多条推广计划，全部保留
-
                   const key = `${item['日期'] || ''}-${item['商品ID'] || ''}-${item['推广名称'] || ''}`;
-
                   if (!seenKeys.has(key)) {
-
-                    existing.promotionProducts.push(item);
-
+                    merged.promotionProducts.push(item);
                     seenKeys.add(key);
-
                   }
-
                 });
-
-                sheetFields.forEach(f => existing.availableFields.promotion.add(f));
-
+                info.fields.forEach((f: string) => merged.availableFields.promotion.add(f));
                 processedTypes.add('商品推广_产品');
-
               } else {
-
-                // 汇总sheet → promotionSummary（KPI计算的唯一数据源）
-
-                // 后上传的文件覆盖先上传的同日期数据
-
                 const summaryMap = new Map<string, any>();
-
-                // 先加载已有数据
-
-                existing.promotionSummary.forEach((r: any) => {
-
+                merged.promotionSummary.forEach((r: any) => {
                   const d = String(r['日期'] || '').trim();
-
                   if (/^\d{4}-\d{2}-\d{2}$/.test(d)) summaryMap.set(d, r);
-
                 });
-
-                // 用新数据覆盖同日期记录
-
-                sheetData.forEach((item: any) => {
-
+                info.data.forEach((item: any) => {
                   if (!isValidDateRow(item)) return;
-
                   summaryMap.set(String(item['日期']).trim(), item);
-
                 });
-
-                existing.promotionSummary = Array.from(summaryMap.values());
-
-                sheetFields.forEach(f => existing.availableFields.promotion.add(f));
-
+                merged.promotionSummary = Array.from(summaryMap.values());
+                info.fields.forEach((f: string) => merged.availableFields.promotion.add(f));
               }
-
-              processedTypes.add(sheetType);
-
-            } else if (sheetType === '明星店铺数据') {
-
-              // 后上传的文件覆盖先上传的同日期+同推广名称数据
-
-              // 汇总sheet无推广名称/创意样式字段，仅用日期作为key
-
-              const hasDistinguishField = sheetFields.includes('推广名称') || sheetFields.includes('创意样式');
-
+              processedTypes.add(info.type);
+            } else if (info.type === '明星店铺数据') {
+              const hasDistinguishField = info.fields.includes('推广名称') || info.fields.includes('创意样式');
               const starMap = new Map<string, any>();
-
-              existing.starStoreSummary.forEach((r: any) => {
-
+              merged.starStoreSummary.forEach((r: any) => {
                 const d = String(r['日期'] || '').trim();
-
                 if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-
                   const suffix = hasDistinguishField ? `-${r['推广名称'] || r['创意样式'] || ''}` : '';
-
                   starMap.set(`${d}${suffix}`, r);
-
                 }
-
               });
-
-              sheetData.forEach((item: any) => {
-
+              info.data.forEach((item: any) => {
                 if (!isValidDateRow(item)) return;
-
                 const suffix = hasDistinguishField ? `-${item['推广名称'] || item['创意样式'] || ''}` : '';
-
                 const key = `${String(item['日期']).trim()}${suffix}`;
-
                 starMap.set(key, item);
-
               });
-
-              existing.starStoreSummary = Array.from(starMap.values());
-
-              // 同时写入promotionProducts以便商品分析统一展示
-
-              sheetData.forEach((item: any) => {
-
+              merged.starStoreSummary = Array.from(starMap.values());
+              info.data.forEach((item: any) => {
                 if (!isValidDateRow(item)) return;
-
                 const promoItem = { ...item, _source: 'starStore' };
-
-                // 明星店铺没有商品ID，用推广名称作为标识
-
                 if (!promoItem['商品ID']) promoItem['商品ID'] = item['推广名称'] || item['创意样式'] || '明星店铺';
-
                 if (!promoItem['商品名称']) promoItem['商品名称'] = item['推广名称'] || item['创意样式'] || '明星店铺';
-
-                existing.promotionProducts.push(promoItem);
-
+                merged.promotionProducts.push(promoItem);
               });
-
-              processedTypes.add(sheetType);
-
-            } else if (sheetType === '直播推广数据') {
-
-              // 后上传的文件覆盖先上传的同日期+同直播间数据
-
-              // 汇总sheet无直播间/推广名称字段，仅用日期作为key
-
-              const hasDistinguishField = sheetFields.includes('直播间') || sheetFields.includes('推广名称');
-
+              processedTypes.add(info.type);
+            } else if (info.type === '直播推广数据') {
+              const hasDistinguishField = info.fields.includes('直播间') || info.fields.includes('推广名称');
               const liveMap = new Map<string, any>();
-
-              existing.liveStreamSummary.forEach((r: any) => {
-
+              merged.liveStreamSummary.forEach((r: any) => {
                 const d = String(r['日期'] || '').trim();
-
                 if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-
                   const suffix = hasDistinguishField ? `-${r['直播间'] || r['推广名称'] || ''}` : '';
-
                   liveMap.set(`${d}${suffix}`, r);
-
                 }
-
               });
-
-              sheetData.forEach((item: any) => {
-
+              info.data.forEach((item: any) => {
                 if (!isValidDateRow(item)) return;
-
                 const suffix = hasDistinguishField ? `-${item['直播间'] || item['推广名称'] || ''}` : '';
-
                 const key = `${String(item['日期']).trim()}${suffix}`;
-
                 liveMap.set(key, item);
-
               });
-
-              existing.liveStreamSummary = Array.from(liveMap.values());
-
-              // 同时写入promotionProducts以便商品分析统一展示
-
-              sheetData.forEach((item: any) => {
-
+              merged.liveStreamSummary = Array.from(liveMap.values());
+              info.data.forEach((item: any) => {
                 if (!isValidDateRow(item)) return;
-
                 const promoItem = { ...item, _source: 'liveStream' };
-
                 if (!promoItem['商品ID']) promoItem['商品ID'] = item['直播间'] || '直播推广';
-
                 if (!promoItem['商品名称']) promoItem['商品名称'] = item['直播间'] || '直播推广';
-
-                existing.promotionProducts.push(promoItem);
-
+                merged.promotionProducts.push(promoItem);
               });
-
-              processedTypes.add(sheetType);
-
-            } else if (sheetType === '运费险数据') {
-
-              const existingKeys = new Set(existing.shippingInsurance.map((r: any) => String(r['订单编号'] || '')));
-
-              sheetData.forEach((item: any) => {
-
+              processedTypes.add(info.type);
+            } else if (info.type === '运费险数据') {
+              const existingKeys = new Set(merged.shippingInsurance.map((r: any) => String(r['订单编号'] || '')));
+              info.data.forEach((item: any) => {
                 const key = String(item['订单编号'] || '');
-
-                if (key && !existingKeys.has(key)) { existing.shippingInsurance.push(item); existingKeys.add(key); }
-
+                if (key && !existingKeys.has(key)) { merged.shippingInsurance.push(item); existingKeys.add(key); }
               });
-
-              existing.availableFields.insurance = new Set(sheetFields);
-
-              processedTypes.add(sheetType);
-
-            } else if (sheetType === '售后数据') {
-
-              // 确保 afterSaleRecords 数组存在
-
-              if (!existing.afterSaleRecords) existing.afterSaleRecords = [];
-
-              const existingKeys = new Set(existing.afterSaleRecords.map((r: any) => String(r['售后编号'] || '')));
-
-              sheetData.forEach((item: any) => {
-
+              merged.availableFields.insurance = new Set(info.fields);
+              processedTypes.add(info.type);
+            } else if (info.type === '售后数据') {
+              if (!merged.afterSaleRecords) merged.afterSaleRecords = [];
+              const existingKeys = new Set(merged.afterSaleRecords.map((r: any) => String(r['售后编号'] || '')));
+              info.data.forEach((item: any) => {
                 const key = String(item['售后编号'] || '');
-
-                if (key && !existingKeys.has(key)) { existing.afterSaleRecords!.push(item); existingKeys.add(key); }
-
+                if (key && !existingKeys.has(key)) { merged.afterSaleRecords!.push(item); existingKeys.add(key); }
               });
-
-              if (!existing.availableFields.afterSale) existing.availableFields.afterSale = new Set();
-
-              existing.availableFields.afterSale = new Set(sheetFields);
-
-              processedTypes.add(sheetType);
-
-            } else if (sheetType === '订单数据') {
-
-              const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订单号'] || '')));
-
-              let duplicateCount = 0;
-
+              if (!merged.availableFields.afterSale) merged.availableFields.afterSale = new Set();
+              merged.availableFields.afterSale = new Set(info.fields);
+              processedTypes.add(info.type);
+            } else if (info.type === '订单数据') {
+              const existingOrderIds = new Set(merged.orders.map((o: any) => String(o['订单号'] || '')));
               const newOrders: any[] = [];
-
-              sheetData.forEach((row: any) => {
-
+              info.data.forEach((row: any) => {
                 const orderId = String(row['订单号'] || '');
-
                 if (orderId && !existingOrderIds.has(orderId)) { newOrders.push(row); existingOrderIds.add(orderId); }
-
-                else if (orderId) { duplicateCount++; }
-
               });
-
-              existing.orders = [...existing.orders, ...newOrders];
-
-              existing.availableFields.csv = new Set(sheetFields);
-
-              processedTypes.add(sheetType);
-
+              merged.orders = [...merged.orders, ...newOrders];
+              merged.availableFields.csv = new Set(info.fields);
+              processedTypes.add(info.type);
             }
-
           }
 
+          return { ...merged, availableFields: { ...merged.availableFields } };
+        });
 
-          if (primaryType === '未知类型') primaryType = detectFileType(file.name);
-
-          const missing = checkRequiredFields(allFields, primaryType);
-
-
-          // 数据一致性检测（针对商品推广数据）
-
-          let mismatchWarning: DataMismatchWarning | undefined;
-
-          if (primaryType === '商品推广数据') {
-
-            // 合并所有商品明细sheet的数据用于检测
-
-            const allPromoProducts = existing.promotionProducts || [];
-
-            mismatchWarning = checkDataConsistency(allPromoProducts, '商品推广数据', existing);
-
-          }
-
-
-          setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, fieldCount: allFields.length, rowCount: totalRows, detectedType: primaryType, missingFields: missing, mismatchWarning } : f));
-
-          setDataFilter(targetStoreId); // 上传后自动切换到该店铺的数据视图
-
-          setFieldReport({ available: allFields, missing, type: primaryType });
-
-          addUploadRecord({ fileName: file.name, fileType: primaryType, storeId: targetStoreId, storeName: targetStoreName, rowCount: totalRows, fieldCount: allFields.length });
-
-
-          return { ...existing, availableFields: { ...existing.availableFields } };
-
-        }) as any);
+        setDataFilter(targetStoreId);
+        setFieldReport({ available: allFields, missing, type: primaryType });
+        addUploadRecord({ fileName: file.name, fileType: primaryType, storeId: targetStoreId, storeName: targetStoreName, rowCount: totalRows, fieldCount: allFields.length });
 
       } catch (err) {
 
@@ -1327,22 +1240,58 @@ const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订�
   }, [getStoreData, setStoreData, addUploadRecord, setDataFilter]);
 
 
+  const processZipFile = useCallback(async (file: File, targetStoreId: string, targetStoreName: string) => {
+    try {
+      const zip = await JSZip.loadAsync(file);
+      const entries = Object.entries(zip.files).filter(([name, f]) =>
+        !f.dir && !name.startsWith('__MACOSX') && !name.startsWith('.') && !name.includes('/.')
+      );
+      // 更新 ZIP 文件条目的状态
+      setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, detectedType: `压缩包 (${entries.length}个子文件)` } : f));
+      // 逐个提取并处理子文件
+      for (const [name, zipEntry] of entries) {
+        const blob = await zipEntry.async('blob');
+        const lowerName = name.toLowerCase();
+        const ext = lowerName.endsWith('.csv') ? 'csv' : 'xlsx';
+        const subFile = new File([blob], name.split('/').pop() || name, {
+          type: ext === 'csv' ? 'text/csv' : 'application/vnd.ms-excel'
+        });
+        const entry: UploadedFile = { name: subFile.name, type: ext, size: subFile.size, status: 'parsing', progress: 0, detectedType: '检测中...' };
+        setFiles(prev => [...prev, entry]);
+        if (ext === 'csv') {
+          processCsvFile(subFile, targetStoreId, targetStoreName);
+        } else {
+          processXlsxFile(subFile, targetStoreId, targetStoreName);
+        }
+      }
+    } catch (err) {
+      const errMsg = `ZIP解压失败: ${err instanceof Error ? err.message : '未知错误'}`;
+      console.error('ZIP parse error:', { err, fileName: file.name });
+      setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error', errorMessage: errMsg } : f));
+    }
+  }, [processCsvFile, processXlsxFile]);
+
+
   const processFile = useCallback((file: File) => {
 
     if (!currentStore) { alert('请先选择一个店铺'); return; }
+    if (dataFilter === '__all__') { alert('请在下拉菜单中选择一个具体店铺后再上传数据'); return; }
 
     const targetStoreId = currentStore.id;
 
     const targetStoreName = currentStore.name;
 
-    const ext = file.name.endsWith('.csv') ? 'csv' : 'xlsx';
+    const isZip = file.name.toLowerCase().endsWith('.zip');
+    const ext = file.name.toLowerCase().endsWith('.csv') ? 'csv' : isZip ? 'zip' : 'xlsx';
 
     const entry: UploadedFile = { name: file.name, type: ext, size: file.size, status: 'parsing', progress: 0, detectedType: '检测中...' };
 
     setFiles(prev => [...prev, entry]);
 
 
-    if (ext === 'csv') {
+    if (ext === 'zip') {
+      processZipFile(file, targetStoreId, targetStoreName);
+    } else if (ext === 'csv') {
 
       processCsvFile(file, targetStoreId, targetStoreName);
 
@@ -1352,7 +1301,7 @@ const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订�
 
     }
 
-  }, [currentStore, processCsvFile, processXlsxFile]);
+  }, [currentStore, dataFilter, processCsvFile, processXlsxFile, processZipFile]);
 
 
   const handleDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); Array.from(e.dataTransfer.files).forEach(processFile); }, [processFile]);
@@ -1662,7 +1611,7 @@ const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订�
 
         onClick={() => document.getElementById('file-input')!.click()}>
 
-        <input id="file-input" type="file" accept=".csv,.xlsx,.xls" multiple className="hidden" onChange={handleFileInput} />
+        <input id="file-input" type="file" accept=".csv,.xlsx,.xls,.zip" multiple className="hidden" onChange={handleFileInput} />
 
         <motion.div animate={{ scale: dragging ? 1.1 : 1 }} className="py-12">
 

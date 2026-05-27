@@ -1,5 +1,7 @@
 const path = require('path');
+const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const TerserPlugin = require('terser-webpack-plugin');
 
 module.exports = (env, argv) => {
   const isDev = argv.mode !== 'production';
@@ -11,6 +13,30 @@ module.exports = (env, argv) => {
       path: path.resolve(__dirname, 'dist'),
       filename: 'bundle.js',
       publicPath: 'auto'
+    },
+    // 生产环境不生成 source map，防止源码泄露
+    devtool: isDev ? 'eval-source-map' : false,
+    optimization: isDev ? undefined : {
+      minimize: true,
+      minimizer: [
+        new TerserPlugin({
+          terserOptions: {
+            compress: {
+              drop_console: true,
+              drop_debugger: true,
+              pure_funcs: ['console.log', 'console.warn', 'console.info', 'console.debug']
+            },
+            mangle: {
+              toplevel: true,
+              safari10: true
+            },
+            output: {
+              comments: false
+            }
+          },
+          extractComments: false
+        })
+      ]
     },
     module: {
       rules: [
@@ -83,6 +109,9 @@ module.exports = (env, argv) => {
       }
     },
     plugins: [
+      new webpack.DefinePlugin({
+        'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
+      }),
       new HtmlWebpackPlugin({
         template: './index.html',
         inject: 'body'

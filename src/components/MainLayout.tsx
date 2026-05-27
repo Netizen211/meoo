@@ -1,5 +1,6 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   LayoutDashboard, Package, Users, Clock, MapPin, Truck,
@@ -7,7 +8,8 @@ import {
   Crown, Calculator, Settings, LogOut, Store, ChevronDown, ChevronRight,
   Search, Bell, Download, RefreshCw, Maximize2, Menu, X, Home,
   ChevronLeft, Zap, Star, GripVertical, Plus,
-  Moon, Sun, Link as LinkIcon, Activity
+  Moon, Sun, Link as LinkIcon, Activity, Layers, Pencil, Check, Landmark,
+  ShieldAlert, Key, FileText, BarChart3, Users as UsersIcon
 } from 'lucide-react';
 import { useAuth, useStore, useData } from '../App';
 import SampleDataImporter from './SampleDataImporter';
@@ -25,6 +27,7 @@ const NAV_ITEMS = [
   { path: '/promotion', label: '推广数据', icon: TrendingUp, category: 'marketing', paid: true },
   { path: '/risk', label: '风险预警', icon: AlertTriangle, category: 'operations', paid: true },
   { path: '/cost-management', label: '成本管理', icon: Calculator, category: 'finance' },
+  { path: '/finance', label: '财务管理', icon: Landmark, category: 'finance' },
   { path: '/membership', label: '会员中心', icon: Crown, category: 'system' },
   { path: '/settings', label: '数据清理', icon: Settings, category: 'system' },
 ];
@@ -40,9 +43,21 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
-  const { stores, currentStore, switchStore, addStore } = useStore();
+  const { stores, currentStore, switchStore, addStore, renameStore } = useStore();
   const { dataFilter, setDataFilter } = useData();
   const [storeDropdown, setStoreDropdown] = useState(false);
+  const [editingStoreId, setEditingStoreId] = useState<string | null>(null);
+  const [editingStoreName, setEditingStoreName] = useState('');
+  const storeBtnRef = useRef<HTMLButtonElement>(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
+
+  const openStoreDropdown = useCallback(() => {
+    if (storeBtnRef.current) {
+      const rect = storeBtnRef.current.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + 4, right: window.innerWidth - rect.right });
+    }
+    setStoreDropdown(true);
+  }, []);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
@@ -106,6 +121,23 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     document.addEventListener('click', handler);
     return () => document.removeEventListener('click', handler);
   }, [notifOpen]);
+
+  // 店铺下拉点击外部关闭（Portal 渲染在 body）
+  useEffect(() => {
+    if (!storeDropdown) return;
+    const handler = (e: MouseEvent) => {
+      const el = document.querySelector('[data-store-dropdown]');
+      if (el && !el.contains(e.target as Node) && e.target !== storeBtnRef.current) {
+        setStoreDropdown(false);
+      }
+    };
+    // 延迟绑定避免打开按钮的 click 事件立即关闭
+    const timer = setTimeout(() => document.addEventListener('click', handler), 0);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('click', handler);
+    };
+  }, [storeDropdown]);
 
   const toggleFavorite = (path: string) => {
     setFavorites(prev => prev.includes(path) ? prev.filter(p => p !== path) : [...prev, path]);
@@ -251,6 +283,37 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           ))}
         </nav>
 
+        {/* Admin section — 仅 admin/test 可见 */}
+        {(user?.role === 'admin' || user?.role === 'test') && (
+          <div className="border-t border-pdd-border pt-3 px-3 pb-1">
+            {!sidebarCollapsed && (
+              <div className="text-[10px] text-amber-400 uppercase tracking-widest mb-2 px-1 font-semibold">后台管理</div>
+            )}
+            {[
+              { path: '/admin', label: '系统概览', icon: BarChart3 },
+              { path: '/admin/users', label: '用户管理', icon: UsersIcon },
+              { path: '/admin/members', label: '会员管理', icon: Crown },
+              { path: '/admin/invite', label: '邀请码', icon: Key },
+              { path: '/admin/data', label: '数据监控', icon: Activity },
+              { path: '/admin/logs', label: '操作日志', icon: FileText },
+              { path: '/admin/settings', label: '系统设置', icon: Settings },
+            ].map(item => (
+              <NavLink key={item.path} to={item.path}>
+                {({ isActive }) => (
+                  <div className={`flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-all duration-200 ${
+                    isActive
+                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                      : 'text-pdd-text-secondary hover:text-pdd-text hover:bg-pdd-card'
+                  }`}>
+                    <item.icon size={18} className={`flex-shrink-0 ${isActive ? 'text-amber-400' : ''}`} />
+                    {!sidebarCollapsed && <span className="text-sm whitespace-nowrap font-medium">{item.label}</span>}
+                  </div>
+                )}
+              </NavLink>
+            ))}
+          </div>
+        )}
+
         {/* Upload button */}
         <NavLink to="/upload">
           <div className="mx-3 mb-3 py-2.5 rounded-xl bg-gradient-to-r from-pdd-primary to-pdd-primary-dark text-white text-center text-sm font-medium hover:shadow-lg hover:shadow-pdd-primary/25 transition-all flex items-center justify-center gap-2">
@@ -350,31 +413,64 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
           {/* Store selector */}
           <div className="relative">
-            <button onClick={() => setStoreDropdown(!storeDropdown)}
+            <button ref={storeBtnRef} onClick={openStoreDropdown}
               className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-pdd-border text-sm hover:border-pdd-primary transition-colors bg-pdd-card">
               <Store size={14} className="text-pdd-primary-light" />
               <span className="max-w-[100px] truncate hidden sm:inline text-pdd-text">
-                {stores.find(s => s.id === dataFilter)?.name || '选择店铺'}
+                {dataFilter === '__all__' ? '全部店铺' : (stores.find(s => s.id === dataFilter)?.name || '选择店铺')}
               </span>
               <ChevronDown size={14} className="text-pdd-text-secondary" />
             </button>
-            <AnimatePresence>
-              {storeDropdown && (
-                <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
-                  className="absolute top-full right-0 mt-1 w-48 bg-pdd-card border border-pdd-border rounded-xl shadow-2xl z-50 overflow-hidden">
-                  {stores.map(s => (
-                    <button key={s.id} onClick={() => { switchStore(s.id); setDataFilter(s.id); setStoreDropdown(false); }}
-                      className={`w-full text-left px-4 py-2.5 text-sm hover:bg-pdd-bg transition-colors flex items-center gap-2 ${s.id === dataFilter ? 'text-pdd-primary-light font-medium bg-pdd-primary/10' : 'text-pdd-text-secondary'}`}>
-                      <Store size={14} /> {s.name}
+            {createPortal(
+              <AnimatePresence>
+                {storeDropdown && (
+                  <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+                    className="fixed w-48 bg-pdd-card border border-pdd-border rounded-xl shadow-2xl z-[99999] overflow-hidden"
+                    style={{ top: dropdownPos.top, right: dropdownPos.right }}
+                    data-store-dropdown>
+                    {stores.length > 0 && (
+                      <button onClick={() => { setDataFilter('__all__'); setStoreDropdown(false); }}
+                        className={`w-full text-left px-4 py-2.5 text-sm hover:bg-pdd-bg transition-colors flex items-center gap-2 ${dataFilter === '__all__' ? 'text-pdd-primary-light font-medium bg-pdd-primary/10' : 'text-pdd-text-secondary'}`}>
+                        <Layers size={14} /> 全部店铺
+                      </button>
+                    )}
+                    {stores.map(s => (
+                      editingStoreId === s.id ? (
+                        <div key={s.id} className="flex items-center gap-1 px-3 py-1.5">
+                          <input
+                            value={editingStoreName}
+                            onChange={e => setEditingStoreName(e.target.value)}
+                            className="flex-1 text-sm px-2 py-1 border border-pdd-primary rounded bg-pdd-bg text-pdd-text focus:outline-none"
+                            autoFocus
+                            onKeyDown={e => {
+                              if (e.key === 'Enter') { renameStore(s.id, editingStoreName.trim() || s.name); setEditingStoreId(null); }
+                              if (e.key === 'Escape') setEditingStoreId(null);
+                            }}
+                          />
+                          <button onClick={() => { renameStore(s.id, editingStoreName.trim() || s.name); setEditingStoreId(null); }} className="p-1 text-pdd-success hover:bg-pdd-success/10 rounded"><Check size={14} /></button>
+                          <button onClick={() => setEditingStoreId(null)} className="p-1 text-pdd-text-secondary hover:bg-pdd-bg rounded"><X size={14} /></button>
+                        </div>
+                      ) : (
+                        <button key={s.id} onClick={() => { switchStore(s.id); setDataFilter(s.id); setStoreDropdown(false); }}
+                          className={`w-full text-left px-4 py-2.5 text-sm hover:bg-pdd-bg transition-colors flex items-center gap-2 group ${s.id === dataFilter ? 'text-pdd-primary-light font-medium bg-pdd-primary/10' : 'text-pdd-text-secondary'}`}>
+                          <Store size={14} /> <span className="flex-1 truncate">{s.name}</span>
+                          <span
+                            onClick={(e) => { e.stopPropagation(); setEditingStoreId(s.id); setEditingStoreName(s.name); }}
+                            className="opacity-0 group-hover:opacity-100 p-0.5 text-pdd-text-secondary hover:text-pdd-primary rounded transition-all"
+                            title="重命名"
+                          ><Pencil size={12} /></span>
+                        </button>
+                      )
+                    ))}
+                    <button onClick={() => { const s = addStore(`店铺${stores.length + 1}`); setDataFilter(s.id); setStoreDropdown(false); }}
+                      className="w-full text-left px-4 py-2.5 text-sm text-pdd-primary-light border-t border-pdd-border hover:bg-pdd-bg transition-colors flex items-center gap-2">
+                      <Plus size={14} /> 添加店铺
                     </button>
-                  ))}
-                  <button onClick={() => { addStore(`店铺${stores.length + 1}`); setStoreDropdown(false); }}
-                    className="w-full text-left px-4 py-2.5 text-sm text-pdd-primary-light border-t border-pdd-border hover:bg-pdd-bg transition-colors flex items-center gap-2">
-                    <Plus size={14} /> 添加店铺
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                  </motion.div>
+                )}
+              </AnimatePresence>,
+              document.body
+            )}
           </div>
 
           {/* Theme toggle */}

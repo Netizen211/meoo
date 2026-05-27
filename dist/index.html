@@ -1,4 +1,4 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>店分析 - 拼多多商家数据分析</title><link rel="stylesheet" href="cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"><style>html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>店分析 - 拼多多商家数据分析</title><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';"><style>html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
     html.light, html.light body { background-color: #ffffff !important; color: #000000; }
     html.dark, html.dark body { background-color: #1a1a1a !important; color: #ffffff; }</style><script>(function() {
       var isInIframe = window.self !== window.top;
@@ -64,4 +64,31 @@
       Element.prototype.querySelectorAll = function(s) { return safeQSA(origElQSA, this, s); };
       var origElQS = Element.prototype.querySelector;
       Element.prototype.querySelector = function(s) { return safeQS(origElQS, this, s); };
+    })();</script><script>// 域名绑定检查 — 非授权域名直接白屏
+    (function() {
+      var allowedHosts = ['localhost', '127.0.0.1', '121.40.196.79'];
+      try {
+        var configHosts = localStorage.getItem('dianfx_allowed_hosts');
+        if (configHosts) {
+          allowedHosts = allowedHosts.concat(JSON.parse(configHosts));
+        }
+      } catch(e) {}
+      var currentHost = window.location.hostname;
+      var isDev = currentHost === 'localhost' || currentHost === '127.0.0.1' || currentHost.startsWith('192.168.');
+      if (!isDev && allowedHosts.indexOf(currentHost) === -1) {
+        document.documentElement.innerHTML = '';
+        document.title = '';
+        throw new Error('Unauthorized domain');
+      }
+    })();</script><script>// 反调试保护
+    (function() {
+      if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return;
+      setInterval(function() {
+        var start = performance.now();
+        debugger;
+        var end = performance.now();
+        if (end - start > 100) {
+          document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:24px;color:#999;">请关闭开发者工具后刷新页面</div>';
+        }
+      }, 1000);
     })();</script></head><body><div id="root"></div><script defer="defer" src="bundle.js"></script></body></html>

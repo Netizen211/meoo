@@ -1,17 +1,19 @@
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Store, Plus, Trash2, ShoppingBag, TrendingUp, DollarSign, ShoppingCart, BarChart3, RefreshCw, Eye, FileText, Users, Package, AlertCircle, CheckCircle, Clock, ChevronRight } from 'lucide-react';
+import { Store, Plus, Trash2, ShoppingBag, TrendingUp, DollarSign, ShoppingCart, BarChart3, RefreshCw, Eye, FileText, Users, Package, AlertCircle, CheckCircle, Clock, ChevronRight, Pencil, Check, X } from 'lucide-react';
 import { useStore, useData } from '../App';
 import { safeFloat } from '../components/TimeFilter';
 import { findField } from '../utils';
 
 export default function StoresPage() {
-  const { stores, currentStore, addStore, switchStore, deleteStore } = useStore();
+  const { stores, currentStore, addStore, renameStore, switchStore, deleteStore } = useStore();
   const { uploadRecords, dataFilter, setDataFilter, getStoreData } = useData();
   const navigate = useNavigate();
   const [name, setName] = useState('');
   const [showAllStores, setShowAllStores] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
 
   const handleAdd = () => {
     if (!name.trim()) return;
@@ -153,7 +155,33 @@ export default function StoresPage() {
                               </div>
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <p className="font-bold text-lg text-pdd-text">{s.name}</p>
+                                  {editingId === s.id ? (
+                                    <div className="flex items-center gap-1">
+                                      <input
+                                        value={editingName}
+                                        onChange={e => setEditingName(e.target.value)}
+                                        className="text-lg font-bold w-40 px-2 py-0.5 border border-pdd-primary rounded-lg bg-pdd-bg text-pdd-text focus:outline-none focus:ring-2 focus:ring-pdd-primary/20"
+                                        autoFocus
+                                        onKeyDown={e => {
+                                          if (e.key === 'Enter') { renameStore(s.id, editingName.trim() || s.name); setEditingId(null); }
+                                          if (e.key === 'Escape') setEditingId(null);
+                                        }}
+                                      />
+                                      <button onClick={() => { renameStore(s.id, editingName.trim() || s.name); setEditingId(null); }} className="p-1 text-pdd-success hover:bg-pdd-success/10 rounded"><Check size={16} /></button>
+                                      <button onClick={() => setEditingId(null)} className="p-1 text-pdd-text-secondary hover:bg-pdd-bg rounded"><X size={16} /></button>
+                                    </div>
+                                  ) : (
+                                    <>
+                                      <p className="font-bold text-lg text-pdd-text">{s.name}</p>
+                                      <button
+                                        onClick={(e) => { e.stopPropagation(); setEditingId(s.id); setEditingName(s.name); }}
+                                        className="p-1 text-pdd-text-secondary hover:text-pdd-primary hover:bg-pdd-primary/10 rounded transition-colors"
+                                        title="重命名店铺"
+                                      >
+                                        <Pencil size={14} />
+                                      </button>
+                                    </>
+                                  )}
                                   {isCurrent && <span className="text-xs bg-pdd-primary text-white px-2 py-0.5 rounded-full shadow-lg shadow-pdd-primary/20">当前店铺</span>}
                                 </div>
                                 <p className="text-xs text-pdd-text-secondary">创建于 {new Date(s.createdAt).toLocaleDateString('zh-CN')}</p>

@@ -3,6 +3,7 @@ import { TrendingUp, ShoppingCart, DollarSign, AlertTriangle, RotateCcw, Package
 import { useData } from '../App';
 import { importSampleData } from '../utils/dataImporter';
 import { findField, safeField } from '../utils/fieldAccess';
+import { getBestPlatformFee, getBestInsuranceFee, getPenaltyFees, getMarketingFees } from '../utils/financialActuals';
 import TimeFilter, { useTimeFilter, TimeRange, TimeGranularity, safeFloat, filterByTimeRange, filterPromoByTimeRange, getCompareOrders } from '../components/TimeFilter';
 import { evaluateFormula, FormulaContext } from '../utils/formulaEngine';
 import { buildTrendData, buildCompareTrendData } from '../utils/trendData';
@@ -18,7 +19,7 @@ export default function DashboardPage() {
     productCosts, packagingFeePerOrder, shippingFeePerOrder,
     laborFeePerOrder, insuranceFeePerOrder, platformCommissionRate,
     defaultCostRatio, taxConfigs, customDeductions,
-    abnormalOrders
+    abnormalOrders, orderFinancialActuals
   } = useData();
   const tf = useTimeFilter('7', 'day');
   const { timeRange, granularity, compareEnabled, setTimeRange, setGranularity, setCompareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange, setCustomRange, setQuickRange, savedRanges, saveCurrentRange, deleteSavedRange, applySavedRange } = tf;
@@ -607,7 +608,9 @@ export default function DashboardPage() {
           const rno = String(findField(r, '订单编号', '订单号') || '');
           return rno && rno === orderNo;
         });
-        const insFee = insRecord ? safeFloat(findField(insRecord, '服务费用（元）', '服务费用(元)', '服务费用', '保费（元）', '保费(元)', '保费')) : 0;
+        const insFeeFromActuals = getBestInsuranceFee(orderNo, 0, orderFinancialActuals);
+        const insFeeFromRecord = insRecord ? safeFloat(findField(insRecord, '服务费用（元）', '服务费用(元)', '服务费用', '保费（元）', '保费(元)', '保费')) : 0;
+        const insFee = insFeeFromActuals > 0 ? insFeeFromActuals : insFeeFromRecord;
         const insStatus = insRecord ? String(findField(insRecord, '理赔状态', '运费补偿状态', '补偿状态') || '-') : '-';
         const insChargeStatus = insRecord ? String(findField(insRecord, '收费状态') || '-') : '-';
 
@@ -644,8 +647,7 @@ export default function DashboardPage() {
         const packagingFee = packagingFeePerOrder || 0;
         const shippingFeePerOrderCost = shippingFeePerOrder || 0;
         const laborFee = laborFeePerOrder || 0;
-        const platformCommission = (platformCommissionRate && platformCommissionRate > 0)
-          ? merchantReceived * (platformCommissionRate / 100) : 0;
+        const platformCommission = getBestPlatformFee(orderNo, merchantReceived, platformCommissionRate, orderFinancialActuals);
 
         // 明星店铺 & 直播推广分摊（按订单日期 + 商品当日 GMV 占比）
         let starLivePromoCost = 0;
@@ -752,12 +754,15 @@ export default function DashboardPage() {
         const customCosts = orderCustomCosts[orderNo] || [];
         const customTotal = customCosts.reduce((s, c) => s + (c.amount || 0), 0);
 
+        const penaltyFees = getPenaltyFees(orderNo, orderFinancialActuals);
+        const marketingFees = getMarketingFees(orderNo, orderFinancialActuals);
+
         // 费用合计（与 ProductLinkStats 计算模型一致）
         const totalCosts =
           productCost + packagingFee + shippingFeePerOrderCost + laborFee +
           postage + insFee + totalPromoCost + platformCommission +
           installFee + deliverFee1 + deliverFee2 +
-          totalTax + totalFormulaDeductions + customTotal;
+          totalTax + totalFormulaDeductions + customTotal + penaltyFees + marketingFees;
         const netProfit = merchantReceived - totalCosts;
         const profitRate = merchantReceived > 0 ? (netProfit / merchantReceived) * 100 : 0;
         const grossProfit = merchantReceived - totalPromoCost - packagingFee - shippingFeePerOrderCost;
@@ -842,6 +847,7 @@ export default function DashboardPage() {
             ...(starLivePromoCost > 0 ? [['推广费(明星+直播)', <span className="text-pdd-danger">-¥{starLivePromoCost.toFixed(2)}</span>]] as [string, React.ReactNode][] : []),
             ...(starLiveMatchInfo && starLivePromoCost > 0 ? [['分摊明细', <span className="text-[10px] text-pdd-text-secondary">{starLiveMatchInfo}</span>]] as [string, React.ReactNode][] : []),
             ['运费险', insFee > 0 ? <span className="text-pdd-danger">-¥{insFee.toFixed(2)}</span> : '未参保'],
+            ...(penaltyFees > 0 ? [['罚款/扣款', <span className="text-pdd-danger font-medium">-¥{penaltyFees.toFixed(2)}</span>]] as [string, React.ReactNode][] : []),
           ]},
           ...(taxDetails.length > 0 ? [{ title: '税费', rows: [
             ...taxDetails.filter((t: any) => t.amount > 0).map((t: any) => [`${t.name}(${t.rate}%)`, <span className="text-pdd-danger">-¥{t.amount.toFixed(2)}</span>] as [string, React.ReactNode]),

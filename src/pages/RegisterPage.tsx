@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { UserPlus, User, Lock, Eye, EyeOff, Phone, CheckCircle, KeyRound, Activity, ArrowRight } from 'lucide-react';
 import { useAuth } from '../App';
+import { serverRegister } from '../api/authApi';
 
 export default function RegisterPage() {
   const [username, setUsername] = useState('');
@@ -14,10 +15,11 @@ export default function RegisterPage() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const { signup } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const { signup, setUser } = useAuth();
   const navigate = useNavigate();
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
     setError('');
     if (!inviteCode.trim()) { setError('请输入邀请码'); return; }
     if (!username.trim()) { setError('请输入用户名'); return; }
@@ -25,6 +27,28 @@ export default function RegisterPage() {
     if (!password.trim()) { setError('请输入密码'); return; }
     if (password.trim().length < 6) { setError('密码至少6个字符'); return; }
     if (password !== confirmPwd) { setError('两次密码不一致'); return; }
+
+    setLoading(true);
+
+    // 优先尝试服务端注册
+    try {
+      const serverResult = await serverRegister(username.trim(), password.trim(), inviteCode.trim(), phone.trim());
+      if (serverResult.success) {
+        if (serverResult.user) setUser(serverResult.user);
+        setSuccess(true);
+        setTimeout(() => navigate('/stores'), 1500);
+        return;
+      }
+      if (serverResult.message && serverResult.message !== '注册失败') {
+        setError(serverResult.message);
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // 服务端不可达，降级到本地注册
+    }
+
+    // 降级：本地 localStorage 注册
     const result = signup(username.trim(), password.trim(), phone.trim(), inviteCode.trim());
     if (result.success) {
       setSuccess(true);
@@ -32,6 +56,7 @@ export default function RegisterPage() {
     } else {
       setError(result.message);
     }
+    setLoading(false);
   };
 
   if (success) {
@@ -141,12 +166,13 @@ export default function RegisterPage() {
           {error && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-pdd-danger text-sm text-center bg-pdd-danger/10 py-2 rounded-lg border border-pdd-danger/20">{error}</motion.p>}
 
           <motion.button
-            whileHover={{ scale: 1.02, boxShadow: '0 8px 30px rgba(99, 102, 241, 0.3)' }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={loading ? {} : { scale: 1.02, boxShadow: '0 8px 30px rgba(99, 102, 241, 0.3)' }}
+            whileTap={loading ? {} : { scale: 0.98 }}
             onClick={handleRegister}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-pdd-primary-dark to-pdd-primary text-white font-medium text-sm transition-all flex items-center justify-center gap-2"
+            disabled={loading}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-pdd-primary-dark to-pdd-primary text-white font-medium text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-60"
           >
-            注册 <ArrowRight size={16} />
+            {loading ? '注册中...' : '注册'} {!loading && <ArrowRight size={16} />}
           </motion.button>
 
           <div className="flex items-center justify-center pt-2">

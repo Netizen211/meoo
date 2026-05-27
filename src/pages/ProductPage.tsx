@@ -4,7 +4,7 @@ import { DndContext, closestCenter, DragEndEvent, DragOverlay, DragStartEvent, u
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, LineChart, Line, ScatterChart, Scatter, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
-import { Package, TrendingUp, DollarSign, ShoppingCart, AlertTriangle, Ban, ArrowUp, ArrowDown, Calendar, Filter, ChevronDown, ChevronLeft, ChevronRight, X, Check, Tag, BarChart3, Link2, RotateCcw, Layers, Clock, Target, Zap, Box, GripVertical, Eye, Activity, Hash, Download, Percent } from 'lucide-react';
+import { Package, TrendingUp, DollarSign, ShoppingCart, AlertTriangle, Ban, ArrowUp, ArrowDown, Calendar, Filter, ChevronDown, ChevronLeft, ChevronRight, X, Check, Tag, BarChart3, Link2, RotateCcw, Layers, Clock, Target, Zap, Box, GripVertical, Eye, Activity, Hash, Download, Percent, Search } from 'lucide-react';
 import { useData, useAuth } from '../App';
 import { findField } from '../utils';
 import TimeFilter, { useTimeFilter, TimeRange, TimeGranularity, safeFloat, filterByTimeRange, filterPromoByTimeRange, getCompareOrders, getAllDateGroups, changePct, getQuickRangeDates } from '../components/TimeFilter';
@@ -14,6 +14,7 @@ import ProfitDiagnosisPanel from './product/ProfitDiagnosisPanel';
 import Product360Analysis from '../components/product-analysis/Product360Analysis';
 import { useProductStats, useProductDetail, ProductStat } from '../components/ProductLinkStats';
 import ProfitTooltip from '../components/ProfitTooltip';
+import ProductDeepAnalysis from './product/ProductDeepAnalysis';
 
 const COLORS = ['var(--pdd-primary)', 'var(--pdd-primary-light)', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6'];
 
@@ -40,7 +41,7 @@ function SortableItem({ id, children }: SortableItemProps) {
 }
 
 export default function ProductPage() {
-  const { currentDisplayData, productCosts, customDeductions, taxConfigs, defaultCostRatio, packagingFeePerOrder, shippingFeePerOrder, abnormalOrders } = useData();
+  const { currentDisplayData, productCosts, customDeductions, taxConfigs, defaultCostRatio, packagingFeePerOrder, shippingFeePerOrder, platformCommissionRate, insuranceFeePerOrder, orderFinancialActuals, abnormalOrders } = useData();
   const { isPaid } = useAuth();
   const tf = useTimeFilter('7', 'day');
   const { timeRange, granularity, compareEnabled, setTimeRange, setGranularity, setCompareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange, setCustomRange, setQuickRange, savedRanges, saveCurrentRange, deleteSavedRange, applySavedRange } = tf;
@@ -62,6 +63,8 @@ export default function ProductPage() {
   const [panelOrder, setPanelOrder] = useState<string[]>(['kpi', 'overview', 'lifecycle', 'sku', 'price', 'fulllink', 'profit']);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
+  const [deepAnalysisOpen, setDeepAnalysisOpen] = useState(false);
+  const [deepAnalysisProductId, setDeepAnalysisProductId] = useState<string | undefined>(undefined);
 
   const pageSize = 10;
 
@@ -200,7 +203,10 @@ export default function ProductPage() {
     customDeductions,
     defaultCostRatio,
     packagingFeePerOrder,
-    shippingFeePerOrder
+    shippingFeePerOrder,
+    platformCommissionRate,
+    insuranceFeePerOrder,
+    orderFinancialActuals
   );
   const prevProductStats = useProductStats(
     prevDisplayData,
@@ -209,7 +215,10 @@ export default function ProductPage() {
     customDeductions,
     defaultCostRatio,
     packagingFeePerOrder,
-    shippingFeePerOrder
+    shippingFeePerOrder,
+    platformCommissionRate,
+    insuranceFeePerOrder,
+    orderFinancialActuals
   );
   const drawerProduct = useProductDetail(productStats, drawerProductId);
   const compareOrders = useMemo(() => compareEnabled ? getCompareOrders(orders, allDates, timeRange, compareStart, compareEnd, customStart, customEnd, quickRange) : [], [orders, allDates, timeRange, compareStart, compareEnd, customStart, customEnd, quickRange, compareEnabled]);
@@ -806,6 +815,8 @@ export default function ProductPage() {
                         <button onClick={() => setTaggingProduct(p.id)} className="p-1.5 rounded-lg hover:bg-purple-100 text-pdd-gray-400 hover:text-purple-600 transition-colors" title="添加标签"><Tag size={14} /></button>
                         {/* 复制商品ID */}
                         <button onClick={() => { navigator.clipboard.writeText(p.id); }} className="p-1.5 rounded-lg hover:bg-pdd-gray-100 text-pdd-gray-400 hover:text-pdd-gray-700 transition-colors" title="复制商品ID"><Hash size={14} /></button>
+                        {/* 一键导入深度解析 */}
+                        <button onClick={() => { setDeepAnalysisProductId(p.id); setDeepAnalysisOpen(true); }} className="p-1.5 rounded-lg hover:bg-cyan-100 text-pdd-gray-400 hover:text-cyan-600 transition-colors" title="一键导入深度解析"><Zap size={14} /></button>
                       </div>
                     </td>
                   </tr>
@@ -1092,6 +1103,11 @@ export default function ProductPage() {
           style={showCompare ? { background: 'linear-gradient(to right, #722ed1, #b37feb)', boxShadow: '0 4px 6px -1px rgba(114, 46, 209, 0.2)' } : {}}>
           <BarChart3 size={12} />对比{compareProducts.length > 0 && `(${compareProducts.length})`}
         </motion.button>
+        <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => { setDeepAnalysisProductId(undefined); setDeepAnalysisOpen(true); }}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all shadow-sm border-cyan-400 text-cyan-600 hover:bg-cyan-50"
+          title="单商品深度解析">
+          <Search size={12} />单商品深度解析
+        </motion.button>
       </div>
 
       {/* 筛选面板 */}
@@ -1168,10 +1184,21 @@ export default function ProductPage() {
       )}</AnimatePresence>
 
       {/* 商品详情抽屉 */}
-      <ProductDetailDrawer 
-        product={drawerProduct} 
-        isOpen={!!drawerProductId} 
-        onClose={() => setDrawerProductId(null)} 
+      <ProductDetailDrawer
+        product={drawerProduct}
+        isOpen={!!drawerProductId}
+        onClose={() => setDrawerProductId(null)}
+      />
+
+      {/* 单商品深度解析全屏模态框 */}
+      <ProductDeepAnalysis
+        isOpen={deepAnalysisOpen}
+        onClose={() => setDeepAnalysisOpen(false)}
+        initialProductId={deepAnalysisProductId}
+        productStats={productStats}
+        products={products}
+        orders={filteredOrders}
+        prevProductStats={prevProductStats}
       />
     </div>
   );

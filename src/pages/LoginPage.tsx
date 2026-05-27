@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Lock, User, Eye, EyeOff, CheckSquare, Square, Activity, ArrowRight } from 'lucide-react';
 import { useAuth } from '../App';
+import { serverLogin } from '../api/authApi';
 
 export default function LoginPage() {
   const [username, setUsername] = useState('');
@@ -10,7 +11,8 @@ export default function LoginPage() {
   const [showPwd, setShowPwd] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
-  const { login } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const { login, setUser } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -21,17 +23,40 @@ export default function LoginPage() {
     }
   }, []);
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (!username.trim() || !password.trim()) { setError('请输入用户名和密码'); return; }
-    if (login(username, password)) {
-      if (rememberMe) {
-        localStorage.setItem('dianfx_remember_username', username);
-      } else {
-        localStorage.removeItem('dianfx_remember_username');
+    setLoading(true);
+    setError('');
+
+    // 优先尝试服务端登录
+    try {
+      const serverResult = await serverLogin(username, password);
+      if (serverResult.success) {
+        if (serverResult.user) setUser(serverResult.user);
+        if (rememberMe) localStorage.setItem('dianfx_remember_username', username);
+        else localStorage.removeItem('dianfx_remember_username');
+        navigate('/stores');
+        return;
       }
-      navigate('/stores');
+      // 服务端返回错误（非网络错误），直接显示
+      if (serverResult.message && serverResult.message !== '登录失败') {
+        setError(serverResult.message);
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // 服务端不可达，降级到本地登录
     }
-    else { setError('登录失败，请重试'); }
+
+    // 降级：本地 localStorage 登录
+    if (login(username, password)) {
+      if (rememberMe) localStorage.setItem('dianfx_remember_username', username);
+      else localStorage.removeItem('dianfx_remember_username');
+      navigate('/stores');
+    } else {
+      setError('登录失败，请检查用户名和密码');
+    }
+    setLoading(false);
   };
 
   return (
@@ -106,12 +131,13 @@ export default function LoginPage() {
           {error && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-pdd-danger text-sm text-center bg-pdd-danger/10 py-2 rounded-lg border border-pdd-danger/20">{error}</motion.p>}
 
           <motion.button
-            whileHover={{ scale: 1.02, boxShadow: '0 8px 30px rgba(99, 102, 241, 0.3)' }}
-            whileTap={{ scale: 0.98 }}
+            whileHover={loading ? {} : { scale: 1.02, boxShadow: '0 8px 30px rgba(99, 102, 241, 0.3)' }}
+            whileTap={loading ? {} : { scale: 0.98 }}
             onClick={handleLogin}
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-pdd-primary-dark to-pdd-primary text-white font-medium text-sm transition-all flex items-center justify-center gap-2"
+            disabled={loading}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-pdd-primary-dark to-pdd-primary text-white font-medium text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-60"
           >
-            登录 <ArrowRight size={16} />
+            {loading ? '登录中...' : '登录'} {!loading && <ArrowRight size={16} />}
           </motion.button>
 
           <div className="flex items-center justify-center pt-2">

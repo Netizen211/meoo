@@ -1,6 +1,8 @@
 import { useMemo } from 'react';
 import { evaluateFormula, FormulaContext } from '../utils/formulaEngine';
 import { findField } from '../utils';
+import type { OrderFinancialActual } from '../utils/financialActuals';
+import { getBestPlatformFee, getBestInsuranceFee, getPenaltyFees, getMarketingFees } from '../utils/financialActuals';
 
 interface DailySalesPoint {
   date: string;
@@ -59,6 +61,9 @@ export interface CostBreakdown {
   promoCost: number;
   discount: number;
   platformFee: number;
+  insuranceFee?: number;
+  penaltyFee?: number;
+  marketingFee?: number;
   taxes: number;
   customDeductions: number;
 }
@@ -232,7 +237,10 @@ export function useProductStats(
   customDeductions?: CustomDeduction[],
   defaultCostRatio?: number,
   packagingFeePerOrder?: number,
-  shippingFeePerOrder?: number
+  shippingFeePerOrder?: number,
+  platformCommissionRate?: number,
+  insuranceFeePerOrder?: number,
+  orderFinancialActuals?: Record<string, OrderFinancialActual>
 ): Record<string, ProductStat> {
   return useMemo(() => {
     // 数据已在UploadPage源头清洗，此处直接使用
@@ -252,6 +260,12 @@ export function useProductStats(
     const dailySalesMap: Record<string, Record<string, DailySalesPoint>> = {};
     // Per-SKU sales tracking for accurate cost calculation
     const skuSalesMap: Record<string, Record<string, number>> = {};
+    // Per-product financial actuals accumulators
+    const platformFees: Record<string, number> = {};
+    const insuranceFees: Record<string, number> = {};
+    const penaltyFees: Record<string, number> = {};
+    const marketingFees: Record<string, number> = {};
+    let orderCountWithActual = 0;
 
     orders.forEach((o: any) => {
       // 使用智能字段匹配获取商品ID
@@ -275,7 +289,7 @@ export function useProductStats(
           dailySales: [], priceDistribution: [], afterSaleBreakdown: {}, relatedProducts: [],
           firstOrderDate: '', lastOrderDate: '', activeDays: 0, avgDailySales: 0,
           inventoryEstimate: 0, turnoverDays: 0, sellThroughRate: 0,
-          costBreakdown: { productCost: 0, packagingFee: 0, shippingFee: 0, promoCost: 0, discount: 0, platformFee: 0, taxes: 0, customDeductions: 0 },
+          costBreakdown: { productCost: 0, packagingFee: 0, shippingFee: 0, promoCost: 0, discount: 0, platformFee: 0, insuranceFee: 0, penaltyFee: 0, marketingFee: 0, taxes: 0, customDeductions: 0 },
           costSource: { productCost: 'missing', taxes: 'default', customDeductions: 'none' },
           taxDetails: [],
           deductionDetails: [],
@@ -300,7 +314,8 @@ export function useProductStats(
       const skuKey = skuId ? `${pid}_${skuId}` : pid;
       if (!skuSalesMap[pid]) skuSalesMap[pid] = {};
       skuSalesMap[pid][skuKey] = (skuSalesMap[pid][skuKey] || 0) + qty;
-      s.revenue += safeNum(findField(o, '商家实收金额(元)', '商家实收', '实收金额'));
+      const merchantReceived = safeNum(findField(o, '商家实收金额(元)', '商家实收', '实收金额'));
+      s.revenue += merchantReceived;
       const shopDiscount = safeNum(findField(o, '店铺优惠折扣(元)', '店铺优惠'));
       const platDiscount = safeNum(findField(o, '平台优惠折扣(元)', '平台优惠'));
       const payDiscount = safeNum(findField(o, '多多支付立减金额(元)', '支付立减'));
@@ -317,6 +332,20 @@ export function useProductStats(
       if (payTime && payTime > maxOrderDate) maxOrderDate = payTime;
       const price = actualPay;
       const orderNo = cleanStr(findField(o, '订单号'));
+
+      // 每单实际财务数据覆盖
+      if (orderNo && (platformCommissionRate || insuranceFeePerOrder) && orderFinancialActuals) {
+        if (!platformFees[pid]) platformFees[pid] = 0;
+        if (!insuranceFees[pid]) insuranceFees[pid] = 0;
+        if (!penaltyFees[pid]) penaltyFees[pid] = 0;
+        if (!marketingFees[pid]) marketingFees[pid] = 0;
+        platformFees[pid] += getBestPlatformFee(orderNo, merchantReceived, platformCommissionRate ?? 0, orderFinancialActuals);
+        insuranceFees[pid] += getBestInsuranceFee(orderNo, insuranceFeePerOrder ?? 0, orderFinancialActuals);
+        penaltyFees[pid] += getPenaltyFees(orderNo, orderFinancialActuals);
+        marketingFees[pid] += getMarketingFees(orderNo, orderFinancialActuals);
+        if (orderFinancialActuals[orderNo]?.hasData) orderCountWithActual++;
+      }
+
       const buyerKey = orderNo.length >= 4 ? orderNo.slice(-4) : orderNo;
 
       if (payTime) orderDetails[pid].dates.push(payTime);
@@ -573,12 +602,16 @@ export function useProductStats(
 
       const packagingFee = (packagingFeePerOrder || 0) * s.orders;
       const shippingFee = (shippingFeePerOrder || 0) * s.orders;
+      const platformFee = platformFees[pid] || 0;
+      const insuranceFee = insuranceFees[pid] || 0;
+      const penaltyFee = penaltyFees[pid] || 0;
+      const marketingFee = marketingFees[pid] || 0;
 
-      // Gross profit = 实收 - 推广费 - 包装费 - 快递费（discount已体现在revenue中，不重复扣）
-      const grossProfit = s.revenue - s.promoCost - packagingFee - shippingFee;
+      // Gross profit = 实收 - 推广费 - 包装费 - 快递费 - 平台扣点 - 运费险 - 罚款 - 营销费用
+      const grossProfit = s.revenue - s.promoCost - packagingFee - shippingFee - platformFee - insuranceFee - penaltyFee - marketingFee;
 
-      // Pre-tax profit = 实收 - 商品成本 - 推广费 - 包装费 - 快递费
-      const preTaxProfit = s.revenue - productCost - s.promoCost - packagingFee - shippingFee;
+      // Pre-tax profit = 实收 - 商品成本 - 推广费 - 包装费 - 快递费 - 平台扣点 - 运费险 - 罚款 - 营销费用
+      const preTaxProfit = s.revenue - productCost - s.promoCost - packagingFee - shippingFee - platformFee - insuranceFee - penaltyFee - marketingFee;
 
       // Tax calculation
       const taxDetails: TaxDetail[] = [];
@@ -651,7 +684,7 @@ export function useProductStats(
           avgOrderValue: s.avgOrderValue,
           activeDays: s.activeDays,
           avgDailySales: s.avgDailySales,
-          platformFee: 0,
+          platformFee: platformFee,
           taxes: totalTax
         };
 
@@ -703,7 +736,9 @@ export function useProductStats(
       s.costBreakdown = {
         productCost, packagingFee, shippingFee,
         promoCost: s.promoCost, discount: s.discount,
-        platformFee: 0, taxes: totalTax, customDeductions: totalCustomDeductions
+        platformFee, insuranceFee, penaltyFee,
+        marketingFee,
+        taxes: totalTax, customDeductions: totalCustomDeductions
       };
       s.costSource = {
         productCost: costSourceType,
@@ -718,7 +753,7 @@ export function useProductStats(
       s.netProfitAfterTax = netProfitAfterTax;
 
       // Legacy fields for backward compatibility
-      s.totalCost = productCost + packagingFee + shippingFee + s.promoCost + totalTax + totalCustomDeductions;
+      s.totalCost = productCost + packagingFee + shippingFee + platformFee + insuranceFee + penaltyFee + s.promoCost + totalTax + totalCustomDeductions;
       s.netProfit = netProfitAfterTax;
 
       // ROI = 总推广成交金额 / 总推广花费（综合多个推广计划的准确ROI）
