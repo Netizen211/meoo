@@ -457,106 +457,142 @@ export default function AfterSalePage() {
       return { hasData: false, promoOrders: 0, nonPromoOrders: 0, promoAfterSaleRate: 0, nonPromoAfterSaleRate: 0, promoRefundAmount: 0, nonPromoRefundAmount: 0, trueRoi: 0, nominalRoi: 0, totalPromoCost: 0, totalPromoGmv: 0, channelBreakdown: [] as any[] };
     }
 
-    // 建立推广标记集合：productId + 日期
-    const promoTagSet = new Set<string>();
+    // Step 1: 构建 商品ID×日期 → 推广订单数 的映射
+    // 推广明细中的"成交笔数"已剔除秒拍秒退，是推广带来的稳定订单
+    const promoStats: Record<string, { promoOrders: number; promoGmv: number; promoCost: number; channelCosts: Record<string, number> }> = {};
+
     let totalPromoCost = 0;
     let totalPromoGmv = 0;
-    const channelData: Record<string, { cost: number; gmv: number; orders: Set<string>; refundAmount: number; afterSaleCount: number }> = {};
+    let totalPromoOrders = 0;
 
     allPromo.forEach((p: any) => {
-      const productId = findField(p, '商品ID', '商品id', '商品编号');
+      const productId = String(findField(p, '商品ID', '商品id', '商品编号') || '').trim();
       const date = String(findField(p, '日期') || '').trim().split(' ')[0].replace(/\//g, '-');
+      if (!productId || !date) return;
+
       const cost = safeFloat(findField(p, '总花费(元)', '花费(元)', '成交花费(元)', '推广花费'));
       const gmv = safeFloat(findField(p, '交易额(元)', '成交金额(元)', '推广GMV'));
-      totalPromoCost += cost;
-      totalPromoGmv += gmv;
+      const orders = safeFloat(findField(p, '成交笔数', '推广订单数', '订单数'));
+
+      const key = `${productId}_${date}`;
+      if (!promoStats[key]) promoStats[key] = { promoOrders: 0, promoGmv: 0, promoCost: 0, channelCosts: {} };
+      promoStats[key].promoOrders += orders;
+      promoStats[key].promoGmv += gmv;
+      promoStats[key].promoCost += cost;
 
       const source = p._source || 'search';
       const chKey = source === 'starStore' ? '明星店铺' : source === 'liveStream' ? '直播推广' : '搜索推广';
-      if (!channelData[chKey]) channelData[chKey] = { cost: 0, gmv: 0, orders: new Set(), refundAmount: 0, afterSaleCount: 0 };
-      channelData[chKey].cost += cost;
-      channelData[chKey].gmv += gmv;
+      promoStats[key].channelCosts[chKey] = (promoStats[key].channelCosts[chKey] || 0) + cost;
 
-      if (productId && date) {
-        promoTagSet.add(`${productId}_${date}`);
+      totalPromoCost += cost;
+      totalPromoGmv += gmv;
+      totalPromoOrders += orders;
+    });
+
+    // Step 2: 统计每个 商品ID×日期 的总订单数（排除已取消）
+    const totalStats: Record<string, number> = {};
+    filteredOrders.forEach((o: any) => {
+      const productId = String(safeField(o, '商品ID', '商品id', '商品编号') || '').trim();
+      const payDate = (safeField(o, '支付时间') || '').split(' ')[0].replace(/\//g, '-');
+      if (!productId || !payDate) return;
+      const key = `${productId}_${payDate}`;
+      totalStats[key] = (totalStats[key] || 0) + 1;
+    });
+
+    // Step 3: 计算每个 key 的推广占比
+    // promoRatio = 推广订单数 / 总订单数（cap at 1.0）
+    const ratioMap: Record<string, number> = {};
+    let totalWithPromo = 0; // 有推广数据的商品×日期 的总订单
+    let promoOrderEstimate = 0; // 按比例分摊后的推广订单估算
+    Object.keys(promoStats).forEach(key => {
+      const total = totalStats[key] || 0;
+      if (total > 0) {
+        const ratio = Math.min(promoStats[key].promoOrders / total, 1.0);
+        ratioMap[key] = ratio;
+        totalWithPromo += total;
+        promoOrderEstimate += total * ratio;
       }
     });
 
-    // 给订单打推广标记
-    const orderMap = new Map<string, any>();
-    filteredOrders.forEach((o: any) => {
-      const orderNo = safeField(o, '订单号', '订单编号');
-      if (orderNo) orderMap.set(orderNo, o);
-    });
+    // 无推广数据的商品×日期：自然订单
+    const totalAllOrders = filteredOrders.length;
+    const nonPromoOrderEstimate = totalAllOrders - promoOrderEstimate;
 
-    let promoOrderCount = 0, nonPromoOrderCount = 0;
-    let promoAfterSaleCount = 0, nonPromoAfterSaleCount = 0;
-    let promoRefundAmount = 0, nonPromoRefundAmount = 0;
-    const promoOrderNos = new Set<string>();
-    const nonPromoOrderNos = new Set<string>();
+    // Step 4: 按比例分摊售后
+    let promoAfterSaleCount = 0;
+    let nonPromoAfterSaleCount = 0;
+    let promoRefundAmount = 0;
+    let nonPromoRefundAmount = 0;
+    // 渠道统计
+    const channelStats: Record<string, { cost: number; gmv: number; promoOrders: number; afterSaleCount: number; refundAmount: number }> = {};
 
-    filteredOrders.forEach((o: any) => {
-      const productId = safeField(o, '商品ID', '商品id', '商品编号');
-      const payTime = safeField(o, '支付时间').split(' ')[0].replace(/\//g, '-');
-      const orderNo = safeField(o, '订单号', '订单编号');
-      const isPromo = productId && payTime ? promoTagSet.has(`${productId}_${payTime}`) : false;
-
-      if (isPromo) {
-        promoOrderCount++;
-        if (orderNo) promoOrderNos.add(orderNo);
-      } else {
-        nonPromoOrderCount++;
-        if (orderNo) nonPromoOrderNos.add(orderNo);
-      }
-    });
-
-    // 匹配售后
     records.forEach((r: any) => {
       const orderNo = getOrderNo(r);
-      if (!orderNo) return;
       const amt = getRefundAmount(r);
-      if (promoOrderNos.has(orderNo)) {
-        promoAfterSaleCount++;
-        promoRefundAmount += amt;
-        // 按渠道统计
-        const order = orderMap.get(orderNo);
-        if (order) {
-          const pid = safeField(order, '商品ID', '商品id', '商品编号');
-          const payTime = safeField(order, '支付时间').split(' ')[0].replace(/\//g, '-');
-          const key = `${pid}_${payTime}`;
-          // 查找该订单对应的推广渠道
-          for (const [chKey, ch] of Object.entries(channelData)) {
-            ch.afterSaleCount++;
-            ch.refundAmount += amt;
-            break; // 简化：归到第一个渠道
-          }
+      if (!orderNo) return;
+
+      // 从 unifiedRecords 中找对应的 order 获取 productId + payDate
+      const productId = String(getProductId(r) || '').trim();
+      const applyDate = (safeField(r, '申请时间') || '').split(' ')[0].replace(/\//g, '-');
+
+      // 尝试用订单号反查订单数据获取支付日期
+      let payDate = applyDate; // fallback: 用申请日期近似
+      const order = filteredOrders.find((o: any) => safeField(o, '订单号', '订单编号') === orderNo);
+      if (order) {
+        payDate = (safeField(order, '支付时间') || '').split(' ')[0].replace(/\//g, '-');
+      }
+
+      const key = `${productId}_${payDate}`;
+      const promoRatio = ratioMap[key] ?? 0; // 查不到推广数据 → 全算自然
+
+      const pCount = promoRatio;
+      const nCount = 1 - promoRatio;
+      promoAfterSaleCount += pCount;
+      nonPromoAfterSaleCount += nCount;
+      promoRefundAmount += amt * promoRatio;
+      nonPromoRefundAmount += amt * (1 - promoRatio);
+
+      // 按渠道花费比例分摊到各渠道
+      if (promoRatio > 0 && promoStats[key]) {
+        const chCosts = promoStats[key].channelCosts;
+        const totalChCost = Object.values(chCosts).reduce((a, b) => a + b, 0);
+        if (totalChCost > 0) {
+          Object.entries(chCosts).forEach(([ch, cost]) => {
+            const chShare = cost / totalChCost;
+            if (!channelStats[ch]) channelStats[ch] = { cost: 0, gmv: 0, promoOrders: 0, afterSaleCount: 0, refundAmount: 0 };
+            channelStats[ch].afterSaleCount += pCount * chShare;
+            channelStats[ch].refundAmount += amt * promoRatio * chShare;
+          });
         }
-      } else if (nonPromoOrderNos.has(orderNo)) {
-        nonPromoAfterSaleCount++;
-        nonPromoRefundAmount += amt;
       }
     });
 
-    const promoAfterSaleRate = promoOrderCount > 0 ? (promoAfterSaleCount / promoOrderCount) * 100 : 0;
-    const nonPromoAfterSaleRate = nonPromoOrderCount > 0 ? (nonPromoAfterSaleCount / nonPromoOrderCount) * 100 : 0;
+    // 汇总渠道统计
+    Object.keys(promoStats).forEach(key => {
+      const { promoOrders, promoGmv, promoCost, channelCosts } = promoStats[key];
+      const totalChCost = Object.values(channelCosts).reduce((a, b) => a + b, 0);
+      Object.entries(channelCosts).forEach(([ch, cost]) => {
+        const chShare = totalChCost > 0 ? cost / totalChCost : 1;
+        if (!channelStats[ch]) channelStats[ch] = { cost: 0, gmv: 0, promoOrders: 0, afterSaleCount: 0, refundAmount: 0 };
+        channelStats[ch].cost += cost;
+        channelStats[ch].gmv += promoGmv * chShare;
+        channelStats[ch].promoOrders += promoOrders * chShare;
+      });
+    });
+
+    const promoAfterSaleRate = promoOrderEstimate > 0 ? (promoAfterSaleCount / promoOrderEstimate) * 100 : 0;
+    const nonPromoAfterSaleRate = nonPromoOrderEstimate > 0 ? (nonPromoAfterSaleCount / nonPromoOrderEstimate) * 100 : 0;
     const nominalRoi = totalPromoCost > 0 ? totalPromoGmv / totalPromoCost : 0;
     const trueRoi = totalPromoCost > 0 ? (totalPromoGmv - promoRefundAmount) / totalPromoCost : 0;
 
-    // 渠道售后率
-    const channelBreakdown = Object.entries(channelData).map(([channel, d]) => {
-      // 估算各渠道订单数
-      const channelOrderCount = filteredOrders.filter((o: any) => {
-        const pid = safeField(o, '商品ID', '商品id', '商品编号');
-        const payTime = safeField(o, '支付时间').split(' ')[0].replace(/\//g, '-');
-        return pid && payTime ? promoTagSet.has(`${pid}_${payTime}`) : false;
-      }).length;
-      const chAfterSaleRate = channelOrderCount > 0 ? (d.afterSaleCount / channelOrderCount) * 100 : 0;
+    const channelBreakdown = Object.entries(channelStats).map(([channel, d]) => {
+      const chAfterSaleRate = d.promoOrders > 0 ? (d.afterSaleCount / d.promoOrders) * 100 : 0;
       const chNominalRoi = d.cost > 0 ? d.gmv / d.cost : 0;
       const chTrueRoi = d.cost > 0 ? (d.gmv - d.refundAmount) / d.cost : 0;
-      return { channel, cost: d.cost, gmv: d.gmv, afterSaleCount: d.afterSaleCount, refundAmount: d.refundAmount, orderCount: channelOrderCount, afterSaleRate: chAfterSaleRate, nominalRoi: chNominalRoi, trueRoi: chTrueRoi };
-    });
+      return { channel, cost: d.cost, gmv: d.gmv, afterSaleCount: d.afterSaleCount, refundAmount: d.refundAmount, orderCount: Math.round(d.promoOrders), afterSaleRate: chAfterSaleRate, nominalRoi: chNominalRoi, trueRoi: chTrueRoi };
+    }).filter(c => c.cost > 0);
 
-    return { hasData: true, promoOrders: promoOrderCount, nonPromoOrders: nonPromoOrderCount, promoAfterSaleRate, nonPromoAfterSaleRate, promoRefundAmount, nonPromoRefundAmount, trueRoi, nominalRoi, totalPromoCost, totalPromoGmv, channelBreakdown, promoAfterSaleCount, nonPromoAfterSaleCount };
+    return { hasData: true, promoOrders: Math.round(promoOrderEstimate), nonPromoOrders: Math.round(nonPromoOrderEstimate), promoAfterSaleRate, nonPromoAfterSaleRate, promoRefundAmount, nonPromoRefundAmount, trueRoi, nominalRoi, totalPromoCost, totalPromoGmv, channelBreakdown, promoAfterSaleCount: Math.round(promoAfterSaleCount), nonPromoAfterSaleCount: Math.round(nonPromoAfterSaleCount) };
   }, [records, filteredOrders, allPromo, hasPromoData]);
 
   // ========== 地域售后分析 ==========
