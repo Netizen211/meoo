@@ -454,7 +454,7 @@ export default function AfterSalePage() {
   // ========== 推广与售后交叉分析 ==========
   const promoCrossAnalysis = useMemo(() => {
     if (!hasPromoData || filteredOrders.length === 0) {
-      return { hasData: false, promoOrders: 0, nonPromoOrders: 0, promoAfterSaleRate: 0, nonPromoAfterSaleRate: 0, promoRefundAmount: 0, nonPromoRefundAmount: 0, trueRoi: 0, nominalRoi: 0, totalPromoCost: 0, totalPromoGmv: 0, channelBreakdown: [] as any[] };
+      return { hasData: false, promoOrderEst: 0, nonPromoOrderEst: 0, promoOrders: 0, nonPromoOrders: 0, promoAfterSaleRate: 0, nonPromoAfterSaleRate: 0, promoRefundAmount: 0, nonPromoRefundAmount: 0, trueRoi: 0, nominalRoi: 0, totalPromoCost: 0, totalPromoGmv: 0, channelBreakdown: [] as any[], promoAfterSaleCount: 0, nonPromoAfterSaleCount: 0 };
     }
 
     // Step 1: 构建 商品ID×日期 → 推广订单数 的映射
