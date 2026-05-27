@@ -844,11 +844,35 @@ export default function AfterSalePage() {
 
   // ========== 概览 ==========
   const renderOverview = () => {
-    const earlyRefundPct = timeWindowAnalysis.windowList.find(w => w.key === '0-7天')?.pct ?? 0;
-    const earlyRefundPct2 = timeWindowAnalysis.windowList.find(w => w.key === '8-30天')?.pct ?? 0;
-    const within30Days = earlyRefundPct + earlyRefundPct2;
+    // 累计退款占比（用于概览卡片）
+    const cumulativePct = (maxDays: number) => {
+      if (!timeWindowAnalysis.totalWithPayTime) return null;
+      const windows = timeWindowAnalysis.windowList;
+      if (maxDays <= 7) return windows.find(w => w.key === '0-7天')?.pct ?? 0;
+      if (maxDays <= 30) return (windows.find(w => w.key === '0-7天')?.pct ?? 0) + (windows.find(w => w.key === '8-30天')?.pct ?? 0);
+      if (maxDays <= 60) {
+        let sum = 0;
+        windows.filter(w => w.min <= 60).forEach(w => sum += w.pct);
+        return sum;
+      }
+      if (maxDays <= 90) {
+        let sum = 0;
+        windows.filter(w => w.min <= 90).forEach(w => sum += w.pct);
+        return sum;
+      }
+      return 100;
+    };
+    const cumulativeCount = (maxDays: number) => {
+      if (!timeWindowAnalysis.totalWithPayTime) return 0;
+      let count = 0;
+      timeWindowAnalysis.windowList.filter(w => w.min <= maxDays).forEach(w => count += w.count);
+      return count;
+    };
+
     const anomalyProvinceCount = regionAnalysis.list.filter(p => p.sufficient && (p.afterSaleRate ?? 0) > regionAnalysis.avgRate + 2 * regionAnalysis.stdRate).length;
     const interceptRecovery = logisticsData.interceptRate > 0 ? (logisticsData.interceptRate / 100) * kpiData.refundAmount : 0;
+
+    const hasTimeData = timeWindowAnalysis.totalWithPayTime > 0;
 
     return (
     <div className="space-y-4">
@@ -859,27 +883,37 @@ export default function AfterSalePage() {
       )}
       {/* 交叉分析摘要卡片 */}
       <div className="grid grid-cols-4 gap-3">
-        <div className="pdd-card px-4 py-3">
-          <p className="text-xs text-[var(--pdd-text-secondary)]">推广 vs 非推广售后率</p>
-          <div className="flex items-center gap-2 mt-1">
+        <div className="pdd-card px-4 py-3 cursor-pointer hover:bg-[var(--pdd-bg)] transition-colors" onClick={() => setActiveTab('promoCross')}>
+          <p className="text-xs text-[var(--pdd-text-secondary)]">推广 vs 自然售后率</p>
+          <div className="flex items-center gap-1.5 mt-1">
             <span className="text-lg font-bold text-[var(--pdd-danger)]">{hasPromoData ? `${promoCrossAnalysis.promoAfterSaleRate.toFixed(1)}%` : '-'}</span>
             <span className="text-xs text-[var(--pdd-text-secondary)]">/</span>
             <span className="text-lg font-bold text-[var(--pdd-primary)]">{hasPromoData ? `${promoCrossAnalysis.nonPromoAfterSaleRate.toFixed(1)}%` : '-'}</span>
           </div>
-          <p className="text-xs text-[var(--pdd-text-secondary)]">推广 / 非推广</p>
+          <p className="text-xs text-[var(--pdd-text-secondary)]">点击查看明细对比</p>
         </div>
-        <div className="pdd-card px-4 py-3">
-          <p className="text-xs text-[var(--pdd-text-secondary)]">30天内退款占比</p>
-          <p className="text-2xl font-bold text-[var(--pdd-warning)]">{timeWindowAnalysis.totalWithPayTime > 0 ? `${within30Days.toFixed(1)}%` : '-'}</p>
-          <p className="text-xs text-[var(--pdd-text-secondary)]">{timeWindowAnalysis.totalWithPayTime > 0 ? `${(earlyRefundPct).toFixed(1)}% 7天内` : '需要售后数据'}</p>
+        <div className="pdd-card px-4 py-3 cursor-pointer hover:bg-[var(--pdd-bg)] transition-colors border-t-2 border-t-[var(--pdd-warning)]" onClick={() => setActiveTab('timeWindow')}>
+          <p className="text-xs text-[var(--pdd-text-secondary)]">退款时间分布</p>
+          {hasTimeData ? (
+            <>
+              <div className="grid grid-cols-3 gap-1 mt-1">
+                <div><span className="text-xs text-[var(--pdd-text-secondary)]">≤30天</span><p className="text-base font-bold text-[var(--pdd-warning)]">{cumulativePct(30)!.toFixed(0)}%</p><p className="text-[10px] text-[var(--pdd-text-secondary)]">{cumulativeCount(30)}单</p></div>
+                <div><span className="text-xs text-[var(--pdd-text-secondary)]">≤60天</span><p className="text-base font-bold text-[var(--pdd-primary)]">{cumulativePct(60)!.toFixed(0)}%</p><p className="text-[10px] text-[var(--pdd-text-secondary)]">{cumulativeCount(60)}单</p></div>
+                <div><span className="text-xs text-[var(--pdd-text-secondary)]">≤90天</span><p className="text-base font-bold text-[var(--pdd-success)]">{cumulativePct(90)!.toFixed(0)}%</p><p className="text-[10px] text-[var(--pdd-text-secondary)]">{cumulativeCount(90)}单</p></div>
+              </div>
+              <p className="text-[10px] text-right text-[var(--pdd-text-secondary)] mt-1">点击查看完整窗口</p>
+            </>
+          ) : (
+            <p className="text-lg font-bold text-[var(--pdd-text-secondary)] mt-1">-</p>
+          )}
         </div>
-        <div className="pdd-card px-4 py-3">
+        <div className="pdd-card px-4 py-3 cursor-pointer hover:bg-[var(--pdd-bg)] transition-colors" onClick={() => setActiveTab('region')}>
           <p className="text-xs text-[var(--pdd-text-secondary)]">异常省份</p>
           <p className="text-2xl font-bold text-[var(--pdd-danger)]">{regionAnalysis.list.length > 0 ? anomalyProvinceCount : '-'}</p>
-          <p className="text-xs text-[var(--pdd-text-secondary)]">{regionAnalysis.list.length > 0 ? '售后率超2σ' : '需要地域数据'}</p>
+          <p className="text-xs text-[var(--pdd-text-secondary)]">{regionAnalysis.list.length > 0 ? '售后率超2σ' : '点击查看地域分析'}</p>
         </div>
         <div className="pdd-card px-4 py-3">
-          <p className="text-xs text-[var(--pdd-text-secondary)]">拦截恢复金额(估)</p>
+          <p className="text-xs text-[var(--pdd-text-secondary)]">拦截恢复(估)</p>
           <p className="text-2xl font-bold text-[var(--pdd-success)]">{logisticsData.interceptRate > 0 ? `¥${interceptRecovery.toFixed(0)}` : '-'}</p>
           <p className="text-xs text-[var(--pdd-text-secondary)]">拦截率 {logisticsData.interceptRate > 0 ? `${logisticsData.interceptRate.toFixed(1)}%` : '-'}</p>
         </div>
