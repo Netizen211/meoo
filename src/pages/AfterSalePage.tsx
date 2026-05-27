@@ -592,7 +592,7 @@ export default function AfterSalePage() {
       return { channel, cost: d.cost, gmv: d.gmv, afterSaleCount: d.afterSaleCount, refundAmount: d.refundAmount, orderCount: Math.round(d.promoOrders), afterSaleRate: chAfterSaleRate, nominalRoi: chNominalRoi, trueRoi: chTrueRoi };
     }).filter(c => c.cost > 0);
 
-    return { hasData: true, promoOrders: Math.round(promoOrderEstimate), nonPromoOrders: Math.round(nonPromoOrderEstimate), promoAfterSaleRate, nonPromoAfterSaleRate, promoRefundAmount, nonPromoRefundAmount, trueRoi, nominalRoi, totalPromoCost, totalPromoGmv, channelBreakdown, promoAfterSaleCount: Math.round(promoAfterSaleCount), nonPromoAfterSaleCount: Math.round(nonPromoAfterSaleCount) };
+    return { hasData: true, promoOrderEst: Math.round(promoOrderEstimate), nonPromoOrderEst: Math.round(nonPromoOrderEstimate), promoOrders: Math.round(promoOrderEstimate), nonPromoOrders: Math.round(nonPromoOrderEstimate), promoAfterSaleRate, nonPromoAfterSaleRate, promoRefundAmount, nonPromoRefundAmount, trueRoi, nominalRoi, totalPromoCost, totalPromoGmv, channelBreakdown, promoAfterSaleCount: Math.round(promoAfterSaleCount), nonPromoAfterSaleCount: Math.round(nonPromoAfterSaleCount) };
   }, [records, filteredOrders, allPromo, hasPromoData]);
 
   // ========== 地域售后分析 ==========
@@ -1162,90 +1162,213 @@ export default function AfterSalePage() {
   );
 
   // ========== 推广关联分析 ==========
-  const renderPromoCross = () => (
+  const renderPromoCross = () => {
+    const a = promoCrossAnalysis;
+    const gap = a.promoAfterSaleRate - a.nonPromoAfterSaleRate;
+    const promoAvgRefund = a.promoOrderEst > 0 ? a.promoRefundAmount / a.promoOrderEst : 0;
+    const nonPromoAvgRefund = a.nonPromoOrderEst > 0 ? a.nonPromoRefundAmount / a.nonPromoOrderEst : 0;
+    const refundErosion = a.nominalRoi - a.trueRoi;
+
+    return (
     <div className="space-y-4">
       {!hasPromoData ? (
         <div className="pdd-card py-12 text-center text-sm text-[var(--pdd-text-secondary)]">
           <Package size={32} className="mx-auto mb-3 text-[var(--pdd-text-secondary)] opacity-50" />
           <p>请先上传推广数据（搜索推广/明星店铺/直播推广）以进行售后关联分析</p>
         </div>
-      ) : !promoCrossAnalysis.hasData ? (
+      ) : !a.hasData ? (
         <div className="pdd-card py-12 text-center text-sm text-[var(--pdd-text-secondary)]">当前时间范围内无推广数据</div>
       ) : (
         <>
-          <div className="grid grid-cols-4 gap-3">
-            <div className="pdd-card px-4 py-3">
-              <p className="text-xs text-[var(--pdd-text-secondary)]">推广订单售后率</p>
-              <p className="text-2xl font-bold text-[var(--pdd-danger)]">{promoCrossAnalysis.promoAfterSaleRate.toFixed(1)}%</p>
-              <p className="text-xs text-[var(--pdd-text-secondary)]">{promoCrossAnalysis.promoOrders} 单推广订单</p>
+          {/* ===== 核心结论横幅 ===== */}
+          <div className={`pdd-card px-5 py-4 border-2 ${gap > 1 ? 'border-red-200 bg-red-50/30' : gap < -1 ? 'border-green-200 bg-green-50/30' : 'border-gray-200'}`}>
+            <div className="flex items-center justify-between gap-8">
+              <div className="text-center flex-1">
+                <p className="text-xs text-[var(--pdd-text-secondary)] mb-1">推广订单售后率</p>
+                <p className="text-3xl font-bold text-[var(--pdd-danger)]">{a.promoAfterSaleRate.toFixed(1)}%</p>
+                <p className="text-xs text-[var(--pdd-text-secondary)]">{a.promoOrderEst} 单推广订单 · {a.promoAfterSaleCount} 笔售后</p>
+              </div>
+              <div className="text-center flex-shrink-0">
+                {Math.abs(gap) < 0.5 ? (
+                  <div className="flex flex-col items-center">
+                    <span className="text-lg font-bold text-[var(--pdd-text-secondary)]">≈</span>
+                    <span className="text-xs text-[var(--pdd-text-secondary)] bg-gray-100 px-2 py-0.5 rounded-full">基本持平</span>
+                  </div>
+                ) : gap > 0 ? (
+                  <div className="flex flex-col items-center">
+                    <ArrowUp size={24} className="text-[var(--pdd-danger)]" />
+                    <span className="text-lg font-bold text-[var(--pdd-danger)]">{gap.toFixed(1)}%</span>
+                    <span className="text-xs text-[var(--pdd-danger)] bg-red-100 px-2 py-0.5 rounded-full">推广更高</span>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center">
+                    <ArrowDown size={24} className="text-[var(--pdd-success)]" />
+                    <span className="text-lg font-bold text-[var(--pdd-success)]">{Math.abs(gap).toFixed(1)}%</span>
+                    <span className="text-xs text-[var(--pdd-success)] bg-green-100 px-2 py-0.5 rounded-full">自然更高</span>
+                  </div>
+                )}
+              </div>
+              <div className="text-center flex-1">
+                <p className="text-xs text-[var(--pdd-text-secondary)] mb-1">非推广订单售后率</p>
+                <p className="text-3xl font-bold text-[var(--pdd-primary)]">{a.nonPromoAfterSaleRate.toFixed(1)}%</p>
+                <p className="text-xs text-[var(--pdd-text-secondary)]">{a.nonPromoOrderEst} 单自然订单 · {a.nonPromoAfterSaleCount} 笔售后</p>
+              </div>
             </div>
-            <div className="pdd-card px-4 py-3">
-              <p className="text-xs text-[var(--pdd-text-secondary)]">非推广订单售后率</p>
-              <p className="text-2xl font-bold text-[var(--pdd-primary)]">{promoCrossAnalysis.nonPromoAfterSaleRate.toFixed(1)}%</p>
-              <p className="text-xs text-[var(--pdd-text-secondary)]">{promoCrossAnalysis.nonPromoOrders} 单非推广订单</p>
-            </div>
-            <div className="pdd-card px-4 py-3">
-              <p className="text-xs text-[var(--pdd-text-secondary)]">推广真实ROI</p>
-              <p className="text-2xl font-bold text-[var(--pdd-success)]">{promoCrossAnalysis.trueRoi.toFixed(2)}</p>
-              <p className="text-xs text-[var(--pdd-text-secondary)]">名义ROI {promoCrossAnalysis.nominalRoi.toFixed(2)}</p>
-            </div>
-            <div className="pdd-card px-4 py-3">
-              <p className="text-xs text-[var(--pdd-text-secondary)]">推广退款金额</p>
-              <p className="text-2xl font-bold text-[var(--pdd-danger)]">¥{promoCrossAnalysis.promoRefundAmount.toFixed(0)}</p>
-              <p className="text-xs text-[var(--pdd-text-secondary)]">非推广 ¥{promoCrossAnalysis.nonPromoRefundAmount.toFixed(0)}</p>
+            {gap > 1 && (
+              <p className="mt-3 text-xs text-center text-[var(--pdd-danger)] bg-red-100/50 px-3 py-1.5 rounded-lg">
+                推广带来的订单售后率比自然流量高 {gap.toFixed(1)} 个百分点，建议排查推广素材是否过度承诺、推广人群是否匹配
+              </p>
+            )}
+            {gap < -1 && (
+              <p className="mt-3 text-xs text-center text-[var(--pdd-success)] bg-green-100/50 px-3 py-1.5 rounded-lg">
+                推广带来的订单质量优于自然流量，售后率低 {Math.abs(gap).toFixed(1)} 个百分点
+              </p>
+            )}
+          </div>
+
+          {/* ===== 对比明细表 ===== */}
+          <div className="pdd-card p-4">
+            <h4 className="text-sm font-semibold mb-4 flex items-center gap-2"><BarChart3 size={16} className="text-[var(--pdd-danger)]" />推广 vs 自然流量 售后对比</h4>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-[var(--pdd-border)]">
+                    <th className="py-2 text-left text-[var(--pdd-text-secondary)] font-medium">指标</th>
+                    <th className="py-2 text-right text-[var(--pdd-text-secondary)] font-medium">推广订单</th>
+                    <th className="py-2 text-right text-[var(--pdd-text-secondary)] font-medium">自然订单</th>
+                    <th className="py-2 text-right text-[var(--pdd-text-secondary)] font-medium">差值</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-[var(--pdd-border)]">
+                    <td className="py-2.5 font-medium">订单总量</td>
+                    <td className="py-2.5 text-right font-mono text-[var(--pdd-danger)]">{a.promoOrderEst}</td>
+                    <td className="py-2.5 text-right font-mono text-[var(--pdd-primary)]">{a.nonPromoOrderEst}</td>
+                    <td className="py-2.5 text-right font-mono text-[var(--pdd-text-secondary)]">{a.promoOrderEst + a.nonPromoOrderEst > 0 ? (a.promoOrderEst / (a.promoOrderEst + a.nonPromoOrderEst) * 100).toFixed(0) : '-'}% 来自推广</td>
+                  </tr>
+                  <tr className="border-b border-[var(--pdd-border)]">
+                    <td className="py-2.5 font-medium">售后笔数（估算）</td>
+                    <td className="py-2.5 text-right font-mono text-[var(--pdd-danger)]">{a.promoAfterSaleCount}</td>
+                    <td className="py-2.5 text-right font-mono text-[var(--pdd-primary)]">{a.nonPromoAfterSaleCount}</td>
+                    <td className="py-2.5 text-right font-mono">{gap > 0 ? '+' : ''}{a.promoAfterSaleCount - a.nonPromoAfterSaleCount}</td>
+                  </tr>
+                  <tr className="border-b border-[var(--pdd-border)] bg-[var(--pdd-bg)]">
+                    <td className="py-2.5 font-semibold">售后率</td>
+                    <td className="py-2.5 text-right font-bold text-sm text-[var(--pdd-danger)]">{a.promoAfterSaleRate.toFixed(2)}%</td>
+                    <td className="py-2.5 text-right font-bold text-sm text-[var(--pdd-primary)]">{a.nonPromoAfterSaleRate.toFixed(2)}%</td>
+                    <td className={`py-2.5 text-right font-bold text-sm ${gap > 0 ? 'text-[var(--pdd-danger)]' : gap < 0 ? 'text-[var(--pdd-success)]' : 'text-[var(--pdd-text-secondary)]'}`}>
+                      {gap > 0 ? '+' : ''}{gap.toFixed(2)}%
+                    </td>
+                  </tr>
+                  <tr className="border-b border-[var(--pdd-border)]">
+                    <td className="py-2.5 font-medium">退款金额</td>
+                    <td className="py-2.5 text-right font-mono text-[var(--pdd-danger)]">¥{a.promoRefundAmount.toFixed(0)}</td>
+                    <td className="py-2.5 text-right font-mono text-[var(--pdd-primary)]">¥{a.nonPromoRefundAmount.toFixed(0)}</td>
+                    <td className="py-2.5 text-right font-mono text-[var(--pdd-text-secondary)]">¥{(a.promoRefundAmount - a.nonPromoRefundAmount).toFixed(0)}</td>
+                  </tr>
+                  <tr className="border-b border-[var(--pdd-border)]">
+                    <td className="py-2.5 font-medium">平均每单退款</td>
+                    <td className="py-2.5 text-right font-mono text-[var(--pdd-danger)]">¥{promoAvgRefund.toFixed(2)}</td>
+                    <td className="py-2.5 text-right font-mono text-[var(--pdd-primary)]">¥{nonPromoAvgRefund.toFixed(2)}</td>
+                    <td className="py-2.5 text-right font-mono text-[var(--pdd-text-secondary)]">¥{(promoAvgRefund - nonPromoAvgRefund).toFixed(2)}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
-          {promoCrossAnalysis.promoAfterSaleRate > promoCrossAnalysis.nonPromoAfterSaleRate && (
-            <div className="text-xs text-[var(--pdd-warning)] bg-pdd-warning/5 px-3 py-1.5 rounded-lg border border-[var(--pdd-warning)]/20">
-              推广订单售后率高于非推广订单 {(promoCrossAnalysis.promoAfterSaleRate - promoCrossAnalysis.nonPromoAfterSaleRate).toFixed(1)}%，建议排查是否有过度承诺或推广人群不匹配问题。
+
+          {/* ===== ROI 侵蚀 ===== */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="pdd-card p-4">
+              <h4 className="text-sm font-semibold mb-4 flex items-center gap-2"><DollarSign size={16} className="text-[var(--pdd-success)]" />推广ROI 退款侵蚀</h4>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[var(--pdd-text-secondary)]">推广总花费</span>
+                  <span className="text-sm font-mono font-bold">¥{a.totalPromoCost.toFixed(0)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[var(--pdd-text-secondary)]">推广GMV</span>
+                  <span className="text-sm font-mono font-bold">¥{a.totalPromoGmv.toFixed(0)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-[var(--pdd-text-secondary)]">退款金额（推广部分）</span>
+                  <span className="text-sm font-mono font-bold text-[var(--pdd-danger)]">- ¥{a.promoRefundAmount.toFixed(0)}</span>
+                </div>
+                <div className="border-t border-[var(--pdd-border)] pt-2 flex items-center justify-between">
+                  <span className="text-xs font-semibold">退款后GMV</span>
+                  <span className="text-sm font-mono font-bold text-[var(--pdd-success)]">¥{(a.totalPromoGmv - a.promoRefundAmount).toFixed(0)}</span>
+                </div>
+                <div className="bg-[var(--pdd-bg)] rounded-lg p-3 flex items-center justify-between">
+                  <span className="text-xs font-semibold">名义ROI → 真实ROI</span>
+                  <div className="flex items-center gap-2 font-mono text-sm">
+                    <span className="text-[var(--pdd-primary)]">{a.nominalRoi.toFixed(2)}</span>
+                    <span className="text-[var(--pdd-text-secondary)]">→</span>
+                    <span className={`font-bold ${a.trueRoi < a.nominalRoi ? 'text-[var(--pdd-danger)]' : 'text-[var(--pdd-success)]'}`}>{a.trueRoi.toFixed(2)}</span>
+                    <span className="text-xs text-[var(--pdd-danger)]">(-{refundErosion.toFixed(2)})</span>
+                  </div>
+                </div>
+              </div>
             </div>
-          )}
-          <div className="pdd-card p-4">
-            <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><BarChart3 size={16} className="text-[var(--pdd-danger)]" />各渠道真实ROI vs 名义ROI</h4>
-            {promoCrossAnalysis.channelBreakdown.length > 0 ? (
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={promoCrossAnalysis.channelBreakdown} barGap={4}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
-                  <XAxis dataKey="channel" tick={{ fontSize: 10 }} />
-                  <YAxis tick={{ fontSize: 10 }} />
-                  <Tooltip formatter={(v: number) => [v.toFixed(2), '']} contentStyle={{ fontSize: 11 }} />
-                  <Legend wrapperStyle={{ fontSize: 11 }} />
-                  <Bar dataKey="nominalRoi" fill="var(--pdd-primary)" name="名义ROI" barSize={24} />
-                  <Bar dataKey="trueRoi" fill="var(--pdd-success)" name="真实ROI(扣退款)" barSize={24} />
-                </BarChart>
-              </ResponsiveContainer>
-            ) : <div className="h-[280px] flex items-center justify-center text-sm text-[var(--pdd-text-secondary)]">暂无渠道数据</div>}
+
+            {/* ===== 渠道ROI对比 ===== */}
+            <div className="pdd-card p-4">
+              <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><TrendingUp size={16} className="text-[var(--pdd-danger)]" />各渠道真实ROI vs 名义ROI</h4>
+              {a.channelBreakdown.length > 0 ? (
+                <ResponsiveContainer width="100%" height={250}>
+                  <BarChart data={a.channelBreakdown} barGap={4}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
+                    <XAxis dataKey="channel" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip formatter={(v: number) => [v.toFixed(2), '']} contentStyle={{ fontSize: 11 }} />
+                    <Legend wrapperStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="nominalRoi" fill="var(--pdd-primary)" name="名义ROI" barSize={22} />
+                    <Bar dataKey="trueRoi" fill="var(--pdd-success)" name="真实ROI(扣退款)" barSize={22} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <div className="h-[250px] flex items-center justify-center text-sm text-[var(--pdd-text-secondary)]">暂无渠道数据</div>}
+            </div>
           </div>
-          <div className="pdd-card p-4">
-            <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><AlertTriangle size={16} className="text-[var(--pdd-danger)]" />各渠道售后率排行</h4>
-            {promoCrossAnalysis.channelBreakdown.length > 0 ? (
+
+          {/* ===== 渠道售后率排行 ===== */}
+          {a.channelBreakdown.length > 0 && (
+            <div className="pdd-card p-4">
+              <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><AlertTriangle size={16} className="text-[var(--pdd-danger)]" />各渠道推广订单售后率</h4>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead><tr className="text-[var(--pdd-text-secondary)] border-b border-[var(--pdd-border)]">
-                    <th className="py-2 text-left">渠道</th><th className="py-2 text-right">花费</th><th className="py-2 text-right">GMV</th><th className="py-2 text-right">订单数</th><th className="py-2 text-right">售后数</th><th className="py-2 text-right">售后率</th><th className="py-2 text-right">名义ROI</th><th className="py-2 text-right">真实ROI</th>
+                    <th className="py-2 text-left">推广渠道</th>
+                    <th className="py-2 text-right">推广花费</th>
+                    <th className="py-2 text-right">推广订单</th>
+                    <th className="py-2 text-right">退款金额</th>
+                    <th className="py-2 text-right">名义ROI</th>
+                    <th className="py-2 text-right">真实ROI</th>
+                    <th className="py-2 text-right">ROI侵蚀</th>
                   </tr></thead>
                   <tbody>
-                    {promoCrossAnalysis.channelBreakdown.sort((a, b) => b.afterSaleRate - a.afterSaleRate).map((ch, i) => (
+                    {a.channelBreakdown.sort((a, b) => b.afterSaleRate - a.afterSaleRate).map((ch, i) => {
+                      const chErosion = ch.nominalRoi - ch.trueRoi;
+                      return (
                       <tr key={i} className="border-b border-[var(--pdd-border)] hover:bg-[var(--pdd-bg)]">
                         <td className="py-2 font-medium">{ch.channel}</td>
                         <td className="py-2 text-right font-mono">¥{ch.cost.toFixed(0)}</td>
-                        <td className="py-2 text-right font-mono">¥{ch.gmv.toFixed(0)}</td>
-                        <td className="py-2 text-right">{ch.orderCount}</td>
-                        <td className="py-2 text-right text-pdd-danger">{ch.afterSaleCount}</td>
-                        <td className="py-2 text-right font-mono text-pdd-danger">{ch.afterSaleRate.toFixed(1)}%</td>
+                        <td className="py-2 text-right font-mono">{ch.orderCount}</td>
+                        <td className="py-2 text-right font-mono text-[var(--pdd-danger)]">¥{ch.refundAmount.toFixed(0)}</td>
                         <td className="py-2 text-right font-mono">{ch.nominalRoi.toFixed(2)}</td>
                         <td className="py-2 text-right font-mono text-[var(--pdd-success)]">{ch.trueRoi.toFixed(2)}</td>
+                        <td className="py-2 text-right font-mono text-[var(--pdd-danger)]">{chErosion > 0.01 ? `-${chErosion.toFixed(2)}` : '≈0'}</td>
                       </tr>
-                    ))}
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
-            ) : <div className="py-8 text-center text-sm text-[var(--pdd-text-secondary)]">暂无渠道数据</div>}
-          </div>
+            </div>
+          )}
         </>
       )}
     </div>
-  );
+    );
+  };
 
   // ========== 地域分析 ==========
   const renderRegion = () => (
