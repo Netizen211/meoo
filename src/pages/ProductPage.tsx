@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { DndContext, closestCenter, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
 import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
@@ -55,12 +55,30 @@ export default function ProductPage() {
   const [sortField, setSortField] = useState<string>('gmv');
   const [sortDesc, setSortDesc] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
-  const [productTags, setProductTags] = useState<Record<string, string[]>>({});
+  const [productTags, setProductTags] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = localStorage.getItem('dianfx_product_tags');
+      if (saved) { const parsed = JSON.parse(saved); if (parsed && typeof parsed === 'object') return parsed; }
+    } catch {}
+    return {};
+  });
   const [tagInput, setTagInput] = useState('');
   const [taggingProduct, setTaggingProduct] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
   const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
-  const [panelOrder, setPanelOrder] = useState<string[]>(['kpi', 'overview', 'lifecycle', 'sku', 'price', 'fulllink', 'profit']);
+  const [panelOrder, setPanelOrder] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('dianfx_product_panel_order');
+      if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr) && arr.length > 0) return arr; }
+    } catch {}
+    return ['kpi', 'overview', 'lifecycle', 'sku', 'price', 'fulllink', 'profit'];
+  });
+  useEffect(() => {
+    localStorage.setItem('dianfx_product_tags', JSON.stringify(productTags));
+  }, [productTags]);
+  useEffect(() => {
+    localStorage.setItem('dianfx_product_panel_order', JSON.stringify(panelOrder));
+  }, [panelOrder]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [deepAnalysisOpen, setDeepAnalysisOpen] = useState(false);

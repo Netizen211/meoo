@@ -30,16 +30,40 @@ export default function DashboardPage() {
   const [sortDesc, setSortDesc] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [detailModal, setDetailModal] = useState<{ open: boolean; title: string; data: any[]; columns?: { key: string; label: string }[] }>({ open: false, title: '', data: [] });
-  const [selectedTrendKpis, setSelectedTrendKpis] = useState<Set<string>>(new Set(['gmv', 'orderCount']));
-  const [hiddenCols, setHiddenCols] = useState<Set<string>>(new Set(['province']));
-  const [pinnedCols, setPinnedCols] = useState<Set<string>>(new Set());
+  const [selectedTrendKpis, setSelectedTrendKpis] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('dianfx_selected_trend_kpis');
+      if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr) && arr.length > 0) return new Set(arr); }
+    } catch {}
+    return new Set(['gmv', 'orderCount']);
+  });
+  const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('dianfx_hidden_cols');
+      if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
+    } catch {}
+    return new Set(['province']);
+  });
+  const [pinnedCols, setPinnedCols] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('dianfx_pinned_cols');
+      if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr)) return new Set(arr); }
+    } catch {}
+    return new Set();
+  });
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
   const [draggedPanel, setDraggedPanel] = useState<string | null>(null);
   const [orderDetail, setOrderDetail] = useState<any>(null);
   const [orderCustomCosts, setOrderCustomCosts] = useState<Record<string, { name: string; amount: number }[]>>(() => {
     try { const s = localStorage.getItem('dianfx_order_custom_costs'); return s ? JSON.parse(s) : {}; } catch { return {}; }
   });
-  const [panelOrder, setPanelOrder] = useState<string[]>(['kpi', 'trend', 'status', 'table']);
+  const [panelOrder, setPanelOrder] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem('dianfx_dashboard_panel_order');
+      if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr) && arr.length > 0) return arr; }
+    } catch {}
+    return ['kpi', 'trend', 'status', 'table'];
+  });
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [visibleKpis, setVisibleKpis] = useState<Set<string>>(() => {
@@ -63,6 +87,22 @@ export default function DashboardPage() {
   useEffect(() => {
     localStorage.setItem('dianfx_visible_kpis', JSON.stringify([...visibleKpis]));
   }, [visibleKpis]);
+  // 持久化趋势图选中 KPI
+  useEffect(() => {
+    localStorage.setItem('dianfx_selected_trend_kpis', JSON.stringify([...selectedTrendKpis]));
+  }, [selectedTrendKpis]);
+  // 持久化隐藏列
+  useEffect(() => {
+    localStorage.setItem('dianfx_hidden_cols', JSON.stringify([...hiddenCols]));
+  }, [hiddenCols]);
+  // 持久化固定列
+  useEffect(() => {
+    localStorage.setItem('dianfx_pinned_cols', JSON.stringify([...pinnedCols]));
+  }, [pinnedCols]);
+  // 持久化面板排序
+  useEffect(() => {
+    localStorage.setItem('dianfx_dashboard_panel_order', JSON.stringify(panelOrder));
+  }, [panelOrder]);
   const [kpiActiveFilter, setKpiActiveFilter] = useState<string | null>(null);
   const pageSize = 10;
 

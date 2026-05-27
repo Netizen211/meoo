@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Package, Edit3, Calculator, Save, AlertCircle, AlertTriangle, Check, ChevronDown, ChevronUp,
@@ -149,7 +149,16 @@ function ProcessPanel({ alertData, alertType, onProcess, onCancel, existingData 
 }
 
 export default function CostManagementPage() {
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const saved = localStorage.getItem('dianfx_cost_active_tab');
+      if (saved) return saved;
+    } catch {}
+    return 'overview';
+  });
+  useEffect(() => {
+    localStorage.setItem('dianfx_cost_active_tab', activeTab);
+  }, [activeTab]);
   const tf = useTimeFilter('7', 'day');
   const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
 
