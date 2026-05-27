@@ -66,7 +66,7 @@
       Element.prototype.querySelector = function(s) { return safeQS(origElQS, this, s); };
     })();</script><script>// 域名绑定检查 — 非授权域名直接白屏
     (function() {
-      var allowedHosts = ['localhost', '127.0.0.1', '121.40.196.79'];
+      var allowedHosts = ['localhost', '127.0.0.1', '121.40.196.79', 'melody.wang', 'www.melody.wang', 'admin.melody.wang'];
       try {
         var configHosts = localStorage.getItem('dianfx_allowed_hosts');
         if (configHosts) {
@@ -91,4 +91,4 @@
           document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:24px;color:#999;">请关闭开发者工具后刷新页面</div>';
         }
       }, 1000);
-    })();</script></head><body><div id="root"></div><script defer="defer" src="bundle.js"></script></body></html>
+    })();</script></head><body><div id="root"></div><script defer="defer" src="bundle.75694b5b.js"></script></body></html>

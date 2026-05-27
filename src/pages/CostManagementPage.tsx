@@ -11,7 +11,7 @@ import { useData } from '../App';
 import type { TaxConfig, CustomDeduction } from '../components/ProductLinkStats';
 import { findField } from '../utils';
 import { getBestPlatformFee, getBestInsuranceFee, getPenaltyFees, matchLateShipmentPenalties, calcLateShipmentPenalty, isLateShipment } from '../utils/financialActuals';
-import { evaluateFormula, validateFormula, FormulaContext } from '../utils/formulaEngine';
+import { evaluateFormula, validateFormula, getVarOptions, FormulaContext } from '../utils/formulaEngine';
 import TimeFilter, { TimeRange, TimeGranularity, filterByTimeRange, getAllDateGroups, useTimeFilter } from '../components/TimeFilter';
 
 const TABS = [
@@ -2063,7 +2063,7 @@ export default function CostManagementPage() {
                 <div className="flex items-center gap-2 mt-1">
                   <input className="flex-1 px-2 py-1.5 border border-pdd-border rounded-lg text-sm font-mono" value={deductionForm.formula || ''}
                     onChange={e => { setDeductionForm(f => ({ ...f, formula: e.target.value })); setFormulaValidation(null); }}
-                    placeholder="如: revenue * 0.05 或 orders * 2" />
+                    placeholder="如: 销售额*0.05 或 订单数*2 或 revenue*0.05" />
                   <button onClick={handleValidateFormula} className="px-3 py-1.5 border border-pdd-border rounded-lg text-xs hover:bg-pdd-bg">
                     验证
                   </button>
@@ -2075,44 +2075,31 @@ export default function CostManagementPage() {
                   </div>
                 )}
                 <details className="mt-2">
-                  <summary className="text-xs text-pdd-primary-light cursor-pointer hover:underline">可用变量（点击展开）</summary>
-                  <div className="mt-2 grid grid-cols-2 gap-1 text-[10px]">
-                    <div className="space-y-0.5">
-                      <p className="text-pdd-text-secondary font-medium">基础交易:</p>
-                      {['gmv', 'revenue', 'orders', 'sales', 'avgOrderValue'].map(v => (
-                        <span key={v} className="inline-block px-1.5 py-0.5 bg-pdd-bg rounded cursor-pointer hover:bg-pdd-primary/10 mr-1 mb-1"
-                          onClick={() => { setDeductionForm(f => ({ ...f, formula: (f.formula || '') + v })); }}>{v}</span>
-                      ))}
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="text-pdd-text-secondary font-medium">成本费用:</p>
-                      {['productCost', 'packagingFee', 'shippingFee', 'promoCost', 'discount', 'taxes'].map(v => (
-                        <span key={v} className="inline-block px-1.5 py-0.5 bg-pdd-bg rounded cursor-pointer hover:bg-pdd-primary/10 mr-1 mb-1"
-                          onClick={() => { setDeductionForm(f => ({ ...f, formula: (f.formula || '') + v })); }}>{v}</span>
-                      ))}
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="text-pdd-text-secondary font-medium">利润指标:</p>
-                      {['profit', 'grossProfit', 'netProfit'].map(v => (
-                        <span key={v} className="inline-block px-1.5 py-0.5 bg-pdd-bg rounded cursor-pointer hover:bg-pdd-primary/10 mr-1 mb-1"
-                          onClick={() => { setDeductionForm(f => ({ ...f, formula: (f.formula || '') + v })); }}>{v}</span>
-                      ))}
-                    </div>
-                    <div className="space-y-0.5">
-                      <p className="text-pdd-text-secondary font-medium">推广数据:</p>
-                      {['promoOrders', 'promoTransaction', 'promoClicks', 'promoImpressions', 'ctr', 'cvr', 'roi'].map(v => (
-                        <span key={v} className="inline-block px-1.5 py-0.5 bg-pdd-bg rounded cursor-pointer hover:bg-pdd-primary/10 mr-1 mb-1"
-                          onClick={() => { setDeductionForm(f => ({ ...f, formula: (f.formula || '') + v })); }}>{v}</span>
-                      ))}
-                    </div>
+                  <summary className="text-xs text-pdd-primary-light cursor-pointer hover:underline">可用变量（点击展开，支持中文名）</summary>
+                  <div className="mt-2 space-y-2 text-[10px]">
+                    {(() => {
+                      const varOpts = getVarOptions();
+                      const categories = [...new Set(varOpts.map(v => v.category))];
+                      return categories.map(cat => (
+                        <div key={cat} className="space-y-0.5">
+                          <p className="text-pdd-text-secondary font-medium">{cat}:</p>
+                          {varOpts.filter(v => v.category === cat).map(v => (
+                            <span key={v.key} className="inline-block px-1.5 py-0.5 bg-pdd-bg rounded cursor-pointer hover:bg-pdd-primary/10 mr-1 mb-1"
+                              onClick={() => { setDeductionForm(f => ({ ...f, formula: (f.formula || '') + v.label })); }}
+                              title={`${v.label} → ${v.key}（两种写法等价）`}>{v.label}</span>
+                          ))}
+                        </div>
+                      ));
+                    })()}
                   </div>
-                  <p className="text-xs text-pdd-text-secondary mt-1">函数: max, min, abs, round, ceil, floor</p>
+                  <p className="text-[10px] text-pdd-text-secondary mt-1">支持中文变量名（如"销售额*0.05"），也可用英文（如"revenue*0.05"）</p>
+                  <p className="text-[10px] text-pdd-text-secondary mt-0.5">函数: max, min, abs, round, ceil, floor</p>
                 </details>
               </div>
               <div>
                 <label className="text-xs text-pdd-text-secondary">条件表达式(可选)</label>
                 <input className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={deductionForm.condition || ''}
-                  onChange={e => setDeductionForm(f => ({ ...f, condition: e.target.value }))} placeholder="如: revenue > 100" />
+                  onChange={e => setDeductionForm(f => ({ ...f, condition: e.target.value }))} placeholder="如: 利润>0 或 revenue>100" />
               </div>
               <div>
                 <label className="text-xs text-pdd-text-secondary">有效期起(可选)</label>

@@ -437,7 +437,7 @@ export function useProductStats(
       });
     });
 
-    // 明星店铺和直播推广数据（按天汇总，无商品ID）- 按日期+GMV占比分配
+    // 明星店铺、直播推广、商品推广分天汇总（按天汇总，无商品ID）- 按日期+GMV占比分配
     // Step 1: 构建每日商品GMV占比表
     const dailyGmvMap: Record<string, { pid: string; gmv: number }[]> = {};
     orders.forEach((o: any) => {
@@ -514,7 +514,35 @@ export function useProductStats(
       });
     });
 
-    // Step 3: 按日期+GMV占比分配明星店铺和直播推广数据
+    // 商品推广分天汇总（无商品ID）- 扣除promotionProducts已精确匹配的部分后，按GMV占比分配
+    const dailyProductPromoCost: Record<string, number> = {};
+    promoProducts.forEach((p: any) => {
+      const dateStr = cleanStr(p['日期'] || '');
+      if (!dateStr) return;
+      dailyProductPromoCost[dateStr] = (dailyProductPromoCost[dateStr] || 0) +
+        safeNum(p['成交花费(元)'] ?? p['总花费(元)'] ?? 0);
+    });
+
+    promoSummary.forEach((r: any) => {
+      const dateStr = cleanStr(r['日期'] || r['统计日期'] || '');
+      if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return;
+      const rawCost = safeNum(r['总花费(元)'] ?? r['花费(元)'] ?? r['成交花费(元)'] ?? 0);
+      const alreadyAttributed = dailyProductPromoCost[dateStr] || 0;
+      const netCost = Math.max(0, rawCost - alreadyAttributed);
+      if (netCost <= 0) return;
+      promoDayRows.push({
+        source: '商品推广(分天)',
+        date: dateStr,
+        cost: netCost,
+        clicks: safeNum(r['点击量'] ?? 0),
+        impressions: safeNum(r['曝光量'] ?? 0),
+        orders: safeNum(r['成交笔数'] ?? 0),
+        transaction: safeNum(r['交易额(元)'] ?? r['成交金额(元)'] ?? 0),
+        rawRow: r,
+      });
+    });
+
+    // Step 3: 按日期+GMV占比分配明星店铺、直播推广和分天汇总数据
     promoDayRows.forEach(row => {
       const ratios = dailyRatios[row.date];
       if (!ratios || ratios.length === 0) return;
