@@ -30,7 +30,7 @@ import { addLog } from './utils/operationLog';
 import { OrderFinancialActual, UnlinkedFinancials, buildFinancialIndex } from './utils/financialActuals';
 import { getItem, setItem, removeItem, getAllKeys, migrateFromLocalStorage, isIndexedDBAvailable } from './services/localDataStore';
 import { syncStoreData, pullStoreData } from './api/dataApi';
-import { hasTokens } from './api/client';
+import { apiClient, hasTokens } from './api/client';
 
 interface User {
   id: string;
@@ -434,6 +434,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       // 从服务器拉取数据合并（如果已登录且有店铺）
       if (hasTokens()) {
         try {
+          // 先从服务器拉取店铺列表，合并到本地（解决换设备后 dianfx_stores 为空的问题）
+          const storesRes = await apiClient.get<{ id: string; name: string; createdAt: string }[]>('/stores');
+          if (storesRes.success && storesRes.data?.length) {
+            const localStores: { id: string; name: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
+            const localIds = new Set(localStores.map((s: any) => s.id));
+            for (const ss of storesRes.data) {
+              if (!localIds.has(ss.id)) localStores.push(ss);
+            }
+            localStorage.setItem('dianfx_stores', JSON.stringify(localStores));
+          }
           const storesList: { id: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
           let hasServerData = false;
           for (const store of storesList) {
