@@ -22,6 +22,8 @@ export function sf(v: any): number {
   return isNaN(n) ? 0 : n;
 }
 
+export const safeFloat = sf;
+
 export function ss(v: any): string {
   return String(v || '').trim();
 }

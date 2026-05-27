@@ -683,6 +683,10 @@ function CostProfitSection({ product }: { product: ProductStat }) {
     { name: '包装费', value: costBreakdown?.packagingFee || 0, color: 'var(--pdd-warning)' },
     { name: '邮费', value: costBreakdown?.shippingFee || 0, color: 'var(--pdd-info)' },
     { name: '推广费', value: costBreakdown?.promoCost || 0, color: '#722ed1' },
+    { name: '平台扣点', value: costBreakdown?.platformFee || 0, color: '#ff7a45' },
+    { name: '运费险', value: costBreakdown?.insuranceFee || 0, color: '#ffc53d' },
+    { name: '罚款', value: costBreakdown?.penaltyFee || 0, color: '#f5222d' },
+    { name: '营销费', value: costBreakdown?.marketingFee || 0, color: '#eb2f96' },
     { name: '税费', value: costBreakdown?.taxes || 0, color: '#13c2c2' },
     { name: '其他扣费', value: costBreakdown?.customDeductions || 0, color: 'var(--pdd-text-secondary)' },
   ].filter(d => d.value > 0);
@@ -791,6 +795,10 @@ function CostProfitSection({ product }: { product: ProductStat }) {
               { label: '包装费', value: costBreakdown?.packagingFee || 0 },
               { label: '邮费', value: costBreakdown?.shippingFee || 0 },
               { label: '推广费', value: costBreakdown?.promoCost || 0 },
+              { label: '平台扣点', value: costBreakdown?.platformFee || 0 },
+              { label: '运费险', value: costBreakdown?.insuranceFee || 0 },
+              { label: '罚款/扣款', value: costBreakdown?.penaltyFee || 0 },
+              { label: '营销费用', value: costBreakdown?.marketingFee || 0 },
               { label: '税费', value: costBreakdown?.taxes || 0 },
               { label: '自定义扣费', value: costBreakdown?.customDeductions || 0 },
             ].map((item) => (

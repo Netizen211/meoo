@@ -429,8 +429,9 @@ export default function DashboardPage() {
   const unpinnedColumns = columns.filter(c => !pinnedCols.has(c.key) && !hiddenCols.has(c.key));
 
   const handleKpiClick = (label: string) => {
+    // 退款率/退款金额/售后率：直接打开详情弹窗，不再过滤全盘数据
     if (label === '退款率' || label === '退款金额' || label === '售后率') {
-      setKpiActiveFilter(prev => prev === label ? null : label);
+      handleKpiDetailClick(label);
       return;
     }
     setKpiActiveFilter(null);
@@ -467,7 +468,15 @@ export default function DashboardPage() {
     const defaultCols = [{ key: '订单号', label: '订单号' }, { key: '时间', label: '支付时间' }, { key: '商品', label: '商品' }, { key: '实付', label: '实付(元)' }];
     const cols = kpiColMap[label] || defaultCols;
 
-    const data = filteredOrders.map((o: any) => ({
+    // 退款/售后类KPI：详情弹窗仅展示相关订单
+    let detailOrders = filteredOrders;
+    if (label === '退款率' || label === '退款金额') {
+      detailOrders = filteredOrders.filter(o => String(findField(o, '售后状态') || '').includes('退款'));
+    } else if (label === '售后率') {
+      detailOrders = filteredOrders.filter(o => { const st = String(findField(o, '售后状态') || '').trim(); return st && st !== '无售后或售后取消' && st !== '无'; });
+    }
+
+    const data = detailOrders.map((o: any) => ({
       '订单号': String(findField(o, '订单号') || ''),
       '时间': String(findField(o, '支付时间') || '').split(' ')[0],
       '商品': String(findField(o, '商品', '商品名称') || '').slice(0, 30),
@@ -478,7 +487,7 @@ export default function DashboardPage() {
       '发货时间': String(findField(o, '发货时间') || ''),
       '优惠': (safeFloat(findField(o, '店铺优惠折扣(元)', '店铺优惠折扣', '店铺优惠')) + safeFloat(findField(o, '平台优惠折扣(元)', '平台优惠折扣', '平台优惠')) + safeFloat(findField(o, '多多支付立减金额(元)', '多多支付立减金额', '支付立减'))).toFixed(2),
     }));
-    setDetailModal({ open: true, title: label, data, columns: cols });
+    setDetailModal({ open: true, title: `${label}详情 (${data.length}条)`, data, columns: cols });
   };
 
   const renderPanel = (panelId: string) => {
@@ -627,8 +636,7 @@ export default function DashboardPage() {
           if (matchingPromos.length > 0) {
             promoCost = matchingPromos.reduce((s: number, r: any) => s + safeFloat(findField(r, '花费(元)', '总花费(元)', '成交花费(元)')), 0);
             // 当天该商品订单数，用于分摊
-            const sameDayOrders = insurance.length > 0 ? 0 : // fallback: rough estimate
-              (currentDisplayData?.orders || []).filter((ord: any) => {
+            const sameDayOrders = (currentDisplayData?.orders || []).filter((ord: any) => {
                 const oD = String(findField(ord, '支付时间') || '').split(' ')[0];
                 const oPid = String(findField(ord, '商品id', '商品ID') || '');
                 return oD === payDate && oPid === productId;
@@ -756,6 +764,7 @@ export default function DashboardPage() {
 
         const penaltyFees = getPenaltyFees(orderNo, orderFinancialActuals);
         const marketingFees = getMarketingFees(orderNo, orderFinancialActuals);
+        const subTechFee = orderFinancialActuals[orderNo]?.subTechFee ?? 0;
 
         // 费用合计（与 ProductLinkStats 计算模型一致）
         const totalCosts =
@@ -834,7 +843,8 @@ export default function DashboardPage() {
             ...(shippingFeePerOrderCost > 0 ? [['快递费(配置)', `-¥${shippingFeePerOrderCost.toFixed(2)}`]] as [string, React.ReactNode][] : []),
             ...(laborFee > 0 ? [['人工费', `-¥${laborFee.toFixed(2)}`]] as [string, React.ReactNode][] : []),
             ...(platformCommission > 0 ? [['平台佣金', `-¥${platformCommission.toFixed(2)}`]] as [string, React.ReactNode][] : []),
-            ...(packagingFee + shippingFeePerOrderCost + laborFee + platformCommission === 0 ? [['状态', <span className="text-pdd-text-secondary text-[10px]">未配置，请在成本管理设置</span>]] as [string, React.ReactNode][] : []),
+            ...(subTechFee > 0 ? [['百亿补贴技术服务费', <span className="text-pdd-danger font-medium">-¥{subTechFee.toFixed(2)}</span>]] as [string, React.ReactNode][] : []),
+            ...(packagingFee + shippingFeePerOrderCost + laborFee + platformCommission + subTechFee === 0 ? [['状态', <span className="text-pdd-text-secondary text-[10px]">未配置，请在成本管理设置</span>]] as [string, React.ReactNode][] : []),
           ]},
           { title: '物流费用(实际)', rows: [
             ['邮费', `-¥${postage.toFixed(2)}`],
@@ -848,6 +858,7 @@ export default function DashboardPage() {
             ...(starLiveMatchInfo && starLivePromoCost > 0 ? [['分摊明细', <span className="text-[10px] text-pdd-text-secondary">{starLiveMatchInfo}</span>]] as [string, React.ReactNode][] : []),
             ['运费险', insFee > 0 ? <span className="text-pdd-danger">-¥{insFee.toFixed(2)}</span> : '未参保'],
             ...(penaltyFees > 0 ? [['罚款/扣款', <span className="text-pdd-danger font-medium">-¥{penaltyFees.toFixed(2)}</span>]] as [string, React.ReactNode][] : []),
+            ...(marketingFees > 0 ? [['营销费用(实际)', <span className="text-pdd-danger font-medium">-¥{marketingFees.toFixed(2)}</span>]] as [string, React.ReactNode][] : []),
           ]},
           ...(taxDetails.length > 0 ? [{ title: '税费', rows: [
             ...taxDetails.filter((t: any) => t.amount > 0).map((t: any) => [`${t.name}(${t.rate}%)`, <span className="text-pdd-danger">-¥{t.amount.toFixed(2)}</span>] as [string, React.ReactNode]),

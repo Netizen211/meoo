@@ -7,6 +7,9 @@ export interface CostBreakdown {
   promoCost: number;
   discount: number;
   platformFee: number;
+  insuranceFee?: number;
+  penaltyFee?: number;
+  marketingFee?: number;
   taxes: number;
   customDeductions: number;
 }

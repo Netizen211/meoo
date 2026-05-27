@@ -283,6 +283,8 @@ function ProfitWaterfall({ stats }: { stats: ProductStat }) {
     { label: '商品成本', value: -(cb.productCost || 0), color: 'var(--pdd-primary)', pct: gmv ? (Math.abs(cb.productCost || 0) / gmv * 100).toFixed(0) + '%' : '--' },
     { label: '平台佣金', value: -(cb.platformFee || 0), color: 'var(--pdd-primary-light)', pct: gmv ? (Math.abs(cb.platformFee || 0) / gmv * 100).toFixed(0) + '%' : '--' },
     { label: '运费险', value: -(cb.insuranceFee || 0), color: 'var(--pdd-primary-light)', pct: gmv ? (Math.abs(cb.insuranceFee || 0) / gmv * 100).toFixed(0) + '%' : '--' },
+    { label: '罚款/扣款', value: -(cb.penaltyFee || 0), color: '#f5222d', pct: gmv ? (Math.abs(cb.penaltyFee || 0) / gmv * 100).toFixed(0) + '%' : '--' },
+    { label: '营销费用', value: -(cb.marketingFee || 0), color: '#eb2f96', pct: gmv ? (Math.abs(cb.marketingFee || 0) / gmv * 100).toFixed(0) + '%' : '--' },
     { label: '包装快递', value: -((cb.packagingFee || 0) + (cb.shippingFee || 0)), color: 'var(--pdd-primary-light)', pct: gmv ? (Math.abs((cb.packagingFee || 0) + (cb.shippingFee || 0)) / gmv * 100).toFixed(0) + '%' : '--' },
     { label: '税费', value: -(cb.taxes || 0), color: '#f97316', pct: gmv ? (Math.abs(cb.taxes || 0) / gmv * 100).toFixed(0) + '%' : '--' },
     { label: '其他扣费', value: -(cb.customDeductions || 0), color: '#f97316', pct: gmv ? (Math.abs(cb.customDeductions || 0) / gmv * 100).toFixed(0) + '%' : '--' },

@@ -18,13 +18,19 @@ function fmtInt(n: number) { return n.toFixed(0); }
 export default function ProductDetailDrawer({ product, isOpen, onClose }: Props) {
   const waterfallData = useMemo(() => {
     if (!product) return [];
-    return [
+    const cb = product.costBreakdown || {};
+    const items: { name: string; value: number; fill: string }[] = [
       { name: 'GMV', value: product.gmv, fill: 'var(--pdd-primary)' },
       { name: '折扣', value: -product.discount, fill: 'var(--pdd-warning)' },
       { name: '推广费', value: -product.promoCost, fill: 'var(--pdd-purple)' },
-      { name: '成本', value: -(product.costBreakdown?.productCost || product.totalCost), fill: 'var(--pdd-danger)' },
-      { name: '净利润', value: product.netProfit, fill: product.netProfit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' },
     ];
+    if ((cb.platformFee || 0) > 0) items.push({ name: '平台扣点', value: -(cb.platformFee || 0), fill: '#ff7a45' });
+    if ((cb.insuranceFee || 0) > 0) items.push({ name: '运费险', value: -(cb.insuranceFee || 0), fill: '#ffc53d' });
+    if ((cb.penaltyFee || 0) > 0) items.push({ name: '罚款/扣款', value: -(cb.penaltyFee || 0), fill: '#f5222d' });
+    if ((cb.marketingFee || 0) > 0) items.push({ name: '营销费用', value: -(cb.marketingFee || 0), fill: '#eb2f96' });
+    items.push({ name: '成本', value: -(cb.productCost || product.totalCost || 0), fill: 'var(--pdd-danger)' });
+    items.push({ name: '净利润', value: product.netProfit, fill: product.netProfit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' });
+    return items;
   }, [product]);
 
   const afterSalePieData = useMemo(() => {

@@ -180,6 +180,8 @@ export default function CostManagementPage() {
     setLaborFeePerOrder,
     insuranceFeePerOrder,
     setInsuranceFeePerOrder,
+    promotionFeePerOrder,
+    setPromotionFeePerOrder,
     abnormalOrders,
     setAbnormalOrder,
     removeAbnormalOrder,
@@ -342,6 +344,7 @@ export default function CostManagementPage() {
   const [tempPlatformCommissionRate, setTempPlatformCommissionRate] = useState(String(platformCommissionRate || 0));
   const [tempLaborFee, setTempLaborFee] = useState(String(laborFeePerOrder || 0));
   const [tempInsuranceFee, setTempInsuranceFee] = useState(String(insuranceFeePerOrder || 0));
+  const [tempPromotionFee, setTempPromotionFee] = useState(String(promotionFeePerOrder || 0));
   const [showImportHelp, setShowImportHelp] = useState(false);
   const [showCostHistory, setShowCostHistory] = useState(false);
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
@@ -645,6 +648,7 @@ export default function CostManagementPage() {
     setPlatformCommissionRate(parseFloat(tempPlatformCommissionRate) || 0);
     setLaborFeePerOrder(parseFloat(tempLaborFee) || 0);
     setInsuranceFeePerOrder(parseFloat(tempInsuranceFee) || 0);
+    setPromotionFeePerOrder(parseFloat(tempPromotionFee) || 0);
     setShowQuickSettings(false);
   };
 
@@ -675,6 +679,7 @@ export default function CostManagementPage() {
     const totalPackaging = packagingFeePerOrder * uniqueOrderCnt;
     const totalLabor = laborFeePerOrder * uniqueOrderCnt;
     const totalShipping = (shippingFeePerOrder || 0) * uniqueOrderCnt;
+    const totalPromotionFee = (promotionFeePerOrder || 0) * uniqueOrderCnt;
 
     // 实际财务数据覆盖：以公式为基准，有货款明细的订单用实际值替换
     const positivePrices = sku.prices.filter(p => p > 0);
@@ -682,6 +687,7 @@ export default function CostManagementPage() {
     const avgRevenue = uniqueOrderCnt > 0 ? totalRevenue / uniqueOrderCnt : 0;
 
     let totalPlatformCommission = totalRevenue * (platformCommissionRate / 100);
+    let totalSubTechFee = 0; // 百亿补贴扣点（单独展示）
     let totalInsurance = (insuranceFeePerOrder || 0) * sku.insuredOrderCount;
     let totalPenalties = 0;
     let totalMarketingFees = 0;
@@ -697,7 +703,8 @@ export default function CostManagementPage() {
       if (actual?.hasData) {
         actualOrderCount++;
         if (actual.baseTechFee > 0 || actual.subTechFee > 0) {
-          totalPlatformCommission += (actual.baseTechFee + actual.subTechFee) - avgRevenue * (platformCommissionRate / 100);
+          totalPlatformCommission += actual.baseTechFee - avgRevenue * (platformCommissionRate / 100);
+          totalSubTechFee += actual.subTechFee;
         }
         if (actual.shippingInsurance > 0) {
           totalInsurance += actual.shippingInsurance - (insuranceFeePerOrder || 0);
@@ -714,7 +721,7 @@ export default function CostManagementPage() {
       }
     });
 
-    const subtotal = totalRawCost + totalPackaging + totalLabor + totalShipping + totalInsurance + totalPlatformCommission + totalPenalties + totalMarketingFees;
+    const subtotal = totalRawCost + totalPackaging + totalLabor + totalShipping + totalInsurance + totalPlatformCommission + totalSubTechFee + totalPenalties + totalMarketingFees + totalPromotionFee;
 
     // 自定义扣费：使用统一的安全公式引擎，含范围/条件/有效期检查
     const deductionDetails = (customDeductions || []).filter(d => d.enabled).sort((a, b) => a.sortOrder - b.sortOrder).map(d => {
@@ -774,8 +781,10 @@ export default function CostManagementPage() {
       totalShipping, shippingOrderCount: sku.shippingOrderCount,
       totalInsurance, insuredOrderCount: sku.insuredOrderCount,
       totalPlatformCommission,
+      totalSubTechFee,
       totalPenalties,
       totalMarketingFees,
+      totalPromotionFee,
       actualOrderCount,
       confirmedPenaltyCount,
       estimatedPenaltyCount,
@@ -811,12 +820,12 @@ export default function CostManagementPage() {
         const lines = v.rows;
         const products = [...new Set(lines.map((r: any) => String(findField(r, '商品', '商品名称') || '').slice(0, 20)))];
         const totalItems = lines.reduce((s: number, r: any) => s + (parseInt(String(findField(r, '商品数量(件)', '商品数量', '数量') || '1')) || 1), 0);
-        const totalPerOrderFees = packagingFeePerOrder + (laborFeePerOrder || 0) + (shippingFeePerOrder || 0) + (insuranceFeePerOrder || 0);
+        const totalPerOrderFees = packagingFeePerOrder + (laborFeePerOrder || 0) + (shippingFeePerOrder || 0) + (insuranceFeePerOrder || 0) + (promotionFeePerOrder || 0);
         const duplicateFee = totalPerOrderFees * (lines.length - 1);
         return { orderNo, lines: lines.length, products, totalItems, duplicateFee, totalPerOrderFees, _rows: lines };
       })
       .sort((a, b) => b.lines - a.lines);
-  }, [filteredOrders, packagingFeePerOrder, laborFeePerOrder, shippingFeePerOrder, insuranceFeePerOrder]);
+  }, [filteredOrders, packagingFeePerOrder, laborFeePerOrder, shippingFeePerOrder, insuranceFeePerOrder, promotionFeePerOrder]);
 
   // 2. 一单多件：单行商品数量 > 1
   const multiItemAlerts = useMemo(() => {
@@ -882,6 +891,7 @@ export default function CostManagementPage() {
           + (laborFeePerOrder || 0)
           + (shippingFeePerOrder || 0)
           + insuranceCost
+          + (promotionFeePerOrder || 0)
           + platformCost
           + penaltyFees
           + (orderActual?.marketingFees ?? 0);
@@ -921,6 +931,7 @@ export default function CostManagementPage() {
           + (laborFeePerOrder || 0)
           + (shippingFeePerOrder || 0)
           + insuranceCost2
+          + (promotionFeePerOrder || 0)
           + platformCost2
           + penaltyFees2
           + (orderActual2?.marketingFees ?? 0);
@@ -928,7 +939,7 @@ export default function CostManagementPage() {
         return { orderNo, product, merchant, qty, cost: knownCost > 0 ? knownCost : 0, estimatedCost, loss, skuKey, costEstimated: knownCost <= 0, _raw: o };
       })
       .sort((a, b) => a.loss - b.loss);
-  }, [filteredOrders, productCosts, packagingFeePerOrder, shippingFeePerOrder, laborFeePerOrder, insuranceFeePerOrder, platformCommissionRate, defaultCostRatio, currentDisplayData, abnormalOrders, orderFinancialActuals, latePenaltyMap]);
+  }, [filteredOrders, productCosts, packagingFeePerOrder, shippingFeePerOrder, laborFeePerOrder, insuranceFeePerOrder, promotionFeePerOrder, platformCommissionRate, defaultCostRatio, currentDisplayData, abnormalOrders, orderFinancialActuals, latePenaltyMap]);
 
   // 统计因无成本数据被跳过的订单数（defaultCostRatio=0 且 knownCost=0 时）
   const skippedNoCostCount = useMemo(() => {
@@ -1324,12 +1335,26 @@ export default function CostManagementPage() {
               {insuranceFeePerOrder > 0 && costInfo.insuredOrderCount < sku.orderCount && (
                 <div className="text-[10px] text-pdd-text-secondary ml-2">&middot; {sku.orderCount}单中{costInfo.insuredOrderCount}单购买了运费险</div>
               )}
+              {promotionFeePerOrder > 0 && (
+                <div className="flex items-center justify-between py-0.5">
+                  <span className="text-pdd-text-secondary">推广费</span>
+                  <span className="font-mono text-pdd-text">
+                    ¥{promotionFeePerOrder.toFixed(2)} × {sku.orderCount}单 = <b>¥{costInfo.totalPromotionFee.toFixed(2)}</b>
+                  </span>
+                </div>
+              )}
               {platformCommissionRate > 0 && (
                 <div className="flex items-center justify-between py-0.5">
                   <span className="text-pdd-text-secondary">平台扣点{costInfo.actualOrderCount > 0 ? ' (含实际)' : ''}</span>
                   <span className="font-mono text-pdd-text">
                     实收×{platformCommissionRate}% = <b>¥{costInfo.totalPlatformCommission.toFixed(2)}</b>
                   </span>
+                </div>
+              )}
+              {costInfo.totalSubTechFee > 0 && (
+                <div className="flex items-center justify-between py-0.5">
+                  <span className="text-pdd-text-secondary">百亿补贴扣点 (实际)</span>
+                  <span className="font-mono text-pdd-danger font-medium">¥{costInfo.totalSubTechFee.toFixed(2)}</span>
                 </div>
               )}
               {costInfo.totalPenalties > 0 && (
@@ -2581,7 +2606,7 @@ export default function CostManagementPage() {
                 </div>
                 <div className="bg-pdd-bg rounded-lg p-3">
                   <p className="text-xs text-pdd-text-secondary mb-2">成本计算公式:</p>
-                  <p className="text-sm font-medium">总成本 = 裸货成本×件数 + (包装+人工+快递+运费险)×订单数 + 平台扣点 + 自定义扣费</p>
+                  <p className="text-sm font-medium">总成本 = 裸货成本×件数 + (包装+人工+快递+运费险+推广费)×订单数 + 平台扣点 + 自定义扣费</p>
                   <p className="text-xs text-pdd-text-secondary mt-2">示例: 裸货成本10元/件，包装2元/单，快递3元/单，人工1元/单</p>
                   <p className="text-xs text-pdd-text-secondary">1单2件 = 10×2 + (2+1+3)×1 = 26元</p>
                   <p className="text-xs text-pdd-text-secondary mt-3">税费、平台扣点和自定义扣费将在利润计算中自动扣除</p>
@@ -2640,6 +2665,12 @@ export default function CostManagementPage() {
                   <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempInsuranceFee}
                     onChange={e => setTempInsuranceFee(e.target.value)} placeholder="选填" step="0.01" />
                   <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Shield size={10} />仅当订单有运费险记录时计入</p>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-pdd-text">推广费/单 (元)</label>
+                  <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempPromotionFee}
+                    onChange={e => setTempPromotionFee(e.target.value)} placeholder="选填" step="0.01" />
+                  <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><DollarSign size={10} />推广花费平均到每单的成本</p>
                 </div>
               </div>
               <button onClick={saveQuickSettings}

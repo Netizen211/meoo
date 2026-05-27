@@ -21,25 +21,23 @@ import MembershipPage from './pages/MembershipPage';
 import SettingsPage from './pages/SettingsPage';
 import ProductLinksPage from './pages/ProductLinksPage';
 import FinancePage from './pages/FinancePage';
-import AdminDashboard from './pages/admin/AdminDashboard';
-import AdminUsers from './pages/admin/AdminUsers';
-import AdminMembers from './pages/admin/AdminMembers';
-import AdminInvite from './pages/admin/AdminInvite';
-import AdminData from './pages/admin/AdminData';
-import AdminLogs from './pages/admin/AdminLogs';
-import AdminSettings from './pages/admin/AdminSettings';
 import { simpleHash } from './utils';
+import { isFullMember } from './utils/permission';
 import type { TaxConfig, CustomDeduction } from './components/ProductLinkStats';
 import { importSampleData, hasSampleData } from './utils/dataImporter';
-import { aggregateStoreData, mergeRecordConfigs, mergeArrayConfigs, mergeAbnormalOrders, weightedAverageFee, ALL_STORES_ID, isAllStores } from './utils/storeAggregator';
+import { aggregateStoreData, mergeRecordConfigs, mergeArrayConfigs, mergeAbnormalOrders, weightedAverageFee, enrichOrdersWithAfterSale, ALL_STORES_ID, isAllStores } from './utils/storeAggregator';
 import { addLog } from './utils/operationLog';
 import { OrderFinancialActual, UnlinkedFinancials, buildFinancialIndex } from './utils/financialActuals';
+import { getItem, setItem, removeItem, getAllKeys, migrateFromLocalStorage, isIndexedDBAvailable } from './services/localDataStore';
+import { syncStoreData, pullStoreData } from './api/dataApi';
+import { hasTokens } from './api/client';
 
 interface User {
   id: string;
   username: string;
   role: 'normal' | 'test' | 'admin';
   membershipLevel: 'free' | 'pro' | 'enterprise';
+  membershipExpiresAt?: string | null;
 }
 
 interface AuthContextType {
@@ -48,7 +46,6 @@ interface AuthContextType {
   setUser: (user: User) => void;
   signup: (username: string, password: string, phone?: string, inviteCode?: string) => { success: boolean; message: string };
   logout: () => void;
-  upgradeMembership: (level: 'pro' | 'enterprise') => void;
   isPaid: boolean;
 }
 
@@ -85,20 +82,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => setUser(null), []);
 
-  const upgradeMembership = useCallback((level: 'pro' | 'enterprise') => {
-    setUser(prev => {
-      if (!prev) return prev;
-      const updated = { ...prev, membershipLevel: level };
-      const users = JSON.parse(localStorage.getItem('dianfx_users') || '[]');
-      const idx = users.findIndex((u: any) => u.id === prev.id);
-      if (idx !== -1) {
-        users[idx].membershipLevel = level;
-        localStorage.setItem('dianfx_users', JSON.stringify(users));
-      }
-      return updated;
-    });
-  }, []);
-
   const signup = useCallback((username: string, password: string, phone?: string, inviteCode?: string): { success: boolean; message: string } => {
     if (!inviteCode || !inviteCode.trim()) {
       return { success: false, message: '邀请码不能为空' };
@@ -127,8 +110,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <AuthContext.Provider value={{
-      user, login, setUser, signup, logout, upgradeMembership,
-      isPaid: user?.membershipLevel !== 'free',
+      user, login, setUser, signup, logout,
+      isPaid: isFullMember(user),
     }}>
       {children}
     </AuthContext.Provider>
@@ -319,7 +302,7 @@ interface DataContextType {
   dataFilter: string;
   setDataFilter: (filter: string) => void;
   getStoreData: (storeId: string) => StoreDataItem | null;
-  setStoreData: (storeId: string, data: StoreDataItem) => void;
+  setStoreData: (storeId: string, dataOrUpdater: any) => void;
   currentDisplayData: StoreDataItem;
   // 以下接口保持不变，内部按 dataFilter 自动选择当前店铺数据
   productCosts: Record<string, number>;
@@ -356,6 +339,8 @@ interface DataContextType {
   setLaborFeePerOrder: (fee: number) => void;
   insuranceFeePerOrder: number;
   setInsuranceFeePerOrder: (fee: number) => void;
+  promotionFeePerOrder: number;
+  setPromotionFeePerOrder: (fee: number) => void;
   orderFinancialActuals: Record<string, OrderFinancialActual>;
   unlinkedFinancials: UnlinkedFinancials;
   abnormalOrders: Record<string, AbnormalOrderRecord>;
@@ -388,6 +373,7 @@ const EMPTY_STORE_DATA: StoreDataItem = {
 };
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
+  const [idbReady, setIdbReady] = useState(false);
   const [dataFilter, setDataFilter] = useState<string>(() => {
     const saved = localStorage.getItem('dianfx_data_filter');
     if (saved === '__all__') {
@@ -399,83 +385,97 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
     return saved || '';
   });
-  const [storeDataMap, setStoreDataMap] = useState<Record<string, StoreDataItem>>(() => {
-    const parseStoreData = (sd: any): StoreDataItem => ({
-      ...sd,
-      afterSaleRecords: sd.afterSaleRecords || [],
-      availableFields: {
-        csv: new Set(sd.availableFields?.csv || []),
-        promotion: new Set(sd.availableFields?.promotion || []),
-        insurance: new Set(sd.availableFields?.insurance || []),
-        afterSale: new Set(sd.availableFields?.afterSale || [])
-      }
-    });
+  const [storeDataMap, setStoreDataMap] = useState<Record<string, StoreDataItem>>({});
 
-    // 优先尝试整体存储
-    const saved = localStorage.getItem('dianfx_store_data_map');
-    console.log('[LOAD] dianfx_store_data_map exists:', !!saved, 'size:', saved?.length || 0);
-    if (saved) {
-      try {
-        const data = JSON.parse(saved);
-        console.log('[LOAD] Parsed stores:', Object.keys(data));
-        const result: Record<string, StoreDataItem> = {};
-        for (const [storeId, storeData] of Object.entries(data)) {
-          result[storeId] = parseStoreData(storeData);
-          console.log('[LOAD] Store', storeId, '- orders:', (storeData as any).orders?.length || 0);
-        }
-        console.log('[LOAD] Final loaded stores:', Object.keys(result));
-        return result;
-      } catch (e) {
-        console.error('[LOAD] Parse failed:', e);
+  // 初始化：从 IndexedDB 加载数据（含 localStorage 迁移）
+  useEffect(() => {
+    const initStore = async () => {
+      if (!isIndexedDBAvailable()) {
+        // 降级到 localStorage
+        setIdbReady(true);
+        return;
       }
-    }
 
-    // 降级：尝试分片存储格式
-    const keysJson = localStorage.getItem('dianfx_store_data_map_keys');
-    if (keysJson) {
-      try {
-        const keys: string[] = JSON.parse(keysJson);
-        const result: Record<string, StoreDataItem> = {};
-        for (const storeId of keys) {
-          const chunk = localStorage.getItem(`dianfx_store_${storeId}`);
-          if (chunk) {
-            result[storeId] = parseStoreData(JSON.parse(chunk));
-          }
+      // 尝试迁移旧数据
+      await migrateFromLocalStorage();
+
+      // 从 IndexedDB 加载
+      const keys = await getAllKeys('storeData');
+      if (keys.length === 0) {
+        setIdbReady(true);
+        return;
+      }
+
+      const result: Record<string, StoreDataItem> = {};
+      for (const storeId of keys) {
+        const sd = await getItem<any>('storeData', storeId);
+        if (sd) {
+          result[storeId] = {
+            orders: sd.orders || [],
+            promotionSummary: sd.promotionSummary || [],
+            promotionProducts: sd.promotionProducts || [],
+            starStoreSummary: sd.starStoreSummary || [],
+            liveStreamSummary: sd.liveStreamSummary || [],
+            shippingInsurance: sd.shippingInsurance || [],
+            afterSaleRecords: sd.afterSaleRecords || [],
+            financialRecords: sd.financialRecords || [],
+            availableFields: {
+              csv: new Set(Array.isArray(sd.availableFields?.csv) ? sd.availableFields.csv : []),
+              promotion: new Set(Array.isArray(sd.availableFields?.promotion) ? sd.availableFields.promotion : []),
+              insurance: new Set(Array.isArray(sd.availableFields?.insurance) ? sd.availableFields.insurance : []),
+              afterSale: new Set(Array.isArray(sd.availableFields?.afterSale) ? sd.availableFields.afterSale : [])
+            }
+          };
         }
-        if (Object.keys(result).length > 0) return result;
-      } catch {}
-    }
-    const legacyData = localStorage.getItem('dianfx_parsed_data');
-    if (legacyData) {
-      try {
-        const data = JSON.parse(legacyData);
-        const legacyStoreId = localStorage.getItem('dianfx_current_store');
-        if (legacyStoreId) {
-          const parsed = JSON.parse(legacyStoreId);
-          if (parsed?.id) {
-            const result: Record<string, StoreDataItem> = {};
-            result[parsed.id] = {
-              orders: data.orders || [],
-              promotionSummary: data.promotionSummary || [],
-              promotionProducts: data.promotionProducts || [],
-              starStoreSummary: data.starStoreSummary || [],
-              liveStreamSummary: data.liveStreamSummary || [],
-              shippingInsurance: data.shippingInsurance || [],
-              afterSaleRecords: data.afterSaleRecords || [],
-              availableFields: {
-                csv: new Set(data.availableFields?.csv || []),
-                promotion: new Set(data.availableFields?.promotion || []),
-                insurance: new Set(data.availableFields?.insurance || []),
-                afterSale: new Set(data.availableFields?.afterSale || [])
+      }
+      setStoreDataMap(result);
+      setIdbReady(true);
+
+      // 从服务器拉取数据合并（如果已登录且有店铺）
+      if (hasTokens()) {
+        try {
+          const storesList: { id: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
+          let hasServerData = false;
+          for (const store of storesList) {
+            const serverData = await pullStoreData(store.id);
+            if (serverData?.data) {
+              const sd = serverData.data;
+              // 服务器数据优先（更新更全）
+              result[store.id] = {
+                orders: sd.orders || [],
+                promotionSummary: sd.promotionSummary || [],
+                promotionProducts: sd.promotionProducts || [],
+                starStoreSummary: sd.starStoreSummary || [],
+                liveStreamSummary: sd.liveStreamSummary || [],
+                shippingInsurance: sd.shippingInsurance || [],
+                afterSaleRecords: sd.afterSaleRecords || [],
+                financialRecords: sd.financialRecords || [],
+                availableFields: {
+                  csv: new Set(Array.isArray(sd.availableFields?.csv) ? sd.availableFields.csv : []),
+                  promotion: new Set(Array.isArray(sd.availableFields?.promotion) ? sd.availableFields.promotion : []),
+                  insurance: new Set(Array.isArray(sd.availableFields?.insurance) ? sd.availableFields.insurance : []),
+                  afterSale: new Set(Array.isArray(sd.availableFields?.afterSale) ? sd.availableFields.afterSale : [])
+                }
+              };
+              // 恢复配置
+              if (serverData.configs) {
+                for (const [key, value] of Object.entries(serverData.configs)) {
+                  localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+                }
               }
-            };
-            return result;
+              hasServerData = true;
+            }
           }
+          if (hasServerData) {
+            setStoreDataMap({ ...result });
+          }
+        } catch {
+          // 服务器不可达，使用本地数据
         }
-      } catch {}
-    }
-    return {};
-  });
+      }
+    };
+    initStore();
+  }, []);
   // 辅助：读取当前店铺的配置（兼容旧格式无 storeId 后缀的键值）
   const getStoreScopedKey = (baseKey: string, storeId: string): string => `${baseKey}_${storeId}`;
 
@@ -582,6 +582,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [insuranceFeeByStore, setInsuranceFeeByStore] = useState<Record<string, number>>(() =>
     loadPerStoreNumber('dianfx_insurance_fee', initialStoreId)
   );
+  const [promotionFeeByStore, setPromotionFeeByStore] = useState<Record<string, number>>(() =>
+    loadPerStoreNumber('dianfx_promotion_fee', initialStoreId)
+  );
   const [abnormalOrdersByStore, setAbnormalOrdersByStore] = useState<Record<string, Record<string, AbnormalOrderRecord>>>(() => {
     const result = loadPerStoreRecord<Record<string, any>>('dianfx_abnormal_orders', initialStoreId);
     // 迁移旧格式: alertType → alertTypes
@@ -669,6 +672,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return insuranceFeeByStore[dataFilter] ?? 0;
   }, [dataFilter, insuranceFeeByStore, storeDataMap]);
 
+  const promotionFeePerOrder = useMemo((): number => {
+    if (isAllStores(dataFilter)) return weightedAverageFee(promotionFeeByStore, storeDataMap);
+    return promotionFeeByStore[dataFilter] ?? 0;
+  }, [dataFilter, promotionFeeByStore, storeDataMap]);
+
   const abnormalOrders = useMemo((): Record<string, AbnormalOrderRecord> => {
     if (isAllStores(dataFilter)) return mergeAbnormalOrders(abnormalOrdersByStore) as Record<string, AbnormalOrderRecord>;
     return abnormalOrdersByStore[dataFilter] || {};
@@ -699,49 +707,72 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, [dataFilter]);
 
   useEffect(() => {
-    console.log('[SAVE] storeDataMap changed, keys:', Object.keys(storeDataMap));
-    const dataToSave: Record<string, any> = {};
-    for (const [storeId, storeData] of Object.entries(storeDataMap)) {
-      dataToSave[storeId] = {
-        orders: storeData.orders,
-        promotionSummary: storeData.promotionSummary,
-        promotionProducts: storeData.promotionProducts,
-        starStoreSummary: storeData.starStoreSummary,
-        liveStreamSummary: storeData.liveStreamSummary,
-        shippingInsurance: storeData.shippingInsurance,
-        afterSaleRecords: storeData.afterSaleRecords,
-        financialRecords: storeData.financialRecords || [],
-        availableFields: {
-          csv: Array.from(storeData.availableFields.csv || []),
-          promotion: Array.from(storeData.availableFields.promotion || []),
-          insurance: Array.from(storeData.availableFields.insurance || []),
-          afterSale: Array.from(storeData.availableFields.afterSale || [])
-        }
-      };
-    }
-    try {
-      const jsonStr = JSON.stringify(dataToSave);
-      console.log('[SAVE] Writing to localStorage, size:', jsonStr.length, 'stores:', Object.keys(dataToSave).length);
-      localStorage.setItem('dianfx_store_data_map', jsonStr);
-      // 整体存储成功，清理旧的分片存储残留
-      localStorage.removeItem('dianfx_store_data_map_keys');
-      console.log('[SAVE] Success');
-    } catch (e) {
-      console.warn('[SAVE] Overall save failed, trying chunked:', e);
-      // 删除旧的整体存储，防止加载时优先命中旧数据而跳过分片
-      localStorage.removeItem('dianfx_store_data_map');
-      // localStorage 容量不足时，尝试逐店铺存储
-      try {
-        for (const [storeId, storeData] of Object.entries(dataToSave)) {
-          localStorage.setItem(`dianfx_store_${storeId}`, JSON.stringify(storeData));
-        }
-        localStorage.setItem('dianfx_store_data_map_keys', JSON.stringify(Object.keys(dataToSave)));
-        console.log('[SAVE] Chunked save success');
-      } catch (e2) {
-        console.error('[SAVE] Chunked save also failed:', e2);
+    if (!idbReady) return;
+    // 保存到 IndexedDB（每个店铺单独存储）
+    const saveToIDB = async () => {
+      const existingKeys = new Set(await getAllKeys('storeData'));
+      const currentKeys = new Set(Object.keys(storeDataMap));
+
+      // 保存现有数据
+      for (const [storeId, storeData] of Object.entries(storeDataMap)) {
+        const dataToSave = {
+          orders: storeData.orders,
+          promotionSummary: storeData.promotionSummary,
+          promotionProducts: storeData.promotionProducts,
+          starStoreSummary: storeData.starStoreSummary,
+          liveStreamSummary: storeData.liveStreamSummary,
+          shippingInsurance: storeData.shippingInsurance,
+          afterSaleRecords: storeData.afterSaleRecords,
+          financialRecords: storeData.financialRecords || [],
+          availableFields: {
+            csv: Array.from(storeData.availableFields.csv || []),
+            promotion: Array.from(storeData.availableFields.promotion || []),
+            insurance: Array.from(storeData.availableFields.insurance || []),
+            afterSale: Array.from(storeData.availableFields.afterSale || [])
+          }
+        };
+        await setItem('storeData', storeId, dataToSave);
       }
-    }
-  }, [storeDataMap]);
+
+      // 删除不存在的店铺数据
+      for (const key of existingKeys) {
+        if (!currentKeys.has(key)) {
+          await removeItem('storeData', key);
+        }
+      }
+    };
+    saveToIDB();
+  }, [storeDataMap, idbReady]);
+
+  // 数据变更后自动同步到服务器
+  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!idbReady || !hasTokens()) return;
+    // 防抖：避免频繁同步
+    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    syncTimerRef.current = setTimeout(async () => {
+      const storesList: { id: string; name: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
+      for (const [storeId, storeData] of Object.entries(storeDataMap)) {
+        if (!storeData.orders?.length && !storeData.promotionSummary?.length) continue;
+        const storeName = storesList.find(s => s.id === storeId)?.name || '';
+        const configs: Record<string, any> = {};
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith(`dianfx_`) && key.endsWith(`_${storeId}`)) {
+            const val = localStorage.getItem(key);
+            if (val) {
+              try { configs[key] = JSON.parse(val); } catch { configs[key] = val; }
+            }
+          }
+        }
+        const storeUploads = uploadRecords.filter(r => r.storeId === storeId);
+        await syncStoreData(storeId, storeName, storeData, configs, storeUploads);
+      }
+    }, 3000);
+    return () => {
+      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
+    };
+  }, [storeDataMap, idbReady, uploadRecords]);
 
   // 清理已被删除的店铺的残留数据（deleteStore 只清 localStorage，这里同步清内存）
   useEffect(() => {
@@ -818,6 +849,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   }, [insuranceFeeByStore]);
   useEffect(() => {
+    for (const [storeId, val] of Object.entries(promotionFeeByStore)) {
+      localStorage.setItem(getStoreScopedKey('dianfx_promotion_fee', storeId), String(val));
+    }
+  }, [promotionFeeByStore]);
+  useEffect(() => {
     for (const [storeId, data] of Object.entries(abnormalOrdersByStore)) {
       localStorage.setItem(getStoreScopedKey('dianfx_abnormal_orders', storeId), JSON.stringify(data));
     }
@@ -832,7 +868,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return storeDataMap[storeId] || null;
   }, [storeDataMap]);
 
-  const setStoreData = useCallback((storeId: string, dataOrUpdater: StoreDataItem | ((prev: StoreDataItem | null) => StoreDataItem)) => {
+  const setStoreData = useCallback((storeId: string, dataOrUpdater: any) => {
     setStoreDataMap(prev => {
       const prevStoreData = prev[storeId] || null;
       const newData = typeof dataOrUpdater === 'function'
@@ -846,7 +882,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!dataFilter) return EMPTY_STORE_DATA;
     // "全部店铺"模式：聚合所有店铺数据
     if (isAllStores(dataFilter)) {
-      return aggregateStoreData(storeDataMap);
+      const aggregated = aggregateStoreData(storeDataMap);
+      // 将售后退款金额合并到订单数据
+      if (aggregated.orders.length > 0 && aggregated.afterSaleRecords.length > 0) {
+        aggregated.orders = enrichOrdersWithAfterSale(aggregated.orders, aggregated.afterSaleRecords);
+      }
+      return aggregated;
     }
     const storeData = storeDataMap[dataFilter];
     if (!storeData) {
@@ -858,6 +899,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                (d.financialRecords?.length > 0);
       });
       return EMPTY_STORE_DATA;
+    }
+    // 将售后退款金额合并到订单数据
+    if (storeData.orders.length > 0 && storeData.afterSaleRecords.length > 0) {
+      return {
+        ...storeData,
+        orders: enrichOrdersWithAfterSale(storeData.orders, storeData.afterSaleRecords),
+      };
     }
     return storeData;
   }, [dataFilter, storeDataMap]);
@@ -1111,6 +1159,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     addLog({ action: '修改费用设置', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `设置运费险: ¥${fee}/单`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
+  const setPromotionFeePerOrder = useCallback((fee: number) => {
+    if (isAllStores(dataFilter)) return;
+    setPromotionFeeByStore(prev => ({ ...prev, [dataFilter]: fee }));
+    addLog({ action: '修改费用设置', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `设置推广费: ¥${fee}/单`, result: 'success' });
+  }, [dataFilter, getStoreName]);
+
   // 辅助：清除所有店铺的某类 localStorage 键值
   const clearPerStoreKeys = (baseKey: string) => {
     const keysToRemove: string[] = [];
@@ -1143,6 +1197,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setPlatformCommissionByStore({});
     setLaborFeeByStore({});
     setInsuranceFeeByStore({});
+    setPromotionFeeByStore({});
     setAbnormalOrdersByStore({});
     setCostHistoryByStore({});
   }, []);
@@ -1209,7 +1264,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const clearCostData = useCallback((storeId?: string) => {
     console.log('[CLEAR] Clearing cost data', storeId ?? 'ALL');
-    const baseKeys = ['dianfx_product_costs', 'dianfx_cost_configs', 'dianfx_packaging_fee', 'dianfx_shipping_fee', 'dianfx_platform_commission', 'dianfx_labor_fee', 'dianfx_insurance_fee', 'dianfx_abnormal_orders', 'dianfx_default_cost_ratio', 'dianfx_cost_history', 'dianfx_custom_deductions'];
+    const baseKeys = ['dianfx_product_costs', 'dianfx_cost_configs', 'dianfx_packaging_fee', 'dianfx_shipping_fee', 'dianfx_platform_commission', 'dianfx_labor_fee', 'dianfx_insurance_fee', 'dianfx_promotion_fee', 'dianfx_abnormal_orders', 'dianfx_default_cost_ratio', 'dianfx_cost_history', 'dianfx_custom_deductions'];
     if (storeId) {
       baseKeys.forEach(baseKey => localStorage.removeItem(`${baseKey}_${storeId}`));
       setProductCostsByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
@@ -1220,6 +1275,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setPlatformCommissionByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
       setLaborFeeByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
       setInsuranceFeeByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
+      setPromotionFeeByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
       setAbnormalOrdersByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
       setCustomDeductionsByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
       setCostHistoryByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
@@ -1233,6 +1289,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setPlatformCommissionByStore({});
       setLaborFeeByStore({});
       setInsuranceFeeByStore({});
+      setPromotionFeeByStore({});
       setAbnormalOrdersByStore({});
       setCustomDeductionsByStore({});
       setCostHistoryByStore({});
@@ -1289,6 +1346,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       platformCommissionRate, setPlatformCommissionRate,
       laborFeePerOrder, setLaborFeePerOrder,
       insuranceFeePerOrder, setInsuranceFeePerOrder,
+      promotionFeePerOrder, setPromotionFeePerOrder,
       orderFinancialActuals, unlinkedFinancials,
       abnormalOrders, setAbnormalOrder, removeAbnormalOrder,
       costHistory, addCostHistory,
@@ -1304,13 +1362,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
-  return <>{children}</>;
-}
-
-function RequireAdmin({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
-  if (!user) return <Navigate to="/login" replace />;
-  if (user.role !== 'admin' && user.role !== 'test') return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 }
 
@@ -1341,13 +1392,6 @@ function App() {
               <Route path="/cost-management" element={<RequireAuth><MainLayout><CostManagementPage /></MainLayout></RequireAuth>} />
               <Route path="/finance" element={<RequireAuth><MainLayout><FinancePage /></MainLayout></RequireAuth>} />
               <Route path="/product-links" element={<RequireAuth><MainLayout><ProductLinksPage /></MainLayout></RequireAuth>} />
-              <Route path="/admin" element={<RequireAdmin><MainLayout><AdminDashboard /></MainLayout></RequireAdmin>} />
-              <Route path="/admin/users" element={<RequireAdmin><MainLayout><AdminUsers /></MainLayout></RequireAdmin>} />
-              <Route path="/admin/members" element={<RequireAdmin><MainLayout><AdminMembers /></MainLayout></RequireAdmin>} />
-              <Route path="/admin/invite" element={<RequireAdmin><MainLayout><AdminInvite /></MainLayout></RequireAdmin>} />
-              <Route path="/admin/data" element={<RequireAdmin><MainLayout><AdminData /></MainLayout></RequireAdmin>} />
-              <Route path="/admin/logs" element={<RequireAdmin><MainLayout><AdminLogs /></MainLayout></RequireAdmin>} />
-              <Route path="/admin/settings" element={<RequireAdmin><MainLayout><AdminSettings /></MainLayout></RequireAdmin>} />
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
           </HashRouter>

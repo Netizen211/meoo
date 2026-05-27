@@ -3,6 +3,7 @@
  */
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
+import { findField } from './index';
 
 export interface StoreDataItem {
   orders: any[];
@@ -293,9 +294,9 @@ function processInsuranceData(existing: StoreDataItem, sheets: Record<string, { 
   for (const [sn, sheet] of Object.entries(sheets)) {
     if (sheet.type !== '运费险数据') continue;
 
-    const existingKeys = new Set(existing.shippingInsurance.map((r: any) => String(r['订单编号'] || '')));
+    const existingKeys = new Set(existing.shippingInsurance.map((r: any) => String(findField(r, '订单编号', '订单号') || '')));
     sheet.data.forEach((item: any) => {
-      const key = String(item['订单编号'] || '');
+      const key = String(findField(item, '订单编号', '订单号') || '');
       if (key && !existingKeys.has(key)) {
         existing.shippingInsurance.push(item);
         existingKeys.add(key);

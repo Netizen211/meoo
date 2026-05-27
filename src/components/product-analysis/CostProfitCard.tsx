@@ -27,6 +27,9 @@ interface CostBreakdown {
   shippingFee: number;
   promoCost: number;
   platformFee: number;
+  insuranceFee: number;
+  penaltyFee: number;
+  marketingFee: number;
   taxes: number;
   customDeductions: number;
 }
@@ -60,6 +63,9 @@ const COLORS = {
   shippingFee: chartColors.primary,
   promoCost: chartColors.purple,
   platformFee: chartColors.cyan,
+  insuranceFee: '#ffc53d',
+  penaltyFee: '#f5222d',
+  marketingFee: '#eb2f96',
   taxes: chartColors.pink,
   customDeductions: chartColors.orange,
 };
@@ -69,7 +75,10 @@ const LABELS: Record<keyof CostBreakdown, string> = {
   packagingFee: '包装费',
   shippingFee: '邮费',
   promoCost: '推广费',
-  platformFee: '平台费',
+  platformFee: '平台扣点',
+  insuranceFee: '运费险',
+  penaltyFee: '罚款/扣款',
+  marketingFee: '营销费用',
   taxes: '税费',
   customDeductions: '自定义扣费',
 };
@@ -80,6 +89,9 @@ const ICONS: Record<keyof CostBreakdown, React.ElementType> = {
   shippingFee: Truck,
   promoCost: Zap,
   platformFee: Building2,
+  insuranceFee: Settings,
+  penaltyFee: AlertCircle,
+  marketingFee: TrendingDown,
   taxes: Receipt,
   customDeductions: Settings,
 };

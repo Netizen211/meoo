@@ -16,7 +16,7 @@ const COLORS = chartColorArray;
 const FIELD_ALIASES = {
   province: ['省', '省份', '收货省', '收货省份', '所在省份', 'Province'],
   city: ['市', '城市', '收货市', '收货城市', '所在城市', 'City'],
-  buyer: ['用户购买手机号', '消费者资料', '买家手机号', '手机号', '收货人手机', '用户手机号', '收货人手机号', '买家ID', '买家id', '用户ID', '用户id', 'buyer_id', '买家账号', '联系人手机'],
+  buyer: ['用户购买手机号', '消费者资料', '买家手机号', '手机号', '收货人手机', '用户手机号', '收货人手机号', '买家ID', '买家id', '用户ID', '用户id', 'buyer_id', '买家账号', '联系人手机', '收货人电话', '联系电话', '收件人手机', '收件人手机号', '收件人电话', '手机号码', '收货人手机号码', '收货人联系方式', '用户手机', '收货人联系电话', '收货人手机', '收件人联系电话', '联系方式'],
   shipTime: ['发货时间', '发货日期', 'ship_time', '发货'],
   payTime: ['支付时间', '下单时间', '付款时间', '订单创建时间', '创建时间', '成交时间', 'pay_time', '订单时间'],
 };
@@ -239,6 +239,8 @@ export default function RegionPage() {
     new Set(filteredOrders.map((o: any) => String(findField(o, ...FIELD_ALIASES.buyer) || '').trim()).filter(Boolean)).size
   , [filteredOrders]);
 
+  const hasBuyerData = totalBuyers > 0;
+
   const kpis = useMemo(() => ({
     provCount: provinceStats.length, cityCount: cityStats.length,
     topProv: provinceStats[0]?.name || '--', topProvRate: provinceStats[0]?.rate || 0,
@@ -424,21 +426,21 @@ export default function RegionPage() {
           <motion.div key="penetration" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div className="pdd-card p-3">
-                <h3 className="text-sm font-semibold mb-2">地域买家数分布({rangeLabel})</h3>
+                <h3 className="text-sm font-semibold mb-2">地域{hasBuyerData ? '买家数' : '订单数'}分布({rangeLabel}){!hasBuyerData && <span className="text-[10px] text-[var(--pdd-text-muted)] ml-1">未识别买家字段，展示订单数</span>}</h3>
                 {noData ? <div className="h-40 flex items-center justify-center text-xs text-[var(--pdd-text-secondary)]">暂无数据</div> : (
-                  <ResponsiveContainer width="100%" height={200}><BarChart data={provinceStats.slice(0, 10)}><CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip /><Bar dataKey="buyers" fill="var(--pdd-danger)" radius={[2, 2, 0, 0]} /></BarChart></ResponsiveContainer>
+                  <ResponsiveContainer width="100%" height={200}><BarChart data={provinceStats.slice(0, 10)}><CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" /><XAxis dataKey="name" tick={{ fontSize: 10 }} /><YAxis tick={{ fontSize: 10 }} /><Tooltip /><Bar dataKey={hasBuyerData ? 'buyers' : 'count'} fill="var(--pdd-danger)" radius={[2, 2, 0, 0]} /></BarChart></ResponsiveContainer>
                 )}
               </div>
               <div className="pdd-card p-3">
                 <h3 className="text-sm font-semibold mb-2">渗透率饼图({rangeLabel})</h3>
                 {noData ? <div className="h-40 flex items-center justify-center text-xs text-[var(--pdd-text-secondary)]">暂无数据</div> : (
-                  <ResponsiveContainer width="100%" height={200}><PieChart><Pie data={provinceStats.slice(0, 8).map(p => ({ name: p.name, value: p.buyers }))} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>{provinceStats.slice(0, 8).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer>
+                  <ResponsiveContainer width="100%" height={200}><PieChart><Pie data={provinceStats.slice(0, 8).map(p => ({ name: p.name, value: hasBuyerData ? p.buyers : p.count }))} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>{provinceStats.slice(0, 8).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer>
                 )}
               </div>
             </div>
             {/* 渗透率详情表 */}
             <div className="pdd-card p-3">
-              <h3 className="text-sm font-semibold mb-2">省份渗透率详情({rangeLabel})</h3>
+              <h3 className="text-sm font-semibold mb-2">省份渗透率详情({rangeLabel}){!hasBuyerData && <span className="text-[10px] text-[var(--pdd-text-muted)] ml-1">未识别买家字段，渗透率不可用</span>}</h3>
               {noData ? <div className="text-xs text-[var(--pdd-text-secondary)] text-center py-8">暂无数据</div> : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs"><thead><tr className="text-[var(--pdd-text-secondary)] border-b border-[var(--pdd-border)]">
@@ -448,12 +450,12 @@ export default function RegionPage() {
                     {provinceStats.slice(0, 20).map((p, i) => (
                       <tr key={p.name} className={`${i % 2 === 1 ? 'bg-[var(--pdd-bg)]/50' : ''} hover:bg-[var(--pdd-gray-200)]/50 border-b border-[var(--pdd-border)]/50`}>
                         <td className="py-1.5 px-2 font-medium">{p.name}</td>
-                        <td className="py-1.5 px-2 text-right">{p.buyers}</td>
+                        <td className="py-1.5 px-2 text-right">{hasBuyerData ? p.buyers : '--'}</td>
                         <td className="py-1.5 px-2 text-right">{p.count.toLocaleString()}</td>
-                        <td className="py-1.5 px-2 text-right">{p.avgBuyerOrder.toFixed(1)}</td>
+                        <td className="py-1.5 px-2 text-right">{hasBuyerData ? p.avgBuyerOrder.toFixed(1) : '--'}</td>
                         <td className="py-1.5 px-2 text-right tabular-nums text-pdd-primary-light font-medium">¥{p.revenue.toFixed(0)}</td>
                         <td className="py-1.5 px-2 text-right tabular-nums">¥{p.avgOrder.toFixed(2)}</td>
-                        <td className="py-1.5 px-2 text-right">{totalBuyers > 0 ? ((p.buyers / totalBuyers) * 100).toFixed(1) : 0}%</td>
+                        <td className="py-1.5 px-2 text-right">{hasBuyerData ? ((p.buyers / totalBuyers) * 100).toFixed(1) : '--'}%</td>
                       </tr>
                     ))}
                   </tbody></table>

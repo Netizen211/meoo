@@ -4,7 +4,7 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, XAx
 import { AlertTriangle, RotateCcw, Truck, Star, Package, TrendingUp, Lock, Crown, Shield } from 'lucide-react';
 import { useData, useAuth } from '../App';
 import { sf, ss, findField } from '../utils';
-import TimeFilter, { useTimeFilter, TimeRange, TimeGranularity, filterByTimeRange, getAllDateGroups, filterPromoByTimeRange } from '../components/TimeFilter';
+import TimeFilter, { useTimeFilter, TimeRange, TimeGranularity, filterByTimeRange, getAllDateGroups, filterPromoByTimeRange, getWeekKey, getMonthKey } from '../components/TimeFilter';
 
 const COLORS = ['var(--pdd-danger)', 'var(--pdd-warning)', 'var(--pdd-primary)', 'var(--pdd-success)', 'var(--pdd-purple)', 'var(--pdd-danger)', 'var(--pdd-cyan)'];
 
@@ -13,6 +13,12 @@ export default function RiskPage() {
   const { isPaid } = useAuth();
   const tf = useTimeFilter('7', 'day');
   const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
+
+  const rangeLabel = timeRange === 'custom' && quickRange
+    ? ({ today: '今日', yesterday: '昨日', thisWeek: '本周', lastWeek: '上周', thisMonth: '本月', lastMonth: '上月', thisQuarter: '本季度', lastQuarter: '上季度', thisYear: '本年', lastYear: '去年' } as Record<string, string>)[quickRange] ?? '自定义'
+    : timeRange === 'custom' && customStart
+    ? (customEnd && customStart !== customEnd ? `${customStart} 至 ${customEnd}` : customStart)
+    : timeRange === '7' ? '近7天' : timeRange === '30' ? '近30天' : timeRange === '90' ? '近90天' : '全部';
 
   const orders = useMemo(() => {
     if (!currentDisplayData?.orders?.length) return [];
@@ -109,24 +115,28 @@ export default function RiskPage() {
     if (!filteredOrders.length) return [];
     const byDate: Record<string, { total: number; as: number; rf: number; ov: number }> = {};
     filteredOrders.forEach((o: any) => {
-      const d = ss(findField(o, '支付时间')).split(' ')[0];
-      if (!d) return;
-      if (!byDate[d]) byDate[d] = { total: 0, as: 0, rf: 0, ov: 0 };
-      byDate[d].total++;
+      const rawDate = ss(findField(o, '支付时间')).split(' ')[0];
+      if (!rawDate) return;
+      let key: string;
+      if (granularity === 'week') key = getWeekKey(rawDate);
+      else if (granularity === 'month') key = getMonthKey(rawDate);
+      else key = rawDate;
+      if (!byDate[key]) byDate[key] = { total: 0, as: 0, rf: 0, ov: 0 };
+      byDate[key].total++;
       const s = ss(findField(o, '售后状态'));
-      if (s && s !== '无售后或售后取消' && s !== '无') byDate[d].as++;
-      if (s.includes('退款')) byDate[d].rf++;
+      if (s && s !== '无售后或售后取消' && s !== '无') byDate[key].as++;
+      if (s.includes('退款')) byDate[key].rf++;
       const payT = ss(findField(o, '支付时间'));
       const shipT = ss(findField(o, '发货时间'));
-      if (payT && shipT && (new Date(shipT).getTime() - new Date(payT).getTime()) / 3600000 > 48) byDate[d].ov++;
+      if (payT && shipT && (new Date(shipT).getTime() - new Date(payT).getTime()) / 3600000 > 48) byDate[key].ov++;
     });
-    return Object.entries(byDate).sort((a, b) => a[0].localeCompare(b[0])).slice(-7).map(([d, v]) => ({
-      date: d.slice(5),
+    return Object.entries(byDate).sort((a, b) => a[0].localeCompare(b[0])).map(([d, v]) => ({
+      date: granularity === 'day' ? d.slice(5) : d,
       asRate: v.total > 0 ? (v.as / v.total) * 100 : 0,
       rfRate: v.total > 0 ? (v.rf / v.total) * 100 : 0,
       ovRate: v.total > 0 ? (v.ov / v.total) * 100 : 0,
     }));
-  }, [filteredOrders]);
+  }, [filteredOrders, granularity]);
 
   const abnormalOrders = useMemo(() => {
     return filteredOrders.filter((o: any) => {
@@ -235,7 +245,7 @@ export default function RiskPage() {
       </div>
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="pdd-card p-3">
-        <h3 className="text-sm font-semibold mb-2">风险趋势(近7日)</h3>
+        <h3 className="text-sm font-semibold mb-2">风险趋势({rangeLabel})</h3>
         {noData ? <div className="h-40 flex items-center justify-center text-xs text-[var(--pdd-text-secondary)]">请先上传数据</div> : (
           <ResponsiveContainer width="100%" height={180}>
             <LineChart data={trendData}>

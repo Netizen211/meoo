@@ -202,6 +202,33 @@ export default function ProfitTooltip({
                 </span>
                 <span className="font-mono">¥{fmt(costBreakdown.promoCost)}</span>
               </div>
+              {costBreakdown.platformFee > 0 && (
+                <div className="flex justify-between">
+                  <span className="flex items-center gap-1">
+                    平台扣点
+                    <span className="text-[10px] text-pdd-gray-400">(含百亿补贴)</span>
+                  </span>
+                  <span className="font-mono">¥{fmt(costBreakdown.platformFee)}</span>
+                </div>
+              )}
+              {(costBreakdown.insuranceFee ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>运费险</span>
+                  <span className="font-mono">¥{fmt(costBreakdown.insuranceFee!)}</span>
+                </div>
+              )}
+              {(costBreakdown.penaltyFee ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <span className="text-red-500">罚款/扣款</span>
+                  <span className="font-mono text-red-500">-¥{fmt(costBreakdown.penaltyFee!)}</span>
+                </div>
+              )}
+              {(costBreakdown.marketingFee ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>营销费用(实际)</span>
+                  <span className="font-mono">-¥{fmt(costBreakdown.marketingFee!)}</span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -306,6 +333,30 @@ export default function ProfitTooltip({
                 <span>推广费</span>
                 <span className="font-mono text-red-500">-¥{fmt(costBreakdown.promoCost)}</span>
               </div>
+              {costBreakdown.platformFee > 0 && (
+                <div className="flex justify-between">
+                  <span>平台扣点</span>
+                  <span className="font-mono text-red-500">-¥{fmt(costBreakdown.platformFee)}</span>
+                </div>
+              )}
+              {(costBreakdown.insuranceFee ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>运费险</span>
+                  <span className="font-mono text-red-500">-¥{fmt(costBreakdown.insuranceFee!)}</span>
+                </div>
+              )}
+              {(costBreakdown.penaltyFee ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>罚款/扣款</span>
+                  <span className="font-mono text-red-500">-¥{fmt(costBreakdown.penaltyFee!)}</span>
+                </div>
+              )}
+              {(costBreakdown.marketingFee ?? 0) > 0 && (
+                <div className="flex justify-between">
+                  <span>营销费用</span>
+                  <span className="font-mono text-red-500">-¥{fmt(costBreakdown.marketingFee!)}</span>
+                </div>
+              )}
               {taxDetails.length > 0 && (
                 <div className="flex justify-between">
                   <span>税费合计</span>
