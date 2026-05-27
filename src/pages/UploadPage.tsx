@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Upload, FileText, FileSpreadsheet, CheckCircle, AlertCircle, X, Loader2, Trash2, History, AlertTriangle, Store, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 
 import { useData, useStore } from '../App';
+import { findField } from '../utils';
 
 import Papa from 'papaparse';
 
@@ -917,7 +918,7 @@ export default function UploadPage() {
 
       // 数据一致性检测（使用当前快照，仅用于展示警告）
 
-      const existingSnapshot = getStoreData(targetStoreId) || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() } };
+      const existingSnapshot = getStoreData(targetStoreId) || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() } };
 
       const mismatchWarning = checkDataConsistency(data, detectedType, existingSnapshot);
 

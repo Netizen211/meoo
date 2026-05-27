@@ -42,7 +42,7 @@ function getSkuInfo(row: any): string {
   return safeField(row, 'sku信息', 'SKU信息', '商品规格', '规格');
 }
 
-type TabKey = 'overview' | 'refund' | 'efficiency' | 'logistics' | 'sku' | 'risk' | 'warning' | 'detail';
+type TabKey = 'overview' | 'refund' | 'timeWindow' | 'efficiency' | 'logistics' | 'promoCross' | 'region' | 'productRisk' | 'warning' | 'detail';
 
 export default function AfterSalePage() {
   const { currentDisplayData } = useData();
@@ -50,6 +50,7 @@ export default function AfterSalePage() {
   const tf = useTimeFilter('7', 'day');
   const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
   const [activeTab, setActiveTab] = useState<TabKey>('overview');
+  const [productRiskSub, setProductRiskSub] = useState<'sku' | 'risk' | 'timeline'>('sku');
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -63,6 +64,13 @@ export default function AfterSalePage() {
     if (!currentDisplayData?.orders?.length) return [];
     return currentDisplayData.orders.filter((o: any) => String(findField(o, '订单状态') || '').trim() !== '已取消');
   }, [currentDisplayData]);
+
+  const promotionProducts = useMemo(() => currentDisplayData?.promotionProducts || [], [currentDisplayData]);
+  const promotionSummary = useMemo(() => currentDisplayData?.promotionSummary || [], [currentDisplayData]);
+  const starStoreSummary = useMemo(() => currentDisplayData?.starStoreSummary || [], [currentDisplayData]);
+  const liveStreamSummary = useMemo(() => currentDisplayData?.liveStreamSummary || [], [currentDisplayData]);
+  const allPromo = useMemo(() => [...promotionProducts, ...promotionSummary, ...starStoreSummary, ...liveStreamSummary], [promotionProducts, promotionSummary, starStoreSummary, liveStreamSummary]);
+  const hasPromoData = allPromo.length > 0;
 
   const hasIndependentData = afterSaleRecords.length > 0;
   const allDates = useMemo(() => getAllDateGroups(orders), [orders]);
@@ -379,6 +387,271 @@ export default function AfterSalePage() {
       .sort((a, b) => b.riskScore - a.riskScore);
   }, [records, filteredOrders]);
 
+  // ========== 退款时间窗口分析 ==========
+  const timeWindowAnalysis = useMemo(() => {
+    const orderMap = new Map<string, any>();
+    filteredOrders.forEach((o: any) => {
+      const orderNo = safeField(o, '订单号', '订单编号');
+      if (orderNo) orderMap.set(orderNo, o);
+    });
+
+    const windows = [
+      { key: '0-7天', label: '0-7天', min: 0, max: 7 },
+      { key: '8-30天', label: '8-30天', min: 8, max: 30 },
+      { key: '31-90天', label: '31-90天', min: 31, max: 90 },
+      { key: '91-180天', label: '91-180天', min: 91, max: 180 },
+      { key: '180天+', label: '180天+', min: 181, max: Infinity },
+    ];
+
+    interface WindowBucket { count: number; refundAmount: number; onlyRefund: number; returnRefund: number; reasons: Record<string, number>; }
+    const windowData: Record<string, WindowBucket> = {};
+    windows.forEach(w => { windowData[w.key] = { count: 0, refundAmount: 0, onlyRefund: 0, returnRefund: 0, reasons: {} }; });
+
+    let unmatchedPayTime = 0;
+    let negativeDays = 0;
+    let totalWithPayTime = 0;
+
+    records.forEach((r: any) => {
+      const orderNo = getOrderNo(r);
+      if (!orderNo) return;
+      const order = orderMap.get(orderNo);
+      if (!order) return;
+      const payTime = safeField(order, '支付时间');
+      const applyTime = safeField(r, '申请时间');
+      if (!payTime || !applyTime) { unmatchedPayTime++; return; }
+      const days = (new Date(applyTime).getTime() - new Date(payTime).getTime()) / 86400000;
+      if (days < 0) { negativeDays++; return; }
+      totalWithPayTime++;
+
+      const w = windows.find(w => days >= w.min && days <= w.max);
+      if (!w) return;
+      const bucket = windowData[w.key];
+      bucket.count++;
+      const amt = getRefundAmount(r);
+      bucket.refundAmount += amt;
+      const type = safeField(r, '退款类型');
+      if (type.includes('退货')) bucket.returnRefund++;
+      else bucket.onlyRefund++;
+
+      const reason = safeField(r, '退款原因', '售后原因') || '其他';
+      bucket.reasons[reason] = (bucket.reasons[reason] || 0) + 1;
+    });
+
+    const windowList = windows.map(w => ({
+      ...w,
+      ...windowData[w.key],
+      pct: totalWithPayTime > 0 ? (windowData[w.key].count / totalWithPayTime) * 100 : 0,
+    }));
+
+    const topReasons = new Set<string>();
+    windowList.forEach(w => {
+      Object.entries(w.reasons).sort((a, b) => b[1] - a[1]).slice(0, 5).forEach(([r]) => topReasons.add(r));
+    });
+
+    return { windowList, topReasons: [...topReasons], unmatchedPayTime, negativeDays, totalWithPayTime };
+  }, [records, filteredOrders]);
+
+  // ========== 推广与售后交叉分析 ==========
+  const promoCrossAnalysis = useMemo(() => {
+    if (!hasPromoData || filteredOrders.length === 0) {
+      return { hasData: false, promoOrders: 0, nonPromoOrders: 0, promoAfterSaleRate: 0, nonPromoAfterSaleRate: 0, promoRefundAmount: 0, nonPromoRefundAmount: 0, trueRoi: 0, nominalRoi: 0, totalPromoCost: 0, totalPromoGmv: 0, channelBreakdown: [] as any[] };
+    }
+
+    // 建立推广标记集合：productId + 日期
+    const promoTagSet = new Set<string>();
+    let totalPromoCost = 0;
+    let totalPromoGmv = 0;
+    const channelData: Record<string, { cost: number; gmv: number; orders: Set<string>; refundAmount: number; afterSaleCount: number }> = {};
+
+    allPromo.forEach((p: any) => {
+      const productId = findField(p, '商品ID', '商品id', '商品编号');
+      const date = String(findField(p, '日期') || '').trim().split(' ')[0].replace(/\//g, '-');
+      const cost = safeFloat(findField(p, '总花费(元)', '花费(元)', '成交花费(元)', '推广花费'));
+      const gmv = safeFloat(findField(p, '交易额(元)', '成交金额(元)', '推广GMV'));
+      totalPromoCost += cost;
+      totalPromoGmv += gmv;
+
+      const source = p._source || 'search';
+      const chKey = source === 'starStore' ? '明星店铺' : source === 'liveStream' ? '直播推广' : '搜索推广';
+      if (!channelData[chKey]) channelData[chKey] = { cost: 0, gmv: 0, orders: new Set(), refundAmount: 0, afterSaleCount: 0 };
+      channelData[chKey].cost += cost;
+      channelData[chKey].gmv += gmv;
+
+      if (productId && date) {
+        promoTagSet.add(`${productId}_${date}`);
+      }
+    });
+
+    // 给订单打推广标记
+    const orderMap = new Map<string, any>();
+    filteredOrders.forEach((o: any) => {
+      const orderNo = safeField(o, '订单号', '订单编号');
+      if (orderNo) orderMap.set(orderNo, o);
+    });
+
+    let promoOrderCount = 0, nonPromoOrderCount = 0;
+    let promoAfterSaleCount = 0, nonPromoAfterSaleCount = 0;
+    let promoRefundAmount = 0, nonPromoRefundAmount = 0;
+    const promoOrderNos = new Set<string>();
+    const nonPromoOrderNos = new Set<string>();
+
+    filteredOrders.forEach((o: any) => {
+      const productId = safeField(o, '商品ID', '商品id', '商品编号');
+      const payTime = safeField(o, '支付时间').split(' ')[0].replace(/\//g, '-');
+      const orderNo = safeField(o, '订单号', '订单编号');
+      const isPromo = productId && payTime ? promoTagSet.has(`${productId}_${payTime}`) : false;
+
+      if (isPromo) {
+        promoOrderCount++;
+        if (orderNo) promoOrderNos.add(orderNo);
+      } else {
+        nonPromoOrderCount++;
+        if (orderNo) nonPromoOrderNos.add(orderNo);
+      }
+    });
+
+    // 匹配售后
+    records.forEach((r: any) => {
+      const orderNo = getOrderNo(r);
+      if (!orderNo) return;
+      const amt = getRefundAmount(r);
+      if (promoOrderNos.has(orderNo)) {
+        promoAfterSaleCount++;
+        promoRefundAmount += amt;
+        // 按渠道统计
+        const order = orderMap.get(orderNo);
+        if (order) {
+          const pid = safeField(order, '商品ID', '商品id', '商品编号');
+          const payTime = safeField(order, '支付时间').split(' ')[0].replace(/\//g, '-');
+          const key = `${pid}_${payTime}`;
+          // 查找该订单对应的推广渠道
+          for (const [chKey, ch] of Object.entries(channelData)) {
+            ch.afterSaleCount++;
+            ch.refundAmount += amt;
+            break; // 简化：归到第一个渠道
+          }
+        }
+      } else if (nonPromoOrderNos.has(orderNo)) {
+        nonPromoAfterSaleCount++;
+        nonPromoRefundAmount += amt;
+      }
+    });
+
+    const promoAfterSaleRate = promoOrderCount > 0 ? (promoAfterSaleCount / promoOrderCount) * 100 : 0;
+    const nonPromoAfterSaleRate = nonPromoOrderCount > 0 ? (nonPromoAfterSaleCount / nonPromoOrderCount) * 100 : 0;
+    const nominalRoi = totalPromoCost > 0 ? totalPromoGmv / totalPromoCost : 0;
+    const trueRoi = totalPromoCost > 0 ? (totalPromoGmv - promoRefundAmount) / totalPromoCost : 0;
+
+    // 渠道售后率
+    const channelBreakdown = Object.entries(channelData).map(([channel, d]) => {
+      // 估算各渠道订单数
+      const channelOrderCount = filteredOrders.filter((o: any) => {
+        const pid = safeField(o, '商品ID', '商品id', '商品编号');
+        const payTime = safeField(o, '支付时间').split(' ')[0].replace(/\//g, '-');
+        return pid && payTime ? promoTagSet.has(`${pid}_${payTime}`) : false;
+      }).length;
+      const chAfterSaleRate = channelOrderCount > 0 ? (d.afterSaleCount / channelOrderCount) * 100 : 0;
+      const chNominalRoi = d.cost > 0 ? d.gmv / d.cost : 0;
+      const chTrueRoi = d.cost > 0 ? (d.gmv - d.refundAmount) / d.cost : 0;
+      return { channel, cost: d.cost, gmv: d.gmv, afterSaleCount: d.afterSaleCount, refundAmount: d.refundAmount, orderCount: channelOrderCount, afterSaleRate: chAfterSaleRate, nominalRoi: chNominalRoi, trueRoi: chTrueRoi };
+    });
+
+    return { hasData: true, promoOrders: promoOrderCount, nonPromoOrders: nonPromoOrderCount, promoAfterSaleRate, nonPromoAfterSaleRate, promoRefundAmount, nonPromoRefundAmount, trueRoi, nominalRoi, totalPromoCost, totalPromoGmv, channelBreakdown, promoAfterSaleCount, nonPromoAfterSaleCount };
+  }, [records, filteredOrders, allPromo, hasPromoData]);
+
+  // ========== 地域售后分析 ==========
+  const regionAnalysis = useMemo(() => {
+    const provinceMap: Record<string, { orders: number; afterSale: number; refundAmount: number; reasons: Record<string, number> }> = {};
+    const orderProvinceMap = new Map<string, string>();
+
+    filteredOrders.forEach((o: any) => {
+      const orderNo = safeField(o, '订单号', '订单编号');
+      const province = safeField(o, '省', '省份');
+      if (orderNo && province) {
+        orderProvinceMap.set(orderNo, province);
+        if (!provinceMap[province]) provinceMap[province] = { orders: 0, afterSale: 0, refundAmount: 0, reasons: {} };
+        provinceMap[province].orders++;
+      }
+    });
+
+    records.forEach((r: any) => {
+      const orderNo = getOrderNo(r);
+      if (!orderNo) return;
+      const province = orderProvinceMap.get(orderNo);
+      if (!province) return;
+      if (!provinceMap[province]) provinceMap[province] = { orders: 0, afterSale: 0, refundAmount: 0, reasons: {} };
+      provinceMap[province].afterSale++;
+      provinceMap[province].refundAmount += getRefundAmount(r);
+      const reason = safeField(r, '退款原因', '售后原因') || '其他';
+      provinceMap[province].reasons[reason] = (provinceMap[province].reasons[reason] || 0) + 1;
+    });
+
+    const list = Object.entries(provinceMap)
+      .map(([name, d]) => ({ province: name, ...d, afterSaleRate: d.orders >= 10 ? (d.afterSale / d.orders) * 100 : null, sufficient: d.orders >= 10 }))
+      .sort((a, b) => (b.afterSaleRate ?? 0) - (a.afterSaleRate ?? 0));
+
+    const sufficientList = list.filter(p => p.sufficient);
+    const avgRate = sufficientList.length > 0 ? sufficientList.reduce((s, p) => s + (p.afterSaleRate ?? 0), 0) / sufficientList.length : 0;
+    const stdRate = sufficientList.length > 1 ? Math.sqrt(sufficientList.reduce((s, p) => s + ((p.afterSaleRate ?? 0) - avgRate) ** 2, 0) / sufficientList.length) : 0;
+
+    const topReasons = new Set<string>();
+    list.forEach(p => {
+      Object.entries(p.reasons).sort((a, b) => b[1] - a[1]).slice(0, 5).forEach(([r]) => topReasons.add(r));
+    });
+
+    return { list, avgRate, stdRate, topReasons: [...topReasons].slice(0, 5) };
+  }, [records, filteredOrders]);
+
+  // ========== 商品退款时效（合并到 productRisk Tab）==========
+  const productAfterSaleTimeline = useMemo(() => {
+    const orderMap = new Map<string, any>();
+    filteredOrders.forEach((o: any) => {
+      const orderNo = safeField(o, '订单号', '订单编号');
+      if (orderNo) orderMap.set(orderNo, o);
+    });
+
+    const productMap: Record<string, { productId: string; name: string; afterSaleCount: number; refundAmount: number; totalDays: number; dayCount: number; fastRefund: number; longTailRefund: number }> = {};
+
+    records.forEach((r: any) => {
+      const pid = getProductId(r);
+      if (!pid) return;
+      if (!productMap[pid]) {
+        productMap[pid] = { productId: pid, name: getSkuInfo(r).split(',')[0] || pid, afterSaleCount: 0, refundAmount: 0, totalDays: 0, dayCount: 0, fastRefund: 0, longTailRefund: 0 };
+      }
+      const p = productMap[pid];
+      p.afterSaleCount++;
+      p.refundAmount += getRefundAmount(r);
+
+      const orderNo = getOrderNo(r);
+      if (orderNo) {
+        const order = orderMap.get(orderNo);
+        if (order) {
+          const payTime = safeField(order, '支付时间');
+          const applyTime = safeField(r, '申请时间');
+          if (payTime && applyTime) {
+            const days = (new Date(applyTime).getTime() - new Date(payTime).getTime()) / 86400000;
+            if (days >= 0 && days < 365) {
+              p.totalDays += days;
+              p.dayCount++;
+              if (days <= 7) p.fastRefund++;
+              if (days > 90) p.longTailRefund++;
+            }
+          }
+        }
+      }
+    });
+
+    return Object.values(productMap)
+      .filter(p => p.afterSaleCount >= 2)
+      .map(p => ({
+        ...p,
+        avgRefundDays: p.dayCount > 0 ? p.totalDays / p.dayCount : 0,
+        fastRefundRate: p.afterSaleCount > 0 ? (p.fastRefund / p.afterSaleCount) * 100 : 0,
+        longTailRate: p.afterSaleCount > 0 ? (p.longTailRefund / p.afterSaleCount) * 100 : 0,
+      }))
+      .sort((a, b) => b.refundAmount - a.refundAmount);
+  }, [records, filteredOrders]);
+
   // ========== 预警中心数据 ==========
   const warningData = useMemo(() => {
     // 超时未处理（待处理 >48h）
@@ -523,22 +796,58 @@ export default function AfterSalePage() {
   const tabs: { key: TabKey; label: string; icon: any }[] = [
     { key: 'overview', label: '概览', icon: TrendingUp },
     { key: 'refund', label: '退款分析', icon: BarChart3 },
+    { key: 'timeWindow', label: '时间窗口', icon: Clock },
     { key: 'efficiency', label: '处理时效', icon: Clock },
     { key: 'logistics', label: '退货物流', icon: Truck },
-    { key: 'sku', label: 'SKU拆解', icon: Tag },
-    { key: 'risk', label: '高风险商品', icon: AlertTriangle },
+    { key: 'promoCross', label: '推广关联', icon: TrendingUp },
+    { key: 'region', label: '地域分析', icon: Users },
+    { key: 'productRisk', label: '商品售后', icon: Tag },
     { key: 'warning', label: '预警中心', icon: Bell },
     { key: 'detail', label: '明细列表', icon: FileText },
   ];
 
   // ========== 概览 ==========
-  const renderOverview = () => (
+  const renderOverview = () => {
+    const earlyRefundPct = timeWindowAnalysis.windowList.find(w => w.key === '0-7天')?.pct ?? 0;
+    const earlyRefundPct2 = timeWindowAnalysis.windowList.find(w => w.key === '8-30天')?.pct ?? 0;
+    const within30Days = earlyRefundPct + earlyRefundPct2;
+    const anomalyProvinceCount = regionAnalysis.list.filter(p => p.sufficient && (p.afterSaleRate ?? 0) > regionAnalysis.avgRate + 2 * regionAnalysis.stdRate).length;
+    const interceptRecovery = logisticsData.interceptRate > 0 ? (logisticsData.interceptRate / 100) * kpiData.refundAmount : 0;
+
+    return (
     <div className="space-y-4">
       {fromOrderOnly && (
         <div className="pdd-card px-4 py-2 text-xs text-[var(--pdd-warning)] bg-pdd-warning/5 border border-[var(--pdd-warning)]/20">
           以下分析基于订单数据中的售后字段，信息可能不完整。建议上传售后数据Excel文件以获得完整分析。
         </div>
       )}
+      {/* 交叉分析摘要卡片 */}
+      <div className="grid grid-cols-4 gap-3">
+        <div className="pdd-card px-4 py-3">
+          <p className="text-xs text-[var(--pdd-text-secondary)]">推广 vs 非推广售后率</p>
+          <div className="flex items-center gap-2 mt-1">
+            <span className="text-lg font-bold text-[var(--pdd-danger)]">{hasPromoData ? `${promoCrossAnalysis.promoAfterSaleRate.toFixed(1)}%` : '-'}</span>
+            <span className="text-xs text-[var(--pdd-text-secondary)]">/</span>
+            <span className="text-lg font-bold text-[var(--pdd-primary)]">{hasPromoData ? `${promoCrossAnalysis.nonPromoAfterSaleRate.toFixed(1)}%` : '-'}</span>
+          </div>
+          <p className="text-xs text-[var(--pdd-text-secondary)]">推广 / 非推广</p>
+        </div>
+        <div className="pdd-card px-4 py-3">
+          <p className="text-xs text-[var(--pdd-text-secondary)]">30天内退款占比</p>
+          <p className="text-2xl font-bold text-[var(--pdd-warning)]">{timeWindowAnalysis.totalWithPayTime > 0 ? `${within30Days.toFixed(1)}%` : '-'}</p>
+          <p className="text-xs text-[var(--pdd-text-secondary)]">{timeWindowAnalysis.totalWithPayTime > 0 ? `${(earlyRefundPct).toFixed(1)}% 7天内` : '需要售后数据'}</p>
+        </div>
+        <div className="pdd-card px-4 py-3">
+          <p className="text-xs text-[var(--pdd-text-secondary)]">异常省份</p>
+          <p className="text-2xl font-bold text-[var(--pdd-danger)]">{regionAnalysis.list.length > 0 ? anomalyProvinceCount : '-'}</p>
+          <p className="text-xs text-[var(--pdd-text-secondary)]">{regionAnalysis.list.length > 0 ? '售后率超2σ' : '需要地域数据'}</p>
+        </div>
+        <div className="pdd-card px-4 py-3">
+          <p className="text-xs text-[var(--pdd-text-secondary)]">拦截恢复金额(估)</p>
+          <p className="text-2xl font-bold text-[var(--pdd-success)]">{logisticsData.interceptRate > 0 ? `¥${interceptRecovery.toFixed(0)}` : '-'}</p>
+          <p className="text-xs text-[var(--pdd-text-secondary)]">拦截率 {logisticsData.interceptRate > 0 ? `${logisticsData.interceptRate.toFixed(1)}%` : '-'}</p>
+        </div>
+      </div>
       <div className="grid grid-cols-2 gap-4">
         <div className="pdd-card p-4">
           <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><TrendingUp size={16} className="text-[var(--pdd-danger)]" />售后趋势</h4>
@@ -585,7 +894,8 @@ export default function AfterSalePage() {
         </div>
       </div>
     </div>
-  );
+    );
+  };
 
   // ========== 退款分析 ==========
   const renderRefund = () => (
@@ -640,6 +950,86 @@ export default function AfterSalePage() {
           </ResponsiveContainer>
         ) : <div className="h-[280px] flex items-center justify-center text-sm text-[var(--pdd-text-secondary)]">暂无数据</div>}
       </div>
+    </div>
+  );
+
+  // ========== 时间窗口分析 ==========
+  const renderTimeWindow = () => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-4 gap-3">
+        {timeWindowAnalysis.windowList.map(w => (
+          <div key={w.key} className="pdd-card px-4 py-3">
+            <p className="text-xs text-[var(--pdd-text-secondary)]">{w.label}</p>
+            <p className="text-xl font-bold text-[var(--pdd-danger)]">{w.count}<span className="text-sm font-normal text-[var(--pdd-text-secondary)]"> 单</span></p>
+            <p className="text-xs text-[var(--pdd-text-secondary)]">¥{w.refundAmount.toFixed(0)} ({w.pct.toFixed(1)}%)</p>
+          </div>
+        ))}
+        {timeWindowAnalysis.windowList.length === 0 && (
+          <div className="col-span-4 py-8 text-center text-sm text-[var(--pdd-text-secondary)]">暂无时间窗口数据</div>
+        )}
+      </div>
+      {timeWindowAnalysis.unmatchedPayTime > 0 && (
+        <div className="text-xs text-[var(--pdd-warning)] bg-pdd-warning/5 px-3 py-1.5 rounded-lg border border-[var(--pdd-warning)]/20">
+          有 {timeWindowAnalysis.unmatchedPayTime} 条售后记录因缺少支付时间/申请时间未纳入窗口统计
+          {timeWindowAnalysis.negativeDays > 0 && `，${timeWindowAnalysis.negativeDays} 条申请时间早于支付时间（数据异常）`}
+        </div>
+      )}
+      <div className="grid grid-cols-2 gap-4">
+        <div className="pdd-card p-4">
+          <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><BarChart3 size={16} className="text-[var(--pdd-danger)]" />退款类型 × 时间窗口</h4>
+          {timeWindowAnalysis.windowList.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <BarChart data={timeWindowAnalysis.windowList}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
+                <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} />
+                <Tooltip />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                <Bar dataKey="onlyRefund" stackId="a" fill="var(--pdd-primary)" name="仅退款" />
+                <Bar dataKey="returnRefund" stackId="a" fill="var(--pdd-danger)" name="退货退款" />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : <div className="h-[250px] flex items-center justify-center text-sm text-[var(--pdd-text-secondary)]">暂无数据</div>}
+        </div>
+        <div className="pdd-card p-4">
+          <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><PieChartIcon size={16} className="text-[var(--pdd-danger)]" />时间窗口分布</h4>
+          {timeWindowAnalysis.windowList.some(w => w.count > 0) ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie data={timeWindowAnalysis.windowList.filter(w => w.count > 0)} dataKey="count" nameKey="label" cx="50%" cy="50%" outerRadius={90} label={({ label, percent }) => `${label} ${(percent * 100).toFixed(0)}%`} fontSize={11}>
+                  {timeWindowAnalysis.windowList.filter(w => w.count > 0).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : <div className="h-[250px] flex items-center justify-center text-sm text-[var(--pdd-text-secondary)]">暂无数据</div>}
+        </div>
+      </div>
+      {timeWindowAnalysis.topReasons.length > 0 && (
+        <div className="pdd-card p-4">
+          <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><Star size={16} className="text-[var(--pdd-warning)]" />退款原因 × 时间窗口交叉表</h4>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead><tr className="text-[var(--pdd-text-secondary)] border-b border-[var(--pdd-border)]">
+                <th className="py-2 text-left">时间窗口</th>
+                <th className="py-2 text-right">笔数</th>
+                {timeWindowAnalysis.topReasons.map(r => <th key={r} className="py-2 text-right">{r.length > 8 ? r.slice(0, 8) + '...' : r}</th>)}
+              </tr></thead>
+              <tbody>
+                {timeWindowAnalysis.windowList.map(w => (
+                  <tr key={w.key} className="border-b border-[var(--pdd-border)] hover:bg-[var(--pdd-bg)]">
+                    <td className="py-2 font-medium">{w.label}</td>
+                    <td className="py-2 text-right font-mono">{w.count}</td>
+                    {timeWindowAnalysis.topReasons.map(reason => (
+                      <td key={reason} className="py-2 text-right font-mono text-[var(--pdd-text-secondary)]">{w.reasons[reason] || 0}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -735,78 +1125,304 @@ export default function AfterSalePage() {
     </div>
   );
 
-  // ========== SKU拆解 ==========
-  const renderSku = () => (
+  // ========== 推广关联分析 ==========
+  const renderPromoCross = () => (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="pdd-card p-4">
-          <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><Tag size={16} className="text-[var(--pdd-danger)]" />SKU退款金额TOP10</h4>
-          {skuBreakdown.length > 0 ? (
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={skuBreakdown.slice(0, 10)} layout="vertical" margin={{ left: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 10 }} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={120} />
-                <Tooltip formatter={(v: number) => [`¥${v.toFixed(0)}`, '退款金额']} contentStyle={{ fontSize: 11 }} />
-                <Bar dataKey="refundAmount" fill="var(--pdd-danger)" radius={[0, 4, 4, 0]} barSize={18} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : <div className="h-[300px] flex items-center justify-center text-sm text-[var(--pdd-text-secondary)]">暂无SKU数据</div>}
+      {!hasPromoData ? (
+        <div className="pdd-card py-12 text-center text-sm text-[var(--pdd-text-secondary)]">
+          <Package size={32} className="mx-auto mb-3 text-[var(--pdd-text-secondary)] opacity-50" />
+          <p>请先上传推广数据（搜索推广/明星店铺/直播推广）以进行售后关联分析</p>
         </div>
+      ) : !promoCrossAnalysis.hasData ? (
+        <div className="pdd-card py-12 text-center text-sm text-[var(--pdd-text-secondary)]">当前时间范围内无推广数据</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-4 gap-3">
+            <div className="pdd-card px-4 py-3">
+              <p className="text-xs text-[var(--pdd-text-secondary)]">推广订单售后率</p>
+              <p className="text-2xl font-bold text-[var(--pdd-danger)]">{promoCrossAnalysis.promoAfterSaleRate.toFixed(1)}%</p>
+              <p className="text-xs text-[var(--pdd-text-secondary)]">{promoCrossAnalysis.promoOrders} 单推广订单</p>
+            </div>
+            <div className="pdd-card px-4 py-3">
+              <p className="text-xs text-[var(--pdd-text-secondary)]">非推广订单售后率</p>
+              <p className="text-2xl font-bold text-[var(--pdd-primary)]">{promoCrossAnalysis.nonPromoAfterSaleRate.toFixed(1)}%</p>
+              <p className="text-xs text-[var(--pdd-text-secondary)]">{promoCrossAnalysis.nonPromoOrders} 单非推广订单</p>
+            </div>
+            <div className="pdd-card px-4 py-3">
+              <p className="text-xs text-[var(--pdd-text-secondary)]">推广真实ROI</p>
+              <p className="text-2xl font-bold text-[var(--pdd-success)]">{promoCrossAnalysis.trueRoi.toFixed(2)}</p>
+              <p className="text-xs text-[var(--pdd-text-secondary)]">名义ROI {promoCrossAnalysis.nominalRoi.toFixed(2)}</p>
+            </div>
+            <div className="pdd-card px-4 py-3">
+              <p className="text-xs text-[var(--pdd-text-secondary)]">推广退款金额</p>
+              <p className="text-2xl font-bold text-[var(--pdd-danger)]">¥{promoCrossAnalysis.promoRefundAmount.toFixed(0)}</p>
+              <p className="text-xs text-[var(--pdd-text-secondary)]">非推广 ¥{promoCrossAnalysis.nonPromoRefundAmount.toFixed(0)}</p>
+            </div>
+          </div>
+          {promoCrossAnalysis.promoAfterSaleRate > promoCrossAnalysis.nonPromoAfterSaleRate && (
+            <div className="text-xs text-[var(--pdd-warning)] bg-pdd-warning/5 px-3 py-1.5 rounded-lg border border-[var(--pdd-warning)]/20">
+              推广订单售后率高于非推广订单 {(promoCrossAnalysis.promoAfterSaleRate - promoCrossAnalysis.nonPromoAfterSaleRate).toFixed(1)}%，建议排查是否有过度承诺或推广人群不匹配问题。
+            </div>
+          )}
+          <div className="pdd-card p-4">
+            <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><BarChart3 size={16} className="text-[var(--pdd-danger)]" />各渠道真实ROI vs 名义ROI</h4>
+            {promoCrossAnalysis.channelBreakdown.length > 0 ? (
+              <ResponsiveContainer width="100%" height={280}>
+                <BarChart data={promoCrossAnalysis.channelBreakdown} barGap={4}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
+                  <XAxis dataKey="channel" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip formatter={(v: number) => [v.toFixed(2), '']} contentStyle={{ fontSize: 11 }} />
+                  <Legend wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="nominalRoi" fill="var(--pdd-primary)" name="名义ROI" barSize={24} />
+                  <Bar dataKey="trueRoi" fill="var(--pdd-success)" name="真实ROI(扣退款)" barSize={24} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <div className="h-[280px] flex items-center justify-center text-sm text-[var(--pdd-text-secondary)]">暂无渠道数据</div>}
+          </div>
+          <div className="pdd-card p-4">
+            <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><AlertTriangle size={16} className="text-[var(--pdd-danger)]" />各渠道售后率排行</h4>
+            {promoCrossAnalysis.channelBreakdown.length > 0 ? (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="text-[var(--pdd-text-secondary)] border-b border-[var(--pdd-border)]">
+                    <th className="py-2 text-left">渠道</th><th className="py-2 text-right">花费</th><th className="py-2 text-right">GMV</th><th className="py-2 text-right">订单数</th><th className="py-2 text-right">售后数</th><th className="py-2 text-right">售后率</th><th className="py-2 text-right">名义ROI</th><th className="py-2 text-right">真实ROI</th>
+                  </tr></thead>
+                  <tbody>
+                    {promoCrossAnalysis.channelBreakdown.sort((a, b) => b.afterSaleRate - a.afterSaleRate).map((ch, i) => (
+                      <tr key={i} className="border-b border-[var(--pdd-border)] hover:bg-[var(--pdd-bg)]">
+                        <td className="py-2 font-medium">{ch.channel}</td>
+                        <td className="py-2 text-right font-mono">¥{ch.cost.toFixed(0)}</td>
+                        <td className="py-2 text-right font-mono">¥{ch.gmv.toFixed(0)}</td>
+                        <td className="py-2 text-right">{ch.orderCount}</td>
+                        <td className="py-2 text-right text-pdd-danger">{ch.afterSaleCount}</td>
+                        <td className="py-2 text-right font-mono text-pdd-danger">{ch.afterSaleRate.toFixed(1)}%</td>
+                        <td className="py-2 text-right font-mono">{ch.nominalRoi.toFixed(2)}</td>
+                        <td className="py-2 text-right font-mono text-[var(--pdd-success)]">{ch.trueRoi.toFixed(2)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <div className="py-8 text-center text-sm text-[var(--pdd-text-secondary)]">暂无渠道数据</div>}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  // ========== 地域分析 ==========
+  const renderRegion = () => (
+    <div className="space-y-4">
+      {regionAnalysis.list.length === 0 ? (
+        <div className="pdd-card py-12 text-center text-sm text-[var(--pdd-text-secondary)]">订单数据中无省份信息，无法进行地域分析</div>
+      ) : (
+        <>
+          <div className="grid grid-cols-3 gap-3">
+            <div className="pdd-card px-4 py-3">
+              <p className="text-xs text-[var(--pdd-text-secondary)]">有数据省份</p>
+              <p className="text-2xl font-bold text-[var(--pdd-primary)]">{regionAnalysis.list.length}</p>
+            </div>
+            <div className="pdd-card px-4 py-3">
+              <p className="text-xs text-[var(--pdd-text-secondary)]">全店平均售后率</p>
+              <p className="text-2xl font-bold text-[var(--pdd-warning)]">{regionAnalysis.avgRate.toFixed(1)}%</p>
+            </div>
+            <div className="pdd-card px-4 py-3">
+              <p className="text-xs text-[var(--pdd-text-secondary)]">异常省份（超2σ）</p>
+              <p className="text-2xl font-bold text-[var(--pdd-danger)]">{regionAnalysis.list.filter(p => p.sufficient && (p.afterSaleRate ?? 0) > regionAnalysis.avgRate + 2 * regionAnalysis.stdRate).length}</p>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="pdd-card p-4">
+              <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><Users size={16} className="text-[var(--pdd-danger)]" />省份售后率排行（≥10单）</h4>
+              {regionAnalysis.list.filter(p => p.sufficient).length > 0 ? (
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={regionAnalysis.list.filter(p => p.sufficient).slice(0, 15)} layout="vertical" margin={{ left: 30 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" horizontal={false} />
+                    <XAxis type="number" tick={{ fontSize: 10 }} unit="%" />
+                    <YAxis type="category" dataKey="province" tick={{ fontSize: 10 }} width={60} />
+                    <Tooltip formatter={(v: number) => [`${v.toFixed(1)}%`, '售后率']} contentStyle={{ fontSize: 11 }} />
+                    <Bar dataKey="afterSaleRate" radius={[0, 4, 4, 0]} barSize={18}>
+                      {regionAnalysis.list.filter(p => p.sufficient).slice(0, 15).map((p, i) => {
+                        const isAnomaly = (p.afterSaleRate ?? 0) > regionAnalysis.avgRate + 2 * regionAnalysis.stdRate;
+                        return <Cell key={i} fill={isAnomaly ? 'var(--pdd-danger)' : 'var(--pdd-primary)'} />;
+                      })}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : <div className="h-[400px] flex items-center justify-center text-sm text-[var(--pdd-text-secondary)]">样本不足（需≥10单的省份）</div>}
+            </div>
+            {regionAnalysis.topReasons.length > 0 && (
+              <div className="pdd-card p-4">
+                <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><Star size={16} className="text-[var(--pdd-warning)]" />退款原因 × 省份（Top8）</h4>
+                <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead><tr className="text-[var(--pdd-text-secondary)] border-b border-[var(--pdd-border)] sticky top-0 bg-[var(--pdd-card)] z-10">
+                      <th className="py-2 text-left">省份</th><th className="py-2 text-right">售后率</th>
+                      {regionAnalysis.topReasons.map(r => <th key={r} className="py-2 text-right">{r.length > 6 ? r.slice(0, 6) + '..' : r}</th>)}
+                    </tr></thead>
+                    <tbody>
+                      {regionAnalysis.list.filter(p => p.sufficient).sort((a, b) => (b.afterSaleRate ?? 0) - (a.afterSaleRate ?? 0)).slice(0, 8).map((p, i) => (
+                        <tr key={i} className="border-b border-[var(--pdd-border)] hover:bg-[var(--pdd-bg)]">
+                          <td className="py-2 font-medium">{p.province}</td>
+                          <td className={`py-2 text-right font-mono ${(p.afterSaleRate ?? 0) > regionAnalysis.avgRate + 2 * regionAnalysis.stdRate ? 'text-pdd-danger' : ''}`}>{(p.afterSaleRate ?? 0).toFixed(1)}%</td>
+                          {regionAnalysis.topReasons.map(reason => (
+                            <td key={reason} className="py-2 text-right text-[var(--pdd-text-secondary)]">{p.reasons[reason] || 0}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  // ========== 商品售后（合并 SKU拆解 + 高风险商品 + 退款时效）==========
+  const renderProductRisk = () => (
+    <div className="space-y-4">
+      {/* 子 Tab 导航 */}
+      <div className="flex gap-1 bg-[var(--pdd-card)] rounded-lg px-1.5 py-1 border border-[var(--pdd-border)] w-fit">
+        {([
+          { key: 'sku' as const, label: 'SKU拆解', icon: Tag },
+          { key: 'risk' as const, label: '高风险商品', icon: AlertTriangle },
+          { key: 'timeline' as const, label: '退款时效', icon: Clock },
+        ]).map(st => (
+          <button key={st.key} onClick={() => setProductRiskSub(st.key)}
+            className={`flex items-center gap-1 px-3 py-1 rounded-md text-xs font-medium transition-all ${
+              productRiskSub === st.key ? 'text-white shadow-sm' : 'text-[var(--pdd-text-secondary)] hover:text-[var(--pdd-text)] hover:bg-[var(--pdd-bg)]'
+            }`}
+            style={productRiskSub === st.key ? { background: 'linear-gradient(to right, var(--pdd-danger), #ff6b5b)' } : {}}>
+            <st.icon size={12} />{st.label}
+          </button>
+        ))}
+      </div>
+
+      {/* SKU拆解 */}
+      {productRiskSub === 'sku' && (
+        <div className="grid grid-cols-2 gap-4">
+          <div className="pdd-card p-4">
+            <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><Tag size={16} className="text-[var(--pdd-danger)]" />SKU退款金额TOP10</h4>
+            {skuBreakdown.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={skuBreakdown.slice(0, 10)} layout="vertical" margin={{ left: 20 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 10 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={120} />
+                  <Tooltip formatter={(v: number) => [`¥${v.toFixed(0)}`, '退款金额']} contentStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="refundAmount" fill="var(--pdd-danger)" radius={[0, 4, 4, 0]} barSize={18} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : <div className="h-[300px] flex items-center justify-center text-sm text-[var(--pdd-text-secondary)]">暂无SKU数据</div>}
+          </div>
+          <div className="pdd-card p-4">
+            <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><Package size={16} className="text-[var(--pdd-danger)]" />SKU售后次数排名</h4>
+            {skuBreakdown.length > 0 ? (
+              <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="text-[var(--pdd-text-secondary)] border-b border-[var(--pdd-border)] sticky top-0 bg-[var(--pdd-card)] z-10">
+                    <th className="py-2 text-left">SKU信息</th><th className="py-2 text-right">售后次数</th><th className="py-2 text-right">退款金额</th><th className="py-2 text-right">售后率</th>
+                  </tr></thead>
+                  <tbody>
+                    {[...skuBreakdown].sort((a, b) => b.count - a.count).slice(0, 15).map((s, i) => (
+                      <tr key={i} className="border-b border-[var(--pdd-border)] hover:bg-[var(--pdd-bg)]">
+                        <td className="py-2 truncate max-w-[200px]" title={s.name}>{s.name}</td>
+                        <td className="py-2 text-right font-mono text-pdd-danger">{s.count}</td>
+                        <td className="py-2 text-right font-mono">¥{s.refundAmount.toFixed(0)}</td>
+                        <td className="py-2 text-right font-mono">{s.orderCount > 0 ? `${s.afterSaleRate.toFixed(1)}%` : '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <div className="h-[300px] flex items-center justify-center text-sm text-[var(--pdd-text-secondary)]">暂无SKU数据</div>}
+          </div>
+        </div>
+      )}
+
+      {/* 高风险商品 */}
+      {productRiskSub === 'risk' && (
         <div className="pdd-card p-4">
-          <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><Package size={16} className="text-[var(--pdd-danger)]" />SKU售后次数排名</h4>
-          {skuBreakdown.length > 0 ? (
-            <div className="overflow-x-auto max-h-[300px] overflow-y-auto">
+          <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><AlertTriangle size={16} className="text-pdd-danger" />高售后商品预警（多因子风险评分）</h4>
+          {highRiskProducts.length > 0 ? (
+            <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead><tr className="text-[var(--pdd-text-secondary)] border-b border-[var(--pdd-border)] sticky top-0 bg-pdd-card z-10">
-                  <th className="py-2 text-left">SKU信息</th><th className="py-2 text-right">售后次数</th><th className="py-2 text-right">退款金额</th><th className="py-2 text-right">售后率</th>
+                <thead><tr className="text-[var(--pdd-text-secondary)] border-b border-[var(--pdd-border)]">
+                  <th className="py-2 text-left">商品名称</th><th className="py-2 text-left">商品ID</th><th className="py-2 text-right">订单数</th><th className="py-2 text-right">售后数</th><th className="py-2 text-right">售后率</th><th className="py-2 text-right">退款金额</th><th className="py-2 text-right">退款占营收</th><th className="py-2 text-right">风险分数</th><th className="py-2 text-center">风险等级</th>
                 </tr></thead>
                 <tbody>
-                  {[...skuBreakdown].sort((a, b) => b.count - a.count).slice(0, 15).map((s, i) => (
+                  {highRiskProducts.slice(0, 20).map((p, i) => (
                     <tr key={i} className="border-b border-[var(--pdd-border)] hover:bg-[var(--pdd-bg)]">
-                      <td className="py-2 truncate max-w-[200px]" title={s.name}>{s.name}</td>
-                      <td className="py-2 text-right font-mono text-pdd-danger">{s.count}</td>
-                      <td className="py-2 text-right font-mono">¥{s.refundAmount.toFixed(0)}</td>
-                      <td className="py-2 text-right font-mono">{s.orderCount > 0 ? `${s.afterSaleRate.toFixed(1)}%` : '-'}</td>
+                      <td className="py-2 truncate max-w-[200px]" title={p.name}>{p.name}</td>
+                      <td className="py-2 font-mono text-[10px]">{p.productId}</td>
+                      <td className="py-2 text-right">{p.orderCount}</td>
+                      <td className="py-2 text-right text-pdd-danger">{p.afterSaleCount}</td>
+                      <td className="py-2 text-right font-mono">{p.afterSaleRate.toFixed(1)}%</td>
+                      <td className="py-2 text-right font-mono">¥{p.refundAmount.toFixed(0)}</td>
+                      <td className="py-2 text-right font-mono">{p.refundRevenueRatio.toFixed(1)}%</td>
+                      <td className="py-2 text-right font-mono">{p.riskScore.toFixed(0)}</td>
+                      <td className="py-2 text-center"><span className={`px-2 py-0.5 rounded text-[10px] ${riskLevel(p.riskScore).cls}`}>{riskLevel(p.riskScore).label}</span></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          ) : <div className="h-[300px] flex items-center justify-center text-sm text-[var(--pdd-text-secondary)]">暂无SKU数据</div>}
+          ) : <div className="py-8 text-center text-sm text-[var(--pdd-text-secondary)]">暂无高售后商品</div>}
         </div>
-      </div>
-    </div>
-  );
+      )}
 
-  // ========== 高风险商品 ==========
-  const renderRisk = () => (
-    <div className="pdd-card p-4">
-      <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><AlertTriangle size={16} className="text-pdd-danger" />高售后商品预警（多因子风险评分）</h4>
-      {highRiskProducts.length > 0 ? (
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead><tr className="text-[var(--pdd-text-secondary)] border-b border-[var(--pdd-border)]">
-              <th className="py-2 text-left">商品名称</th><th className="py-2 text-left">商品ID</th><th className="py-2 text-right">订单数</th><th className="py-2 text-right">售后数</th><th className="py-2 text-right">售后率</th><th className="py-2 text-right">退款金额</th><th className="py-2 text-right">退款占营收</th><th className="py-2 text-right">风险分数</th><th className="py-2 text-center">风险等级</th>
-            </tr></thead>
-            <tbody>
-              {highRiskProducts.slice(0, 20).map((p, i) => (
-                <tr key={i} className="border-b border-[var(--pdd-border)] hover:bg-[var(--pdd-bg)]">
-                  <td className="py-2 truncate max-w-[200px]" title={p.name}>{p.name}</td>
-                  <td className="py-2 font-mono text-[10px]">{p.productId}</td>
-                  <td className="py-2 text-right">{p.orderCount}</td>
-                  <td className="py-2 text-right text-pdd-danger">{p.afterSaleCount}</td>
-                  <td className="py-2 text-right font-mono">{p.afterSaleRate.toFixed(1)}%</td>
-                  <td className="py-2 text-right font-mono">¥{p.refundAmount.toFixed(0)}</td>
-                  <td className="py-2 text-right font-mono">{p.refundRevenueRatio.toFixed(1)}%</td>
-                  <td className="py-2 text-right font-mono">{p.riskScore.toFixed(0)}</td>
-                  <td className="py-2 text-center"><span className={`px-2 py-0.5 rounded text-[10px] ${riskLevel(p.riskScore).cls}`}>{riskLevel(p.riskScore).label}</span></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* 商品退款时效 */}
+      {productRiskSub === 'timeline' && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="pdd-card px-4 py-3">
+              <p className="text-xs text-[var(--pdd-text-secondary)]">有退款时效数据的商品</p>
+              <p className="text-2xl font-bold text-[var(--pdd-primary)]">{productAfterSaleTimeline.length}</p>
+            </div>
+            <div className="pdd-card px-4 py-3">
+              <p className="text-xs text-[var(--pdd-text-secondary)]">平均快速退款率(≤7天)</p>
+              <p className="text-2xl font-bold text-[var(--pdd-warning)]">{productAfterSaleTimeline.length > 0 ? (productAfterSaleTimeline.reduce((s, p) => s + p.fastRefundRate, 0) / productAfterSaleTimeline.length).toFixed(1) : '-'}%</p>
+            </div>
+            <div className="pdd-card px-4 py-3">
+              <p className="text-xs text-[var(--pdd-text-secondary)]">平均长尾退款率({'>'}90天)</p>
+              <p className="text-2xl font-bold text-[var(--pdd-danger)]">{productAfterSaleTimeline.length > 0 ? (productAfterSaleTimeline.reduce((s, p) => s + p.longTailRate, 0) / productAfterSaleTimeline.length).toFixed(1) : '-'}%</p>
+            </div>
+          </div>
+          <div className="pdd-card p-4">
+            <h4 className="text-sm font-semibold mb-3 flex items-center gap-2"><Clock size={16} className="text-[var(--pdd-danger)]" />商品快速退款率 vs 长尾退款率</h4>
+            {productAfterSaleTimeline.length > 0 ? (
+              <div className="overflow-x-auto max-h-[400px] overflow-y-auto">
+                <table className="w-full text-xs">
+                  <thead><tr className="text-[var(--pdd-text-secondary)] border-b border-[var(--pdd-border)] sticky top-0 bg-[var(--pdd-card)] z-10">
+                    <th className="py-2 text-left">商品</th><th className="py-2 text-right">售后数</th><th className="py-2 text-right">退款金额</th><th className="py-2 text-right">平均退款天数</th><th className="py-2 text-right">快速退款率(≤7天)</th><th className="py-2 text-right">长尾退款率({'>'}90天)</th><th className="py-2 text-center">特征</th>
+                  </tr></thead>
+                  <tbody>
+                    {productAfterSaleTimeline.slice(0, 20).map((p, i) => (
+                      <tr key={i} className="border-b border-[var(--pdd-border)] hover:bg-[var(--pdd-bg)]">
+                        <td className="py-2 truncate max-w-[160px]" title={p.name}>{p.name}</td>
+                        <td className="py-2 text-right font-mono">{p.afterSaleCount}</td>
+                        <td className="py-2 text-right font-mono">¥{p.refundAmount.toFixed(0)}</td>
+                        <td className="py-2 text-right font-mono">{p.avgRefundDays.toFixed(1)}天</td>
+                        <td className="py-2 text-right font-mono text-[var(--pdd-warning)]">{p.fastRefundRate.toFixed(1)}%</td>
+                        <td className="py-2 text-right font-mono text-pdd-danger">{p.longTailRate.toFixed(1)}%</td>
+                        <td className="py-2 text-center">
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] ${p.fastRefundRate > 60 ? 'bg-pdd-danger/10 text-red-700' : p.longTailRate > 20 ? 'bg-pdd-warning/10 text-yellow-700' : 'bg-pdd-success/10 text-green-700'}`}>
+                            {p.fastRefundRate > 60 ? '疑似质量/描述问题' : p.longTailRate > 20 ? '关注长尾风险' : '正常'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <div className="py-8 text-center text-sm text-[var(--pdd-text-secondary)]">暂无退款时效数据（需≥2条售后记录的商品）</div>}
+          </div>
         </div>
-      ) : <div className="py-8 text-center text-sm text-[var(--pdd-text-secondary)]">暂无高售后商品</div>}
+      )}
     </div>
   );
 
@@ -1010,10 +1626,12 @@ export default function AfterSalePage() {
       {/* Tab 内容 */}
       {activeTab === 'overview' && renderOverview()}
       {activeTab === 'refund' && renderRefund()}
+      {activeTab === 'timeWindow' && renderTimeWindow()}
       {activeTab === 'efficiency' && renderEfficiency()}
       {activeTab === 'logistics' && renderLogistics()}
-      {activeTab === 'sku' && renderSku()}
-      {activeTab === 'risk' && renderRisk()}
+      {activeTab === 'promoCross' && renderPromoCross()}
+      {activeTab === 'region' && renderRegion()}
+      {activeTab === 'productRisk' && renderProductRisk()}
       {activeTab === 'warning' && renderWarning()}
       {activeTab === 'detail' && renderDetail()}
 
