@@ -174,15 +174,16 @@ export default function DashboardPage() {
 
   const revenueTrend = useMemo(() => {
     if (!filteredOrders.length) return [];
-    const byDate: Record<string, { income: number; orders: number }> = {};
+    const byDate: Record<string, { income: number; orders: number; refund: number }> = {};
     filteredOrders.forEach(o => {
       const d = String(findField(o, '支付时间') || '').split(' ')[0];
       if (!d) return;
-      if (!byDate[d]) byDate[d] = { income: 0, orders: 0 };
+      if (!byDate[d]) byDate[d] = { income: 0, orders: 0, refund: 0 };
       byDate[d].income += safeFloat(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额'));
       byDate[d].orders += 1;
+      byDate[d].refund += safeFloat(findField(o, '退款金额(元)', '退款金额', '退款(元)'));
     });
-    return Object.entries(byDate).sort((a, b) => a[0].localeCompare(b[0])).slice(-7).map(([d, v]) => ({ date: d.slice(5), ...v }));
+    return Object.entries(byDate).sort((a, b) => a[0].localeCompare(b[0])).map(([d, v]) => ({ date: d.slice(5), ...v }));
   }, [filteredOrders]);
 
   const statusDist = useMemo(() => {
