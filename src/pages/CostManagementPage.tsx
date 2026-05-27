@@ -7,6 +7,7 @@ import {
   TrendingUp, Percent, BarChart3, Zap, Truck, Wrench, MessageSquare, RotateCcw, Filter
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
+import * as XLSX from 'xlsx';
 import { useData } from '../App';
 import type { TaxConfig, CustomDeduction } from '../components/ProductLinkStats';
 import { findField } from '../utils';
@@ -1099,49 +1100,86 @@ export default function CostManagementPage() {
     return result;
   };
 
+  // 通用处理：从表头和数据行导入成本
+  const processImportRows = (headers: string[], rows: any[][]) => {
+    // 清洗表头：去除BOM和不可见字符
+    const cleanHeaders = headers.map(h => String(h || '').replace(/[﻿ \t\r\n]+/g, '').trim());
+    const costIdx = cleanHeaders.findIndex(h => h.includes('成本') || h.toLowerCase().includes('cost'));
+    const idIdx = cleanHeaders.findIndex(h => h.includes('商品ID') || h.toLowerCase().includes('productid') || h.toLowerCase().includes('product'));
+    const skuIdx = cleanHeaders.findIndex(h => h.includes('SKU') || h.toLowerCase().includes('sku'));
+
+    if (costIdx < 0) { setImportStatus({ type: 'error', msg: '未找到成本列，请确保表头包含"成本"关键字' }); return; }
+    if (idIdx < 0) { setImportStatus({ type: 'error', msg: '未找到商品ID列，请确保表头包含"商品ID"关键字' }); return; }
+
+    let successCount = 0, skipCount = 0;
+    for (const row of rows) {
+      const cols = row.map(c => String(c ?? '').trim());
+      const productId = cols[idIdx];
+      const skuId = skuIdx >= 0 ? cols[skuIdx] : '';
+      const costVal = parseFloat(cols[costIdx]);
+      if (!productId || isNaN(costVal) || costVal <= 0) { skipCount++; continue; }
+      const skuKey = skuId ? `${productId}_${skuId}` : productId;
+      const oldCost = productCosts[skuKey] || 0;
+      setProductCost(skuKey, costVal);
+      const existingCfg = costConfigs[skuKey];
+      setCostConfig(skuKey, { rawCost: costVal, packagingFee: existingCfg?.packagingFee ?? packagingFeePerOrder, updatedAt: new Date().toISOString() });
+      const product = productGroups.find(g => g.productId === productId || g.skus.some(s => `${s.productId}_${s.skuId}` === skuKey));
+      if (product) {
+        addCostHistory({ productId: skuKey, productName: product.productName, field: 'rawCost', oldValue: oldCost, newValue: costVal, reason: '导入成本数据' });
+      }
+      successCount++;
+    }
+    setImportStatus({ type: 'success', msg: `成功导入 ${successCount} 条成本数据${skipCount > 0 ? `，跳过 ${skipCount} 条无效数据` : ''}` });
+  };
+
   const handleImportCosts = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setImportStatus(null);
 
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      try {
-        const text = evt.target?.result as string;
-        const lines = text.split(/\r?\n/).filter(l => l.trim());
-        if (lines.length < 2) { setImportStatus({ type: 'error', msg: '文件为空或格式不正确' }); return; }
+    const ext = file.name.toLowerCase().split('.').pop();
 
-        const headers = parseCsvLine(lines[0]);
-        const costIdx = headers.findIndex(h => h.includes('成本') || h.toLowerCase().includes('cost'));
-        const idIdx = headers.findIndex(h => h.includes('商品ID') || h.toLowerCase().includes('product'));
-        const skuIdx = headers.findIndex(h => h.includes('SKU') || h.toLowerCase().includes('sku'));
-
-        if (costIdx < 0) { setImportStatus({ type: 'error', msg: '未找到成本列，请确保表头包含"成本"关键字' }); return; }
-
-        let successCount = 0, skipCount = 0;
-        for (let i = 1; i < lines.length; i++) {
-          const cols = parseCsvLine(lines[i]);
-          const productId = cols[idIdx >= 0 ? idIdx : 0];
-          const skuId = skuIdx >= 0 ? cols[skuIdx] : '';
-          const costVal = parseFloat(cols[costIdx]);
-          if (!productId || isNaN(costVal) || costVal <= 0) { skipCount++; continue; }
-          const skuKey = skuId ? `${productId}_${skuId}` : productId;
-          const oldCost = productCosts[skuKey] || 0;
-          setProductCost(skuKey, costVal);
-          const existingCfg = costConfigs[skuKey];
-          setCostConfig(skuKey, { rawCost: costVal, packagingFee: existingCfg?.packagingFee ?? packagingFeePerOrder, updatedAt: new Date().toISOString() });
-          const product = productGroups.find(g => g.productId === productId || g.skus.some(s => `${s.productId}_${s.skuId}` === skuKey));
-          if (product) {
-            addCostHistory({ productId: skuKey, productName: product.productName, field: 'rawCost', oldValue: oldCost, newValue: costVal, reason: '导入成本数据' });
-          }
-          successCount++;
+    if (ext === 'xlsx' || ext === 'xls') {
+      // Excel 文件解析
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const wb = XLSX.read(evt.target?.result, { type: 'array' });
+          const sheetName = wb.SheetNames[0];
+          if (!sheetName) { setImportStatus({ type: 'error', msg: '文件中没有工作表' }); return; }
+          const sheet = wb.Sheets[sheetName];
+          const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+          // 跳过空行，找到有效数据
+          const validRows = rawRows.filter(r => r && r.length > 0 && r.some((c: any) => String(c || '').trim()));
+          if (validRows.length < 2) { setImportStatus({ type: 'error', msg: '文件为空或格式不正确' }); return; }
+          const headers = validRows[0].map((c: any) => String(c ?? ''));
+          const dataRows = validRows.slice(1);
+          processImportRows(headers, dataRows);
+        } catch (err) {
+          setImportStatus({ type: 'error', msg: '解析Excel文件失败，请检查格式' });
         }
-        setImportStatus({ type: 'success', msg: `成功导入 ${successCount} 条成本数据${skipCount > 0 ? `，跳过 ${skipCount} 条无效数据` : ''}` });
-      } catch (err) {
-        setImportStatus({ type: 'error', msg: '解析文件失败，请检查CSV格式' });
-      }
-    };
-    reader.readAsText(file);
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      // CSV 文件解析
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        try {
+          const text = evt.target?.result as string;
+          // 去除 UTF-8 BOM
+          const cleanText = text.replace(/^﻿/, '');
+          const lines = cleanText.split(/\r?\n/).filter(l => l.trim());
+          if (lines.length < 2) { setImportStatus({ type: 'error', msg: '文件为空或格式不正确' }); return; }
+
+          const headers = parseCsvLine(lines[0]);
+          const dataRows = lines.slice(1).map(l => parseCsvLine(l));
+          processImportRows(headers, dataRows);
+        } catch (err) {
+          setImportStatus({ type: 'error', msg: '解析CSV文件失败，请检查格式' });
+        }
+      };
+      reader.readAsText(file);
+    }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -1530,7 +1568,7 @@ export default function CostManagementPage() {
                 </button>
                 <label className="flex items-center gap-1 px-2.5 py-1.5 border border-red-200 bg-pdd-danger/10 rounded-lg text-xs text-pdd-danger hover:bg-pdd-danger/20 cursor-pointer transition-colors">
                   <Upload size={13} /> 导入
-                  <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={handleImportCosts} />
+                  <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" className="hidden" onChange={handleImportCosts} />
                 </label>
                 <button onClick={() => setShowMissingFilters(!showMissingFilters)}
                   className={`flex items-center gap-1 px-2.5 py-1.5 border rounded-lg text-xs transition-all ${showMissingFilters ? 'bg-pdd-danger/10 border-red-200 text-pdd-danger' : 'border-pdd-border text-pdd-text-secondary hover:bg-pdd-bg'}`}>
