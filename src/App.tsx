@@ -158,6 +158,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setStores(prev => [...prev, s]);
     setCurrentStore(s);
     addLog({ action: '添加店铺', storeId: s.id, storeName: name, details: `添加店铺: ${name}`, result: 'success' });
+    // 同步创建店铺到服务端
+    apiClient.post('/stores', { name }).catch(() => {});
     return s;
   }, []);
 
@@ -754,34 +756,46 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     saveToIDB();
   }, [storeDataMap, idbReady]);
 
-  // 数据变更后自动同步到服务器
-  const syncTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // 数据变更后即时同步到服务器
+  const syncingRef = useRef(false);
+  const pendingRef = useRef(false);
   useEffect(() => {
     if (!idbReady || !hasTokens()) return;
-    // 防抖：避免频繁同步
-    if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
-    syncTimerRef.current = setTimeout(async () => {
-      const storesList: { id: string; name: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
-      for (const [storeId, storeData] of Object.entries(storeDataMap)) {
-        if (!storeData.orders?.length && !storeData.promotionSummary?.length) continue;
-        const storeName = storesList.find(s => s.id === storeId)?.name || '';
-        const configs: Record<string, any> = {};
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i);
-          if (key && key.startsWith(`dianfx_`) && key.endsWith(`_${storeId}`)) {
-            const val = localStorage.getItem(key);
-            if (val) {
-              try { configs[key] = JSON.parse(val); } catch { configs[key] = val; }
+    if (syncingRef.current) {
+      pendingRef.current = true;
+      return;
+    }
+
+    const doSync = async () => {
+      syncingRef.current = true;
+      pendingRef.current = false;
+      try {
+        const storesList: { id: string; name: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
+        for (const [storeId, storeData] of Object.entries(storeDataMap)) {
+          if (!storeData.orders?.length && !storeData.promotionSummary?.length) continue;
+          const storeName = storesList.find(s => s.id === storeId)?.name || '';
+          const configs: Record<string, any> = {};
+          for (let i = 0; i < localStorage.length; i++) {
+            const key = localStorage.key(i);
+            if (key && key.startsWith(`dianfx_`) && key.endsWith(`_${storeId}`)) {
+              const val = localStorage.getItem(key);
+              if (val) {
+                try { configs[key] = JSON.parse(val); } catch { configs[key] = val; }
+              }
             }
           }
+          const storeUploads = uploadRecords.filter(r => r.storeId === storeId);
+          await syncStoreData(storeId, storeName, storeData, configs, storeUploads);
         }
-        const storeUploads = uploadRecords.filter(r => r.storeId === storeId);
-        await syncStoreData(storeId, storeName, storeData, configs, storeUploads);
+      } catch {} finally {
+        syncingRef.current = false;
+        if (pendingRef.current) {
+          pendingRef.current = false;
+          doSync();
+        }
       }
-    }, 3000);
-    return () => {
-      if (syncTimerRef.current) clearTimeout(syncTimerRef.current);
     };
+    doSync();
   }, [storeDataMap, idbReady, uploadRecords]);
 
   // 清理已被删除的店铺的残留数据（deleteStore 只清 localStorage，这里同步清内存）
