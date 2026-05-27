@@ -2,7 +2,7 @@ import React, { useState, useCallback } from 'react';
 
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { Upload, FileText, FileSpreadsheet, CheckCircle, AlertCircle, X, Loader2, Trash2, History, AlertTriangle, Store } from 'lucide-react';
+import { Upload, FileText, FileSpreadsheet, CheckCircle, AlertCircle, X, Loader2, Trash2, History, AlertTriangle, Store, ChevronDown, ChevronRight, Clock } from 'lucide-react';
 
 import { useData, useStore } from '../App';
 
@@ -10,6 +10,7 @@ import Papa from 'papaparse';
 
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
+import { changelog } from '../data/changelog';
 
 
 interface DataMismatchWarning {
@@ -749,6 +750,8 @@ export default function UploadPage() {
   const [selectedRecords, setSelectedRecords] = useState<Set<string>>(new Set());
 
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
 
 
   const currentStoreUploads = uploadRecords.filter(r => r.storeId === currentStore?.id);
@@ -1079,7 +1082,7 @@ const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订�
         setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, fieldCount: allFields.length, rowCount: totalRows, detectedType: primaryType, missingFields: missing, mismatchWarning } : f));
 
         // 使用 functional updater 合并数据，避免并发上传时的竞态覆盖
-        setStoreData(targetStoreId, (prev) => {
+        setStoreData(targetStoreId, (prev: any) => {
           const base = prev || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() } };
           const merged = {
             ...base,
@@ -1774,6 +1777,69 @@ const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订�
         )}
 
       </AnimatePresence>
+
+      {/* 网站更新日志 */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="pdd-card mt-4">
+        <button
+          onClick={() => setShowChangelog(!showChangelog)}
+          className="w-full flex items-center justify-between text-left"
+        >
+          <span className="font-bold flex items-center gap-2 text-pdd-text">
+            <Clock size={18} className="text-pdd-primary" />网站更新日志
+          </span>
+          <span className="text-pdd-text-secondary">
+            {showChangelog ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+          </span>
+        </button>
+        <AnimatePresence>
+          {showChangelog && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              className="overflow-hidden"
+            >
+              <div className="mt-4 space-y-3">
+                {changelog.map((entry) => (
+                  <div key={entry.version} className="border border-pdd-border rounded-lg overflow-hidden">
+                    <button
+                      onClick={() => setExpandedVersion(expandedVersion === entry.version ? null : entry.version)}
+                      className="w-full flex items-center justify-between px-4 py-2.5 bg-pdd-bg hover:bg-pdd-border/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="px-2 py-0.5 text-xs font-bold bg-pdd-primary text-white rounded">{entry.version}</span>
+                        <span className="text-xs text-pdd-text-secondary">{entry.date}</span>
+                      </div>
+                      <span className="text-pdd-text-secondary">
+                        {expandedVersion === entry.version ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      </span>
+                    </button>
+                    <AnimatePresence>
+                      {expandedVersion === entry.version && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <ul className="px-4 py-3 space-y-1.5 border-t border-pdd-border">
+                            {entry.changes.map((change, i) => (
+                              <li key={i} className="text-sm text-pdd-text-secondary flex items-start gap-2">
+                                <span className="text-pdd-primary mt-1.5 w-1.5 h-1.5 rounded-full bg-pdd-primary flex-shrink-0" />
+                                {change}
+                              </li>
+                            ))}
+                          </ul>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
 
     </div>
 
