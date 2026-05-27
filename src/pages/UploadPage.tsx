@@ -932,6 +932,27 @@ export default function UploadPage() {
           if (orderId && snapshotOrderIds.has(orderId)) approxDuplicateCount++;
           else if (orderId) { approxNewCount++; snapshotOrderIds.add(orderId); }
         });
+      } else if (detectedType === '运费险数据') {
+        const snapshotKeys = new Set((existingSnapshot.shippingInsurance || []).map(getInsuranceRowKey).filter(Boolean));
+        data.forEach((row: any) => {
+          const key = getInsuranceRowKey(row);
+          if (key && snapshotKeys.has(key)) approxDuplicateCount++;
+          else if (key) { approxNewCount++; snapshotKeys.add(key); }
+        });
+      } else if (detectedType === '售后数据') {
+        const snapshotKeys = new Set((existingSnapshot.afterSaleRecords || []).map(getAfterSaleRowKey).filter(Boolean));
+        data.forEach((row: any) => {
+          const key = getAfterSaleRowKey(row);
+          if (key && snapshotKeys.has(key)) approxDuplicateCount++;
+          else if (key) { approxNewCount++; snapshotKeys.add(key); }
+        });
+      } else if (detectedType === '货款明细') {
+        const snapshotKeys = new Set((existingSnapshot.financialRecords || []).map(getFinancialRowKey).filter(Boolean));
+        data.forEach((row: any) => {
+          const key = getFinancialRowKey(row);
+          if (key && snapshotKeys.has(key)) approxDuplicateCount++;
+          else if (key) { approxNewCount++; snapshotKeys.add(key); }
+        });
       }
 
       setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, fieldCount: fields.length, rowCount: data.length, detectedType, missingFields: missing, mismatchWarning, duplicateCount: approxDuplicateCount, newCount: approxNewCount } : f));
@@ -967,6 +988,87 @@ export default function UploadPage() {
           if (!existing.financialRecords) existing.financialRecords = [];
           const { merged: mergedFinancial } = dedupMerge(existing.financialRecords, data, getFinancialRowKey);
           existing.financialRecords = mergedFinancial;
+
+        } else if (detectedType === '运费险数据') {
+          const { merged: mergedIns } = dedupMerge(existing.shippingInsurance, data, getInsuranceRowKey);
+          existing.shippingInsurance = mergedIns;
+          existing.availableFields.insurance = new Set(fields);
+
+        } else if (detectedType === '售后数据') {
+          if (!existing.afterSaleRecords) existing.afterSaleRecords = [];
+          const { merged: mergedAS } = dedupMerge(existing.afterSaleRecords, data, getAfterSaleRowKey);
+          existing.afterSaleRecords = mergedAS;
+          if (!existing.availableFields.afterSale) existing.availableFields.afterSale = new Set();
+          existing.availableFields.afterSale = new Set(fields);
+
+        } else if (detectedType === '商品推广数据') {
+          const hasProductId = fields.some((f: string) => {
+            const n = f.replace(/[﻿ 	]/g, '').trim().toLowerCase();
+            return n === '商品id' || n.includes('productid') || n.includes('商品编号');
+          });
+          if (hasProductId) {
+            const getPromoKey = (r: any) => {
+              const d = String(findField(r, '日期') || '').trim();
+              if (!/^d{4}-d{2}-d{2}$/.test(d)) return '';
+              return d + '-' + String(findField(r, '商品ID') || '').trim() + '-' + String(findField(r, '推广名称') || '').trim();
+            };
+            const seenKeys = new Set(existing.promotionProducts.map(getPromoKey).filter(Boolean));
+            data.forEach((item: any) => {
+              const key = getPromoKey(item);
+              if (key && !seenKeys.has(key)) {
+                existing.promotionProducts.push(item);
+                seenKeys.add(key);
+              }
+            });
+          } else {
+            const summaryMap = new Map<string, any>();
+            existing.promotionSummary.forEach((r: any) => {
+              const d = String(findField(r, '日期') || '').trim();
+              if (/^d{4}-d{2}-d{2}$/.test(d)) summaryMap.set(d, r);
+            });
+            data.forEach((item: any) => {
+              const d = String(findField(item, '日期') || '').trim();
+              if (/^d{4}-d{2}-d{2}$/.test(d)) summaryMap.set(d, item);
+            });
+            existing.promotionSummary = Array.from(summaryMap.values());
+          }
+          fields.forEach((f: string) => existing.availableFields.promotion.add(f));
+
+        } else if (detectedType === '明星店铺数据') {
+          const hasDistinguish = fields.includes('推广名称') || fields.includes('创意样式');
+          const starMap = new Map<string, any>();
+          existing.starStoreSummary.forEach((r: any) => {
+            const d = String(findField(r, '日期') || '').trim();
+            if (/^d{4}-d{2}-d{2}$/.test(d)) {
+              const suffix = hasDistinguish ? '-' + String(findField(r, '推广名称') || findField(r, '创意样式') || '').trim() : '';
+              starMap.set(d + suffix, r);
+            }
+          });
+          data.forEach((item: any) => {
+            const d = String(findField(item, '日期') || '').trim();
+            if (!/^d{4}-d{2}-d{2}$/.test(d)) return;
+            const suffix = hasDistinguish ? '-' + String(findField(item, '推广名称') || findField(item, '创意样式') || '').trim() : '';
+            starMap.set(d + suffix, item);
+          });
+          existing.starStoreSummary = Array.from(starMap.values());
+
+        } else if (detectedType === '直播推广数据') {
+          const hasDistinguish = fields.includes('直播间') || fields.includes('推广名称');
+          const liveMap = new Map<string, any>();
+          existing.liveStreamSummary.forEach((r: any) => {
+            const d = String(findField(r, '日期') || '').trim();
+            if (/^d{4}-d{2}-d{2}$/.test(d)) {
+              const suffix = hasDistinguish ? '-' + String(findField(r, '直播间') || findField(r, '推广名称') || '').trim() : '';
+              liveMap.set(d + suffix, r);
+            }
+          });
+          data.forEach((item: any) => {
+            const d = String(findField(item, '日期') || '').trim();
+            if (!/^d{4}-d{2}-d{2}$/.test(d)) return;
+            const suffix = hasDistinguish ? '-' + String(findField(item, '直播间') || findField(item, '推广名称') || '').trim() : '';
+            liveMap.set(d + suffix, item);
+          });
+          existing.liveStreamSummary = Array.from(liveMap.values());
 
         }
 
@@ -1058,7 +1160,7 @@ export default function UploadPage() {
         let totalRows = 0;
         let allFields: string[] = [];
         let primaryType = '未知类型';
-        const isValidDateRow = (item: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(item['日期'] || '').trim());
+        const isValidDateRow = (item: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(findField(item, '日期') || '').trim());
 
         for (const sn of wb.SheetNames) {
           const sheetData = sheets[sn];
@@ -1131,7 +1233,7 @@ export default function UploadPage() {
                 const seenKeys = new Set<string>();
                 info.data.forEach((item: any) => {
                   if (!isValidDateRow(item)) return;
-                  const key = `${item['日期'] || ''}-${item['商品ID'] || ''}-${item['推广名称'] || ''}`;
+                  const key = `${String(findField(item, '日期') || '').trim()}-${String(findField(item, '商品ID') || '').trim()}-${String(findField(item, '推广名称') || '').trim()}`;
                   if (!seenKeys.has(key)) {
                     merged.promotionProducts.push(item);
                     seenKeys.add(key);
@@ -1142,12 +1244,12 @@ export default function UploadPage() {
               } else {
                 const summaryMap = new Map<string, any>();
                 merged.promotionSummary.forEach((r: any) => {
-                  const d = String(r['日期'] || '').trim();
+                  const d = String(findField(r, '日期') || '').trim();
                   if (/^\d{4}-\d{2}-\d{2}$/.test(d)) summaryMap.set(d, r);
                 });
                 info.data.forEach((item: any) => {
                   if (!isValidDateRow(item)) return;
-                  summaryMap.set(String(item['日期']).trim(), item);
+                  summaryMap.set(String(findField(item, '日期') || '').trim(), item);
                 });
                 merged.promotionSummary = Array.from(summaryMap.values());
                 info.fields.forEach((f: string) => merged.availableFields.promotion.add(f));
@@ -1157,24 +1259,24 @@ export default function UploadPage() {
               const hasDistinguishField = info.fields.includes('推广名称') || info.fields.includes('创意样式');
               const starMap = new Map<string, any>();
               merged.starStoreSummary.forEach((r: any) => {
-                const d = String(r['日期'] || '').trim();
+                const d = String(findField(r, '日期') || '').trim();
                 if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-                  const suffix = hasDistinguishField ? `-${r['推广名称'] || r['创意样式'] || ''}` : '';
+                  const suffix = hasDistinguishField ? `-${findField(r, '推广名称') || findField(r, '创意样式') || ''}` : '';
                   starMap.set(`${d}${suffix}`, r);
                 }
               });
               info.data.forEach((item: any) => {
                 if (!isValidDateRow(item)) return;
-                const suffix = hasDistinguishField ? `-${item['推广名称'] || item['创意样式'] || ''}` : '';
-                const key = `${String(item['日期']).trim()}${suffix}`;
+                const suffix = hasDistinguishField ? `-${findField(item, '推广名称') || findField(item, '创意样式') || ''}` : '';
+                const key = `${String(findField(item, '日期') || '').trim()}${suffix}`;
                 starMap.set(key, item);
               });
               merged.starStoreSummary = Array.from(starMap.values());
               info.data.forEach((item: any) => {
                 if (!isValidDateRow(item)) return;
                 const promoItem = { ...item, _source: 'starStore' };
-                if (!promoItem['商品ID']) promoItem['商品ID'] = item['推广名称'] || item['创意样式'] || '明星店铺';
-                if (!promoItem['商品名称']) promoItem['商品名称'] = item['推广名称'] || item['创意样式'] || '明星店铺';
+                if (!promoItem['商品ID']) promoItem['商品ID'] = findField(item, '推广名称') || findField(item, '创意样式') || '明星店铺';
+                if (!promoItem['商品名称']) promoItem['商品名称'] = findField(item, '推广名称') || findField(item, '创意样式') || '明星店铺';
                 merged.promotionProducts.push(promoItem);
               });
               processedTypes.add(info.type);
@@ -1182,24 +1284,24 @@ export default function UploadPage() {
               const hasDistinguishField = info.fields.includes('直播间') || info.fields.includes('推广名称');
               const liveMap = new Map<string, any>();
               merged.liveStreamSummary.forEach((r: any) => {
-                const d = String(r['日期'] || '').trim();
+                const d = String(findField(r, '日期') || '').trim();
                 if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
-                  const suffix = hasDistinguishField ? `-${r['直播间'] || r['推广名称'] || ''}` : '';
+                  const suffix = hasDistinguishField ? `-${findField(r, '直播间') || findField(r, '推广名称') || ''}` : '';
                   liveMap.set(`${d}${suffix}`, r);
                 }
               });
               info.data.forEach((item: any) => {
                 if (!isValidDateRow(item)) return;
-                const suffix = hasDistinguishField ? `-${item['直播间'] || item['推广名称'] || ''}` : '';
-                const key = `${String(item['日期']).trim()}${suffix}`;
+                const suffix = hasDistinguishField ? `-${findField(item, '直播间') || findField(item, '推广名称') || ''}` : '';
+                const key = `${String(findField(item, '日期') || '').trim()}${suffix}`;
                 liveMap.set(key, item);
               });
               merged.liveStreamSummary = Array.from(liveMap.values());
               info.data.forEach((item: any) => {
                 if (!isValidDateRow(item)) return;
                 const promoItem = { ...item, _source: 'liveStream' };
-                if (!promoItem['商品ID']) promoItem['商品ID'] = item['直播间'] || '直播推广';
-                if (!promoItem['商品名称']) promoItem['商品名称'] = item['直播间'] || '直播推广';
+                if (!promoItem['商品ID']) promoItem['商品ID'] = findField(item, '直播间') || '直播推广';
+                if (!promoItem['商品名称']) promoItem['商品名称'] = findField(item, '直播间') || '直播推广';
                 merged.promotionProducts.push(promoItem);
               });
               processedTypes.add(info.type);
