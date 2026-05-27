@@ -41,6 +41,12 @@ jobs:
           scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key /tmp/dist.tar.gz ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/tmp/
           ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p /www/wwwroot/meoo/dist && rm -rf /www/wwwroot/meoo/dist/* && tar xzf /tmp/dist.tar.gz -C /www/wwwroot/meoo/dist/ && rm /tmp/dist.tar.gz && echo 'frontend ok'"
 
+      - name: 部署管理端到服务器
+        run: |
+          cd dist-admin && tar czf /tmp/admin-dist.tar.gz . && cd ..
+          scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key /tmp/admin-dist.tar.gz ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/tmp/
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p /www/wwwroot/meoo-admin/dist && rm -rf /www/wwwroot/meoo-admin/dist/* && tar xzf /tmp/admin-dist.tar.gz -C /www/wwwroot/meoo-admin/dist/ && rm /tmp/admin-dist.tar.gz && echo 'admin ok'"
+
       - name: 部署后端到服务器
         run: |
           cd server && tar czf /tmp/server-dist.tar.gz dist/ package.json && cd ..
