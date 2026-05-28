@@ -6,6 +6,7 @@ import { useStore, useData } from '../App';
 import { safeFloat } from '../components/TimeFilter';
 import { findField } from '../utils';
 import { importSampleData, hasSampleData } from '../utils/dataImporter';
+import { forceSyncFromServer } from '../utils/forceSync';
 
 export default function StoresPage() {
   const { stores, currentStore, addStore, renameStore, switchStore, deleteStore } = useStore();
@@ -133,6 +134,22 @@ export default function StoresPage() {
               <Store size={20} className="text-pdd-primary-light" />
               我的店铺 ({stores.length})
             </h2>
+            {stores.length > 0 && (
+              <button onClick={async () => {
+                if (!confirm('数据恢复将从服务器拉取最新数据覆盖本地，确认继续？')) return;
+                setImporting(true); setImportMsg('正在从服务器同步...');
+                const r = await forceSyncFromServer();
+                setImporting(false);
+                if (r.success) setImportMsg(`已恢复 ${r.storesRecovered}/${r.storesFound} 个店铺，即将刷新...`);
+                else setImportMsg(r.error || '同步失败');
+                if (r.success) setTimeout(() => window.location.reload(), 1000);
+              }}
+                disabled={importing}
+                className="px-3 py-1.5 text-xs border border-pdd-border rounded-lg text-pdd-text-secondary hover:text-pdd-primary hover:border-pdd-primary/40 transition-colors flex items-center gap-1"
+              >
+                <RefreshCw size={14} className={importing ? 'animate-spin' : ''} /> 数据恢复
+              </button>
+            )}
             </div>
 
             {stores.length === 0 ? (
@@ -140,24 +157,49 @@ export default function StoresPage() {
                 <ShoppingBag size={64} className="mx-auto mb-4 text-pdd-border" />
                 <p className="text-lg text-pdd-text-secondary mb-2">还没有添加店铺</p>
                 <p className="text-sm text-pdd-text-secondary mb-4">在右侧添加您的第一个店铺开始使用</p>
-                <button
-                  onClick={async () => {
-                    setImporting(true); setImportMsg('');
-                    try {
-                      await importSampleData();
-                      setImportMsg('导入成功，页面即将刷新...');
-                      setTimeout(() => window.location.reload(), 800);
-                    } catch { setImportMsg('导入失败，请重试'); }
-                    setImporting(false);
-                  }}
-                  disabled={importing}
-                  className="px-6 py-3 bg-gradient-to-r from-pdd-primary to-pdd-primary-light text-white rounded-xl font-medium hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-pdd-primary/20"
-                >
-                  <RefreshCw size={18} className={`inline mr-2 ${importing ? 'animate-spin' : ''}`} />
-                  {importing ? '正在导入...' : '一键导入演示数据'}
-                </button>
-                {importMsg && <p className="text-sm text-pdd-success mt-2">{importMsg}</p>}
-                <p className="text-xs text-pdd-text-secondary mt-2">包含520笔订单 + 推广 + 售后 + 成本配置</p>
+                <div className="flex items-center justify-center gap-3">
+                  <button
+                    onClick={async () => {
+                      setImporting(true); setImportMsg('');
+                      try {
+                        await importSampleData();
+                        setImportMsg('导入成功，页面即将刷新...');
+                        setTimeout(() => window.location.reload(), 800);
+                      } catch { setImportMsg('导入失败，请重试'); }
+                      setImporting(false);
+                    }}
+                    disabled={importing}
+                    className="px-6 py-3 bg-gradient-to-r from-pdd-primary to-pdd-primary-light text-white rounded-xl font-medium hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-pdd-primary/20"
+                  >
+                    <Store size={18} className="inline mr-2" />
+                    {importing ? '正在导入...' : '一键导入演示数据'}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!confirm('数据恢复将从服务器拉取最新数据，确认继续？')) return;
+                      setImporting(true); setImportMsg('正在连接服务器...');
+                      const r = await forceSyncFromServer();
+                      setImporting(false);
+                      if (r.success) {
+                        if (r.storesRecovered > 0) {
+                          setImportMsg(`已恢复 ${r.storesRecovered} 个店铺数据，即将刷新...`);
+                          setTimeout(() => window.location.reload(), 1000);
+                        } else {
+                          setImportMsg('服务器无数据，请先导入演示数据或上传文件');
+                        }
+                      } else {
+                        setImportMsg(r.error || '同步失败，请检查网络');
+                      }
+                    }}
+                    disabled={importing}
+                    className="px-6 py-3 border border-pdd-border text-pdd-text-secondary rounded-xl font-medium hover:border-pdd-primary/40 hover:text-pdd-primary transition-all"
+                  >
+                    <RefreshCw size={18} className={`inline mr-2 ${importing ? 'animate-spin' : ''}`} />
+                    数据恢复
+                  </button>
+                </div>
+                {importMsg && <p className={`text-sm mt-2 ${importMsg.includes('成功')||importMsg.includes('恢复') ? 'text-pdd-success' : 'text-pdd-text-secondary'}`}>{importMsg}</p>}
+                <p className="text-xs text-pdd-text-secondary mt-2">若已注册但数据丢失，先点"数据恢复"从云端拉取，不行再点"导入演示数据"</p>
               </motion.div>
             ) : (
               <div className="space-y-3">
