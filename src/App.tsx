@@ -477,17 +477,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           }
           if (hasServerData) {
             setStoreDataMap({ ...result });
-          } else if (!hasSampleData()) {
-            // 服务器也没数据，加载演示数据
-            await importSampleData();
-            window.location.reload();
-            return;
           }
         } catch {
-          // 服务器不可达，如有本地数据就用，否则加载演示
-          if (Object.keys(result).length === 0 && !hasSampleData()) {
-            try { await importSampleData(); window.location.reload(); return; } catch {}
-          }
+          // 服务器不可达，使用本地数据
         }
       }
     };

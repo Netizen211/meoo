@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
 import { registerUser, loginUser, refreshAccessToken, revokeRefreshToken } from '../services/authService';
+import { createDemoDataForUser } from '../services/demoDataService';
 import { db } from '../db';
 import validator from 'validator';
 
@@ -12,6 +13,11 @@ router.post('/register', async (req: Request, res: Response) => {
     const { username, password, phone, inviteCode } = req.body;
     const result = await registerUser(username, password, inviteCode, phone);
     if (result.success) {
+      // 新注册用户自动创建演示数据
+      if (result.user) {
+        createDemoDataForUser(result.user.id).catch(err =>
+          console.error('[auth] demo creation failed:', err));
+      }
       res.json({ success: true, data: result.tokens, message: result.message });
     } else {
       res.status(400).json({ success: false, error: result.message });
@@ -28,6 +34,14 @@ router.post('/login', async (req: Request, res: Response) => {
     const { username, password } = req.body;
     const result = await loginUser(username, password);
     if (result.success) {
+      // 登录时若用户无店铺，自动创建演示数据
+      if (result.user) {
+        const storeCount = await db('stores').where('user_id', result.user.id).count('* as cnt').first();
+        if (!(storeCount as any)?.cnt) {
+          createDemoDataForUser(result.user.id).catch(err =>
+            console.error('[auth] demo creation on login failed:', err));
+        }
+      }
       res.json({ success: true, data: result.tokens, message: result.message });
     } else {
       res.status(401).json({ success: false, error: result.message });

@@ -5,6 +5,7 @@ import { Store, Plus, Trash2, ShoppingBag, TrendingUp, DollarSign, ShoppingCart,
 import { useStore, useData } from '../App';
 import { safeFloat } from '../components/TimeFilter';
 import { findField } from '../utils';
+import { importSampleData, hasSampleData } from '../utils/dataImporter';
 
 export default function StoresPage() {
   const { stores, currentStore, addStore, renameStore, switchStore, deleteStore } = useStore();
@@ -13,6 +14,8 @@ export default function StoresPage() {
   const [name, setName] = useState('');
   const [showAllStores, setShowAllStores] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState('');
   const [editingName, setEditingName] = useState('');
 
   const handleAdd = () => {
@@ -136,7 +139,25 @@ export default function StoresPage() {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pdd-card text-center py-16">
                 <ShoppingBag size={64} className="mx-auto mb-4 text-pdd-border" />
                 <p className="text-lg text-pdd-text-secondary mb-2">还没有添加店铺</p>
-                <p className="text-sm text-pdd-text-secondary">在右侧添加您的第一个店铺开始使用</p>
+                <p className="text-sm text-pdd-text-secondary mb-4">在右侧添加您的第一个店铺开始使用</p>
+                <button
+                  onClick={async () => {
+                    setImporting(true); setImportMsg('');
+                    try {
+                      await importSampleData();
+                      setImportMsg('导入成功，页面即将刷新...');
+                      setTimeout(() => window.location.reload(), 800);
+                    } catch { setImportMsg('导入失败，请重试'); }
+                    setImporting(false);
+                  }}
+                  disabled={importing}
+                  className="px-6 py-3 bg-gradient-to-r from-pdd-primary to-pdd-primary-light text-white rounded-xl font-medium hover:opacity-90 disabled:opacity-50 transition-all shadow-lg shadow-pdd-primary/20"
+                >
+                  <RefreshCw size={18} className={`inline mr-2 ${importing ? 'animate-spin' : ''}`} />
+                  {importing ? '正在导入...' : '一键导入演示数据'}
+                </button>
+                {importMsg && <p className="text-sm text-pdd-success mt-2">{importMsg}</p>}
+                <p className="text-xs text-pdd-text-secondary mt-2">包含520笔订单 + 推广 + 售后 + 成本配置</p>
               </motion.div>
             ) : (
               <div className="space-y-3">

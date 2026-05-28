@@ -1,0 +1,53 @@
+:3015/#/dashboard:1 Refused to apply style from 'http://localhost:3015/cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css' because its MIME type ('text/html') is not a supported stylesheet MIME type, and strict MIME checking is enabled.
+
+bundle.js:8234 [webpack-dev-server] Server started: Hot Module Replacement enabled, Live Reloading enabled, Progress disabled, Overlay enabled.
+bundle.js:8397 [HMR] Waiting for update signal from WDS...
+bundle.js:6837 Download the React DevTools for a better development experience: https://reactjs.org/link/react-devtools
+App.tsx:428 [LOAD] dianfx_store_data_map exists: true size: 103671
+App.tsx:432 [LOAD] Parsed stores: (2) ['store-1779707258995', 'store-1779775258502']0: "store-1779707258995"1: "store-1779775258502"length: 2[[Prototype]]: Array(0)at: ƒ at()concat: ƒ concat()constructor: ƒ Array()copyWithin: ƒ copyWithin()entries: ƒ entries()every: ƒ every()fill: ƒ fill()filter: ƒ filter()find: ƒ find()findIndex: ƒ findIndex()findLast: ƒ findLast()findLastIndex: ƒ findLastIndex()flat: ƒ flat()flatMap: ƒ flatMap()forEach: ƒ forEach()includes: ƒ includes()indexOf: ƒ indexOf()join: ƒ join()keys: ƒ keys()lastIndexOf: ƒ lastIndexOf()length: 0map: ƒ map()pop: ƒ pop()push: ƒ push()reduce: ƒ reduce()reduceRight: ƒ reduceRight()reverse: ƒ reverse()shift: ƒ shift()slice: ƒ slice()some: ƒ some()sort: ƒ sort()splice: ƒ splice()toLocaleString: ƒ toLocaleString()toReversed: ƒ toReversed()toSorted: ƒ toSorted()toSpliced: ƒ toSpliced()toString: ƒ toString()unshift: ƒ unshift()values: ƒ values()with: ƒ with()Symbol(Symbol.iterator): ƒ values()Symbol(Symbol.unscopables): {at: true, copyWithin: true, entries: true, fill: true, find: true, …}[[Prototype]]: Object
+App.tsx:440 [LOAD] Store store-1779707258995 - orders: 0
+App.tsx:440 [LOAD] Store store-1779775258502 - orders: 0
+App.tsx:442 [LOAD] Final loaded stores: (2) ['store-1779707258995', 'store-1779775258502']0: "store-1779707258995"1: "store-1779775258502"length: 2[[Prototype]]: Array(0)at: ƒ at()concat: ƒ concat()constructor: ƒ Array()copyWithin: ƒ copyWithin()entries: ƒ entries()every: ƒ every()fill: ƒ fill()filter: ƒ filter()find: ƒ find()findIndex: ƒ findIndex()findLast: ƒ findLast()findLastIndex: ƒ findLastIndex()flat: ƒ flat()flatMap: ƒ flatMap()forEach: ƒ forEach()includes: ƒ includes()indexOf: ƒ indexOf()join: ƒ join()keys: ƒ keys()lastIndexOf: ƒ lastIndexOf()length: 0map: ƒ map()pop: ƒ pop()push: ƒ push()reduce: ƒ reduce()reduceRight: ƒ reduceRight()reverse: ƒ reverse()shift: ƒ shift()slice: ƒ slice()some: ƒ some()sort: ƒ sort()splice: ƒ splice()toLocaleString: ƒ toLocaleString()toReversed: ƒ toReversed()toSorted: ƒ toSorted()toSpliced: ƒ toSpliced()toString: ƒ toString()unshift: ƒ unshift()values: ƒ values()with: ƒ with()Symbol(Symbol.iterator): ƒ values()Symbol(Symbol.unscopables): {at: true, copyWithin: true, entries: true, fill: true, find: true, …}[[Prototype]]: Object
+App.tsx:428 [LOAD] dianfx_store_data_map exists: true size: 103671
+App.tsx:432 [LOAD] Parsed stores: (2) ['store-1779707258995', 'store-1779775258502']
+App.tsx:440 [LOAD] Store store-1779707258995 - orders: 0
+App.tsx:440 [LOAD] Store store-1779775258502 - orders: 0
+App.tsx:442 [LOAD] Final loaded stores: (2) ['store-1779707258995', 'store-1779775258502']
+index.js:997 ⚠️ React Router Future Flag Warning: React Router will begin wrapping state updates in `React.startTransition` in v7. You can use the `v7_startTransition` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_starttransition.
+warnOnce @ index.js:997
+logDeprecation @ index.js:1000
+logV6DeprecationWarnings @ index.js:1003
+eval @ index.js:768
+commitHookEffectListMount @ react-dom.development.js:23185
+commitPassiveMountOnFiber @ react-dom.development.js:24966
+commitPassiveMountEffects_complete @ react-dom.development.js:24926
+commitPassiveMountEffects_begin @ react-dom.development.js:24913
+commitPassiveMountEffects @ react-dom.development.js:24901
+flushPassiveEffectsImpl @ react-dom.development.js:27074
+flushPassiveEffects @ react-dom.development.js:27019
+eval @ react-dom.development.js:26804
+workLoop @ scheduler.development.js:266
+flushWork @ scheduler.development.js:239
+performWorkUntilDeadline @ scheduler.development.js:533
+index.js:997 ⚠️ React Router Future Flag Warning: Relative route resolution within Splat routes is changing in v7. You can use the `v7_relativeSplatPath` future flag to opt-in early. For more information, see https://reactrouter.com/v6/upgrading/future#v7_relativesplatpath.
+warnOnce @ index.js:997
+logDeprecation @ index.js:1000
+logV6DeprecationWarnings @ index.js:1006
+eval @ index.js:768
+commitHookEffectListMount @ react-dom.development.js:23185
+commitPassiveMountOnFiber @ react-dom.development.js:24966
+commitPassiveMountEffects_complete @ react-dom.development.js:24926
+commitPassiveMountEffects_begin @ react-dom.development.js:24913
+commitPassiveMountEffects @ react-dom.development.js:24901
+flushPassiveEffectsImpl @ react-dom.development.js:27074
+flushPassiveEffects @ react-dom.development.js:27019
+eval @ react-dom.development.js:26804
+workLoop @ scheduler.development.js:266
+flushWork @ scheduler.development.js:239
+performWorkUntilDeadline @ scheduler.development.js:533
+App.tsx:788 [SAVE] storeDataMap changed, keys: (2) ['store-1779707258995', 'store-1779775258502']
+App.tsx:813 [SAVE] Writing to localStorage, size: 103671 stores: 2
+App.tsx:815 [SAVE] Success
+App.tsx:788 [SAVE] storeDataMap changed, keys: (2) ['store-1779707258995', 'store-1779775258502']
+App.tsx:813 [SAVE] Writing to localStorage, size: 103671 stores: 2
+App.tsx:815 [SAVE] Success
