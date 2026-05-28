@@ -141,25 +141,72 @@ router.put('/users/:id/membership', async (req: Request, res: Response) => {
 // GET /api/admin/data-stats — 数据监控
 router.get('/data-stats', async (_req: Request, res: Response) => {
   try {
-    const storeDataStats = await db('store_data')
+    const rawStats = await db('store_data')
       .select('store_id', 'category')
       .sum('row_count as total_rows')
       .groupBy('store_id', 'category');
 
-    const storeCounts = await db('stores')
-      .select('user_id')
-      .count('* as store_count')
-      .groupBy('user_id');
+    const stores = await db('stores')
+      .select('stores.id', 'stores.name', 'users.username')
+      .leftJoin('users', 'stores.user_id', 'users.id');
+
+    const storeMap: Record<string, any> = {};
+    for (const s of stores) {
+      storeMap[s.id] = {
+        storeId: s.id,
+        storeName: s.name || '未命名',
+        userName: s.username || '-',
+        orders: 0, promotionSummary: 0, promotionProducts: 0,
+        starStoreSummary: 0, liveStreamSummary: 0,
+        shippingInsurance: 0, afterSaleRecords: 0, financialRecords: 0,
+        totalRows: 0,
+      };
+    }
+    for (const row of rawStats as any[]) {
+      if (!storeMap[row.store_id]) {
+        storeMap[row.store_id] = {
+          storeId: row.store_id, storeName: '未知店铺', userName: '-',
+          orders: 0, promotionSummary: 0, promotionProducts: 0,
+          starStoreSummary: 0, liveStreamSummary: 0,
+          shippingInsurance: 0, afterSaleRecords: 0, financialRecords: 0,
+          totalRows: 0,
+        };
+      }
+      const cat = row.category as string;
+      if (storeMap[row.store_id][cat] !== undefined) {
+        storeMap[row.store_id][cat] = row.total_rows || 0;
+      }
+      storeMap[row.store_id].totalRows += row.total_rows || 0;
+    }
+
+    res.json({ success: true, data: Object.values(storeMap) });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: '获取数据统计失败' });
+  }
+});
+
+// GET /api/admin/recent-activity — 最近操作动态
+router.get('/recent-activity', async (_req: Request, res: Response) => {
+  try {
+    const rows = await db('admin_logs')
+      .select('admin_logs.*', 'users.username')
+      .leftJoin('users', 'admin_logs.admin_id', 'users.id')
+      .orderBy('admin_logs.created_at', 'desc')
+      .limit(8);
 
     res.json({
       success: true,
-      data: {
-        storeStats: storeDataStats,
-        storesPerUser: storeCounts,
-      },
+      data: rows.map((r: any) => ({
+        id: r.id,
+        username: r.username || r.admin_id,
+        action: r.action,
+        details: r.details,
+        targetType: r.target_type,
+        createdAt: r.created_at,
+      })),
     });
   } catch (err: any) {
-    res.status(500).json({ success: false, error: '获取数据统计失败' });
+    res.status(500).json({ success: false, error: '获取动态失败' });
   }
 });
 
@@ -171,13 +218,24 @@ router.get('/logs', async (req: Request, res: Response) => {
 
     const total = await db('admin_logs').count('* as count').first();
     const rows = await db('admin_logs')
-      .orderBy('created_at', 'desc')
+      .select('admin_logs.*', 'users.username')
+      .leftJoin('users', 'admin_logs.admin_id', 'users.id')
+      .orderBy('admin_logs.created_at', 'desc')
       .offset(offset)
       .limit(Number(pageSize));
 
     res.json({
       success: true,
-      data: rows,
+      data: rows.map((r: any) => ({
+        id: r.id,
+        adminId: r.username || r.admin_id,
+        action: r.action,
+        targetType: r.target_type,
+        targetId: r.target_id,
+        details: r.details,
+        ipAddress: r.ip_address,
+        createdAt: r.created_at,
+      })),
       total: (total as any)?.count || 0,
       page: Number(page),
       pageSize: Number(pageSize),

@@ -68,6 +68,12 @@ export const adminApi = {
     return res;
   },
 
+  // 获取最近操作动态
+  async getRecentActivity() {
+    const res = await apiClient.get('/admin/recent-activity');
+    return res;
+  },
+
   // 获取数据统计
   async getDataStats() {
     const res = await apiClient.get('/admin/data-stats');
