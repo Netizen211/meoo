@@ -15,6 +15,9 @@ import {
 import { ProductStat, CostBreakdown } from '../../components/ProductLinkStats';
 import { useData } from '../../App';
 import { findField } from '../../utils';
+import { useAnalysis } from '../../context/analysisContext';
+import AnalysisControlBar from '../../components/analysis/AnalysisControlBar';
+import MiniRanking from '../../components/analysis/MiniRanking';
 
 const COLORS = ['var(--pdd-primary)', 'var(--pdd-primary-light)', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'];
 const WATERFALL_POSITIVE = '#22c55e';
@@ -1036,6 +1039,10 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   const [comparisonMode, setComparisonMode] = useState<'storeAvg' | 'topProduct' | 'prevPeriod' | 'none'>('storeAvg');
   const [expandedDiagnosis, setExpandedDiagnosis] = useState<number | null>(null);
 
+  // 读取全局分析上下文（时间筛选、面包屑等）
+  const analysis = useAnalysis();
+  const { timeFilter, breadcrumbs, highlightMetric, setHighlight } = analysis;
+
   // 获取全局数据
   const { currentDisplayData, productCosts } = useData();
   const afterSaleRecords = currentDisplayData?.afterSaleRecords || [];
@@ -1046,14 +1053,27 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   const selectedStats = selectedId ? productStats[selectedId] : null;
   const prevStats = selectedId && prevProductStats ? prevProductStats[selectedId] : undefined;
 
-  // 筛选该商品的订单
+  // 按时间范围过滤订单（基于 AnalysisContext 的 timeFilter）
+  const timeFilteredOrders = useMemo(() => {
+    const { rangeA } = timeFilter;
+    const start = rangeA.start;
+    const end = rangeA.end;
+    return orders.filter(o => {
+      const payTime = String(o['支付时间'] || '').trim();
+      if (!payTime) return true; // 无支付时间的保留
+      const datePart = payTime.split(' ')[0]; // "2026-05-20"
+      return datePart >= start && datePart <= end;
+    });
+  }, [orders, timeFilter]);
+
+  // 筛选该商品的订单（加上时间过滤）
   const productOrders = useMemo(() => {
     if (!selectedId) return [];
-    return orders.filter(o => {
+    return timeFilteredOrders.filter(o => {
       const oId = String(o['商品ID'] || o['商品id'] || o['productId'] || '');
       return oId === selectedId;
     });
-  }, [orders, selectedId]);
+  }, [timeFilteredOrders, selectedId]);
 
   // ─── 增强计算 #1：SKU 深度矩阵 ─────────────────────────────
   const skuDeepMatrix = useMemo(() => {
@@ -1632,27 +1652,8 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                 </div>
               ) : (
                 <div className="p-4 space-y-4 max-w-7xl mx-auto">
-                  {/* 对比模式选择器 */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs text-pdd-gray-400 shrink-0">对比：</span>
-                    <div className="flex items-center gap-1 bg-pdd-gray-100 rounded-lg p-0.5">
-                      {([
-                        { key: 'storeAvg' as const, label: '店铺均值' },
-                        { key: 'topProduct' as const, label: 'TOP商品' },
-                        { key: 'prevPeriod' as const, label: '上周期', disabled: !prevStats },
-                        { key: 'none' as const, label: '独立查看' },
-                      ]).map(m => (
-                        <button key={m.key} onClick={() => !m.disabled && setComparisonMode(m.key)}
-                          disabled={m.disabled}
-                          className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
-                            comparisonMode === m.key ? 'bg-pdd-card text-pdd-text shadow-sm' : 'text-pdd-gray-400 hover:text-pdd-gray-600'
-                          } ${m.disabled ? 'opacity-30 cursor-not-allowed' : ''}`}>
-                          {m.label}
-                        </button>
-                      ))}
-                    </div>
-                    {!storeBenchmark && <span className="text-xs text-pdd-gray-400">（需 2+ 商品方可用对比模式）</span>}
-                  </div>
+                  {/* 分析控制栏（面包屑 + 时间筛选 + 对比） */}
+                  <AnalysisControlBar />
 
                   {/* A. KPI 卡片行 */}
                   <KpiCardRow stats={selectedStats} prevStats={prevStats} benchmark={storeBenchmark} getBenchmark={getBenchmark} comparisonMode={comparisonMode} healthScore={healthScore} cm3={cmLayers?.cm3?.value ?? 0} allProductStats={productStats} />

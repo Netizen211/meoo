@@ -15,6 +15,7 @@ import Product360Analysis from '../components/product-analysis/Product360Analysi
 import { useProductStats, useProductDetail, ProductStat } from '../components/ProductLinkStats';
 import ProfitTooltip from '../components/ProfitTooltip';
 import ProductDeepAnalysis from './product/ProductDeepAnalysis';
+import { AnalysisProvider } from '../context/analysisContext';
 
 const COLORS = ['var(--pdd-primary)', 'var(--pdd-primary-light)', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6'];
 
@@ -1209,15 +1210,17 @@ export default function ProductPage() {
       />
 
       {/* 单商品深度解析全屏模态框 */}
-      <ProductDeepAnalysis
-        isOpen={deepAnalysisOpen}
-        onClose={() => setDeepAnalysisOpen(false)}
-        initialProductId={deepAnalysisProductId}
-        productStats={productStats}
-        products={products}
-        orders={filteredOrders}
-        prevProductStats={prevProductStats}
-      />
+      <AnalysisProvider>
+        <ProductDeepAnalysis
+          isOpen={deepAnalysisOpen}
+          onClose={() => setDeepAnalysisOpen(false)}
+          initialProductId={deepAnalysisProductId}
+          productStats={productStats}
+          products={products}
+          orders={filteredOrders}
+          prevProductStats={prevProductStats}
+        />
+      </AnalysisProvider>
     </div>
   );
 }
