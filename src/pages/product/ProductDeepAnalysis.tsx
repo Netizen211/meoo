@@ -1125,7 +1125,9 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       const refundRate = info.orderCount > 0 ? (refund.refundCount / info.orderCount) * 100 : 0;
       const avgRefundDays = refund.refundDays.length > 0 ? refund.refundDays.reduce((a, b) => a + b, 0) / refund.refundDays.length : 0;
       const topRefundReason = Object.entries(refund.reasons || {}).sort((a, b) => b[1] - a[1])[0]?.[0];
-      const skuCost = productCosts?.[info.skuId];
+      // SKU成本：productId_skuId 优先，productId 兜底
+      const skuKey = `${selectedId}_${info.skuId}`;
+      const skuCost = productCosts?.[skuKey] ?? productCosts?.[selectedId];
       const profitRate = info.revenue > 0 && skuCost != null ? ((info.revenue - skuCost * info.sales - refund.refundAmount) / info.revenue) * 100 : undefined;
       return {
         skuId: info.skuId,
