@@ -109,15 +109,19 @@ jobs:
           head -1 ~/.ssh/deploy_key_hk
           tail -1 ~/.ssh/deploy_key_hk
 
-      - name: 检查产物文件 & SSH 连通性
+      - name: 检查产物文件
         run: |
           echo "=== 产物文件 ==="
           find . -name "*.tar.gz" -type f 2>/dev/null || echo "无tar.gz文件"
-          ls -la frontend/ 2>/dev/null || echo "frontend目录不存在"
-          ls -la admin/ 2>/dev/null || echo "admin目录不存在"
-          ls -la backend/ 2>/dev/null || echo "backend目录不存在"
+          ls -laR frontend/ 2>/dev/null || echo "frontend目录不存在"
+          ls -laR admin/ 2>/dev/null || echo "admin目录不存在"
+          ls -laR backend/ 2>/dev/null || echo "backend目录不存在"
+          ls -la . 2>/dev/null
+
+      - name: SSH 连通性测试（香港）
+        run: |
           echo "=== SSH 连通性测试 ==="
-          ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 -i ~/.ssh/deploy_key_hk ${{ secrets.REMOTE_USER_HK }}@${{ secrets.REMOTE_HOST_HK }} "echo SSH连接成功 && hostname && pwd"
+          ssh -v -o StrictHostKeyChecking=accept-new -o ConnectTimeout=30 -i ~/.ssh/deploy_key_hk ${{ secrets.REMOTE_USER_HK }}@${{ secrets.REMOTE_HOST_HK }} "echo SSH连接成功 && hostname && pwd"
 
       - name: 部署前端
         run: |
