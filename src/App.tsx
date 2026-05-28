@@ -532,14 +532,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             }
           }
           if (Object.keys(result).length > 0) {
-            setStoreDataMap(prev => ({ ...prev, ...result }));
-            const firstStoreId = storesList[0]?.id;
-            if (firstStoreId && !localStorage.getItem('dianfx_data_filter')) {
-              localStorage.setItem('dianfx_data_filter', firstStoreId);
-              localStorage.setItem('dianfx_current_store', JSON.stringify(storesList[0]));
-              setDataFilter(firstStoreId);
-            }
-            return; // 已有真实数据
+            // 数据已恢复到 localStorage，reload 让 initStore 从 IndexedDB 正确加载
+            window.location.reload();
+            return;
           }
         }
         // 2. 检查是否已有任何数据（本地IndexedDB或演示数据）
