@@ -4,7 +4,8 @@ import {
   Package, Edit3, Calculator, Save, AlertCircle, AlertTriangle, Check, ChevronDown, ChevronUp,
   Eye, EyeOff, X, Settings, DollarSign, Plus, Trash2, Shield, Calculator as CalcIcon,
   Upload, History, ArrowUp, ArrowDown, Download, Search, LayoutDashboard,
-  TrendingUp, Percent, BarChart3, Zap, Truck, Wrench, MessageSquare, RotateCcw, Filter
+  TrendingUp, Percent, BarChart3, Zap, Truck, Wrench, MessageSquare, RotateCcw, Filter,
+  Clock, Target
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -202,6 +203,9 @@ export default function CostManagementPage() {
   } = useData();
 
   const allOrders = currentDisplayData?.orders || [];
+  const afterSaleRecords = currentDisplayData?.afterSaleRecords || [];
+  const promotionProducts = currentDisplayData?.promotionProducts || [];
+  const financialRecords = currentDisplayData?.financialRecords || [];
   const allDates = useMemo(() => getAllDateGroups(allOrders), [allOrders]);
   const filteredOrders = useMemo(() => {
     const timeFiltered = filterByTimeRange(allOrders, allDates, timeRange, customStart, customEnd, quickRange);
@@ -806,7 +810,7 @@ export default function CostManagementPage() {
   };
 
   // Alert states
-  const [alertFilter, setAlertFilter] = useState<'all' | 'multiSku' | 'multiItem' | 'loss' | 'lowPay' | 'highQty'>('all');
+  const [alertFilter, setAlertFilter] = useState<'all' | 'multiSku' | 'multiItem' | 'loss' | 'lowPay' | 'highQty' | 'flashRefund'>('all');
   const [alertProcessedFilter, setAlertProcessedFilter] = useState<'all' | 'unprocessed' | 'processed'>('all');
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   const [alertActionOpen, setAlertActionOpen] = useState<Set<string>>(new Set());
@@ -2249,6 +2253,178 @@ export default function CostManagementPage() {
     setDismissedAlerts(newSet);
   };
 
+  // ═══════════════════════════════════════════════════════════
+  // 推广秒退验证 — 跨源数据比对
+  // ═══════════════════════════════════════════════════════════
+
+  // 构建 orderNo → 支付时间 Map
+  const orderPayTimeMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    allOrders.forEach(o => {
+      const orderNo = String(findField(o, '订单号', '订单编号') || '').trim();
+      const payTime = String(findField(o, '支付时间', '订单支付时间', '付款时间') || '').trim();
+      if (orderNo && payTime) map[orderNo] = payTime;
+    });
+    return map;
+  }, [allOrders]);
+
+  // ① 秒拍秒退识别 + 分桶
+  const flashRefundBuckets = useMemo(() => {
+    const buckets = [
+      { label: '<1小时', maxHours: 1, count: 0, amount: 0 },
+      { label: '1-24小时', maxHours: 24, count: 0, amount: 0 },
+      { label: '1-7天', maxHours: 168, count: 0, amount: 0 },
+      { label: '7-30天', maxHours: 720, count: 0, amount: 0 },
+      { label: '>30天', maxHours: Infinity, count: 0, amount: 0 },
+    ];
+    let skippedNoApplyTime = 0;
+    let skippedNoPayTime = 0;
+    let skippedNoOrderNo = 0;
+
+    afterSaleRecords.forEach(r => {
+      const orderNo = String(findField(r, '订单编号', '订单号') || '').trim();
+      if (!orderNo) { skippedNoOrderNo++; return; }
+      const applyTime = String(findField(r, '申请时间', '售后创建时间', '退款申请时间') || '').trim();
+      if (!applyTime) { skippedNoApplyTime++; return; }
+      const payTime = orderPayTimeMap[orderNo];
+      if (!payTime) { skippedNoPayTime++; return; }
+
+      const applyDate = new Date(applyTime);
+      const payDate = new Date(payTime);
+      if (isNaN(applyDate.getTime()) || isNaN(payDate.getTime())) { skippedNoApplyTime++; return; }
+
+      const diffHours = (applyDate.getTime() - payDate.getTime()) / 3600000;
+      const refundAmount = Number(findField(r, '退款金额', '售后金额', '退款金额(元)') || 0) || 0;
+
+      for (const b of buckets) {
+        if (diffHours <= b.maxHours) { b.count++; b.amount += refundAmount; break; }
+      }
+    });
+
+    const totalCount = buckets.reduce((s, b) => s + b.count, 0);
+    const totalAmount = buckets.reduce((s, b) => s + b.amount, 0);
+    buckets.forEach(b => { (b as any).ratio = totalCount > 0 ? (b.count / totalCount) * 100 : 0; });
+
+    return { buckets, totalCount, totalAmount, skippedNoApplyTime, skippedNoPayTime, skippedNoOrderNo };
+  }, [afterSaleRecords, orderPayTimeMap]);
+
+  // ② 推广订单 vs 有效订单对比
+  const promoOrderGap = useMemo(() => {
+    if (!promotionProducts.length) return { hasData: false, totalOrders: 0, flashRefundOrders: 0, effectiveOrders: 0, promoClaimedOrders: 0, promoCost: 0, avgCpc: 0, anomalies: [] as string[] };
+
+    // 全店总订单（排除已取消）
+    const totalOrders = allOrders.filter(o => {
+      const status = String(findField(o, '订单状态', '订单交易状态') || '');
+      return !status.includes('已取消') && !status.includes('取消');
+    }).length;
+
+    // 推广声称成交笔数 + 总花费
+    let promoClaimedOrders = 0;
+    let promoCost = 0;
+    promotionProducts.forEach((p: any) => {
+      promoClaimedOrders += Number(findField(p, '成交笔数', '推广订单数', '订单数') || 0) || 0;
+      promoCost += Number(findField(p, '总花费(元)', '花费(元)', '成交花费(元)', '推广花费') || 0) || 0;
+    });
+
+    // 秒拍秒退（<1小时）
+    const flashRefundOrders = flashRefundBuckets.buckets[0]?.count || 0;
+    const effectiveOrders = totalOrders - flashRefundOrders;
+    const avgCpc = promoClaimedOrders > 0 ? promoCost / promoClaimedOrders : 0;
+
+    const anomalies: string[] = [];
+    if (promoClaimedOrders > effectiveOrders) {
+      anomalies.push(`推广声称成交${promoClaimedOrders}笔 > 有效订单${effectiveOrders}笔，数据异常`);
+    }
+    if (promoCost > 0 && flashRefundOrders > 0 && flashRefundBuckets.totalCount > 0) {
+      const estimatedWasted = avgCpc * flashRefundOrders;
+      const wastedPct = promoCost > 0 ? (estimatedWasted / promoCost) * 100 : 0;
+      if (wastedPct > 5) {
+        anomalies.push(`估算秒退可能浪费推广费约 ¥${estimatedWasted.toFixed(0)}（占总推广费 ${wastedPct.toFixed(1)}%）`);
+      }
+    }
+
+    return { hasData: true, totalOrders, flashRefundOrders, effectiveOrders, promoClaimedOrders, promoCost, avgCpc, anomalies };
+  }, [allOrders, promotionProducts, flashRefundBuckets]);
+
+  // ③ 财务 002 流水独立解析（不修改 buildFinancialIndex）
+  const financial002Analysis = useMemo(() => {
+    if (!financialRecords.length) return { hasData: false, categories: [], totalCount: 0, totalAmount: 0 };
+
+    const catMap: Record<string, { count: number; amount: number }> = {};
+    let totalCount = 0;
+    let totalAmount = 0;
+
+    financialRecords.forEach((r: any) => {
+      const desc = String(r['业务描述'] || '');
+      if (!desc.startsWith('002')) return;
+      const inc = Number(r['收入金额（+元）'] || r['收入金额(元)'] || r['收入金额'] || 0) || 0;
+      const exp = Number(r['支出金额（-元）'] || r['支出金额(元)'] || r['支出金额'] || 0) || 0;
+      const amount = Math.abs(inc + exp);
+      // 提取描述文字（去掉编码前缀）
+      const parts = desc.split('|');
+      const label = parts.length > 1 ? parts.slice(1).join(' / ') : desc;
+      if (!catMap[label]) catMap[label] = { count: 0, amount: 0 };
+      catMap[label].count++;
+      catMap[label].amount += amount;
+      totalCount++;
+      totalAmount += amount;
+    });
+
+    const categories = Object.entries(catMap)
+      .map(([label, d]) => ({ label, count: d.count, amount: d.amount }))
+      .sort((a, b) => b.amount - a.amount);
+
+    return { hasData: true, categories, totalCount, totalAmount };
+  }, [financialRecords]);
+
+  // 推广秒退验证结论
+  const flashRefundVerdict = useMemo(() => {
+    const flashCount = flashRefundBuckets.buckets[0]?.count || 0;
+    const hasPromo = promoOrderGap.hasData;
+    const hasFinancial = financial002Analysis.hasData;
+
+    if (!hasPromo && flashRefundBuckets.totalCount === 0) {
+      return { level: 'info' as const, text: '暂无售后或推广数据，无法完成验证。请上传售后数据和推广数据。' };
+    }
+    if (!hasPromo && flashRefundBuckets.totalCount > 0) {
+      return { level: 'info' as const, text: `检测到 ${flashRefundBuckets.totalCount} 笔退款订单（其中<1小时秒退 ${flashCount} 笔），但缺少推广数据，无法验证推广费。` };
+    }
+
+    // 检查 002 流水中是否有疑似推广费退还
+    const promoRefundKeywords = ['推广', '营销', '广告', '返还', '退还'];
+    const promoRefundCats = financial002Analysis.categories.filter(c =>
+      promoRefundKeywords.some(kw => c.label.includes(kw))
+    );
+    const promoRefundTotal = promoRefundCats.reduce((s, c) => s + c.amount, 0);
+
+    if (promoRefundTotal > 0) {
+      const estimatedWasted = promoOrderGap.avgCpc * flashCount;
+      const match = Math.abs(promoRefundTotal - estimatedWasted) / Math.max(estimatedWasted, 1) < 0.5;
+      return {
+        level: match ? 'safe' as const : 'warn' as const,
+        text: match
+          ? `✓ 002流水检测到推广相关退还 ¥${promoRefundTotal.toFixed(0)}，与秒退估算 ¥${estimatedWasted.toFixed(0)} 基本匹配，推广费退还正常。`
+          : `⚠️ 002流水检测到推广相关退还 ¥${promoRefundTotal.toFixed(0)}，但秒退估算 ¥${estimatedWasted.toFixed(0)}，金额不匹配，建议核查。`,
+      };
+    }
+
+    if (flashCount > 0 && promoOrderGap.anomalies.length > 0) {
+      return {
+        level: 'warn' as const,
+        text: `⚠️ 财务002流水中未检测到推广费退还记录，但存在 ${flashCount} 笔秒退订单。${promoOrderGap.anomalies.join(' ')}。建议核对货款明细中002开头的流水，确认推广费是否被多扣。`,
+      };
+    }
+
+    if (flashCount > 0) {
+      return {
+        level: 'info' as const,
+        text: `检测到 ${flashCount} 笔秒退订单（<1小时），但推广数据未显示明显异常。若平台确实退还秒退推广费，当前系统暂未在002流水中检测到。`,
+      };
+    }
+
+    return { level: 'safe' as const, text: '✓ 未检测到秒拍秒退异常，推广数据与订单数据基本一致。' };
+  }, [flashRefundBuckets, promoOrderGap, financial002Analysis]);
+
   const allAlerts = useMemo(() => {
     const merged: { type: string; severity: number; data: any }[] = [];
     activeMultiSkuAlerts.forEach(a => merged.push({ type: 'multiSku', severity: 2, data: a }));
@@ -2320,13 +2496,14 @@ export default function CostManagementPage() {
   const renderAlerts = () => (
     <motion.div key="alerts" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
       {/* 汇总统计 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
         {[
           { label: '一单多SKU', count: activeMultiSkuAlerts.length, color: 'var(--pdd-warning)', bg: 'rgba(245,158,11,0.1)', desc: '包装/快递费重复计算', type: 'multiSku' as const },
           { label: '一单多件', count: activeMultiItemAlerts.length, color: 'var(--pdd-primary)', bg: 'rgba(59,130,246,0.1)', desc: '数量>1单品成本', type: 'multiItem' as const },
           { label: '亏损订单', count: activeLossAlerts.length, color: 'var(--pdd-danger)', bg: 'rgba(239,68,68,0.1)', desc: '实收 < 预估成本', type: 'loss' as const },
           { label: '低支付金额', count: activeLowPayAlerts.length, color: '#722ed1', bg: 'rgba(114,46,209,0.1)', desc: '实收<¥5或比<10%', type: 'lowPay' as const },
           { label: '高数量异常', count: activeHighQtyAlerts.length, color: '#fa541c', bg: 'rgba(250,84,28,0.1)', desc: '件数≥50异常数据', type: 'highQty' as const },
+          { label: '推广秒退', count: flashRefundBuckets.totalCount > 0 ? flashRefundBuckets.buckets[0]?.count || 0 : 0, color: '#0891b2', bg: 'rgba(8,145,178,0.1)', desc: flashRefundVerdict.level === 'warn' ? '⚠ 需关注' : flashRefundVerdict.level === 'safe' ? '✓ 正常' : '推广费秒退验证', type: 'flashRefund' as const },
         ].map((item, i) => (
           <motion.div key={item.label} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
             onClick={() => setAlertFilter(item.type)}
@@ -2360,6 +2537,7 @@ export default function CostManagementPage() {
             { key: 'loss', label: '亏损订单', count: activeLossAlerts.length },
             { key: 'lowPay', label: '低支付金额', count: activeLowPayAlerts.length },
             { key: 'highQty', label: '高数量异常', count: activeHighQtyAlerts.length },
+            { key: 'flashRefund', label: '推广秒退', count: flashRefundBuckets.buckets[0]?.count || 0 },
           ].map(f => (
             <button key={f.key} onClick={() => setAlertFilter(f.key as any)}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all whitespace-nowrap ${
@@ -2397,8 +2575,134 @@ export default function CostManagementPage() {
         </div>
       )}
 
+      {/* 推广秒退详情面板 */}
+      {alertFilter === 'flashRefund' && (
+        <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} className="pdd-card rounded-xl border p-4 space-y-4" style={{ borderColor: 'rgba(8,145,178,0.3)', backgroundColor: 'rgba(8,145,178,0.02)' }}>
+          <div className="flex items-center gap-2">
+            <Zap size={16} color="#0891b2" />
+            <h3 className="text-sm font-bold text-pdd-text">推广秒退验证</h3>
+            <span className={`ml-auto px-2 py-0.5 rounded-full text-xs font-medium ${
+              flashRefundVerdict.level === 'safe' ? 'bg-green-100 text-green-700' :
+              flashRefundVerdict.level === 'warn' ? 'bg-red-100 text-red-600' :
+              'bg-blue-100 text-blue-600'
+            }`}>
+              {flashRefundVerdict.level === 'safe' ? '✓ 正常' : flashRefundVerdict.level === 'warn' ? '⚠ 需关注' : 'ℹ 信息'}
+            </span>
+          </div>
+
+          <p className="text-xs text-pdd-gray-600 leading-relaxed">{flashRefundVerdict.text}</p>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* 左：秒退时间分布 */}
+            <div>
+              <h4 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1"><Clock size={12} color="#0891b2" />退款时间分布（支付→申请）</h4>
+              {flashRefundBuckets.totalCount > 0 ? (
+                <>
+                  <table className="w-full" style={{ fontSize: '10px' }}>
+                    <thead>
+                      <tr className="text-pdd-gray-400 border-b border-pdd-gray-100">
+                        <th className="py-1.5 text-left font-medium">时间窗口</th>
+                        <th className="py-1.5 text-right font-medium">订单数</th>
+                        <th className="py-1.5 text-right font-medium">占比</th>
+                        <th className="py-1.5 text-right font-medium">退款金额</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-pdd-gray-50">
+                      {flashRefundBuckets.buckets.map(b => (
+                        <tr key={b.label} className={`hover:bg-pdd-gray-50 ${b.label === '<1小时' ? 'bg-red-50/30 font-semibold' : ''}`}>
+                          <td className="py-1.5 text-pdd-gray-700">{b.label}</td>
+                          <td className="py-1.5 text-right font-mono text-pdd-gray-700">{b.count}</td>
+                          <td className="py-1.5 text-right font-mono text-pdd-gray-600">{(b as any).ratio.toFixed(1)}%</td>
+                          <td className="py-1.5 text-right font-mono text-pdd-gray-600">¥{b.amount.toFixed(0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="mt-1 text-pdd-gray-400" style={{ fontSize: '9px' }}>
+                    共 {flashRefundBuckets.totalCount} 笔退款，总金额 ¥{flashRefundBuckets.totalAmount.toFixed(0)}
+                    {flashRefundBuckets.skippedNoPayTime > 0 && <span className="ml-2 text-pdd-primary">跳过 {flashRefundBuckets.skippedNoPayTime} 条无支付时间</span>}
+                    {flashRefundBuckets.skippedNoApplyTime > 0 && <span className="ml-2 text-pdd-primary">跳过 {flashRefundBuckets.skippedNoApplyTime} 条无申请时间</span>}
+                  </div>
+                </>
+              ) : (
+                <div className="text-xs text-pdd-gray-400 py-4 text-center">暂无售后数据，请上传售后明细</div>
+              )}
+            </div>
+
+            {/* 右：推广验证 + 002 分析 */}
+            <div className="space-y-4">
+              {/* 推广订单验证 */}
+              <div>
+                <h4 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1"><Target size={12} color="#7c3aed" />推广订单验证</h4>
+                {promoOrderGap.hasData ? (
+                  <div className="space-y-1.5">
+                    {[
+                      { label: '全店总订单', value: promoOrderGap.totalOrders.toLocaleString() },
+                      { label: '秒拍秒退 (<1h)', value: promoOrderGap.flashRefundOrders.toLocaleString(), warn: true },
+                      { label: '有效订单 (总-秒退)', value: promoOrderGap.effectiveOrders.toLocaleString() },
+                      { label: '推广声称成交笔数', value: promoOrderGap.promoClaimedOrders.toLocaleString() },
+                      { label: '推广总花费', value: '¥' + promoOrderGap.promoCost.toFixed(0) },
+                      { label: '单均推广成本 (CPO)', value: '¥' + promoOrderGap.avgCpc.toFixed(2) },
+                    ].map(row => (
+                      <div key={row.label} className="flex justify-between text-xs">
+                        <span className="text-pdd-gray-500">{row.label}</span>
+                        <span className={`font-mono ${row.warn ? 'text-red-500 font-semibold' : 'text-pdd-gray-700'}`}>{row.value}</span>
+                      </div>
+                    ))}
+                    {promoOrderGap.anomalies.map((a, i) => (
+                      <div key={i} className="text-xs text-red-500 bg-red-50 px-2 py-1 rounded mt-1">{a}</div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-xs text-pdd-gray-400 py-2">暂无推广数据</div>
+                )}
+              </div>
+
+              {/* 002 财务流水分析 */}
+              <div>
+                <h4 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1"><DollarSign size={12} color="#f97316" />002类财务流水（退款相关）</h4>
+                {financial002Analysis.hasData && financial002Analysis.totalCount > 0 ? (
+                  <>
+                    <div className="text-xs text-pdd-gray-500 mb-1">
+                      共 {financial002Analysis.totalCount} 条记录，总金额 ¥{financial002Analysis.totalAmount.toFixed(0)}
+                    </div>
+                    <div className="max-h-[180px] overflow-y-auto space-y-1">
+                      {financial002Analysis.categories.slice(0, 8).map(c => (
+                        <div key={c.label} className="flex items-center justify-between text-xs py-0.5 border-b border-pdd-gray-50 last:border-0">
+                          <span className="text-pdd-gray-600 truncate max-w-[200px]" title={c.label}>{c.label}</span>
+                          <span className="text-pdd-gray-400 font-mono shrink-0">{c.count}笔 / ¥{c.amount.toFixed(0)}</span>
+                        </div>
+                      ))}
+                      {financial002Analysis.categories.length > 8 && (
+                        <div className="text-xs text-pdd-gray-400">...还有 {financial002Analysis.categories.length - 8} 个分类</div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-xs text-pdd-gray-400 py-2">
+                    {financial002Analysis.hasData ? '002类流水为空（可能无退款相关财务记录）' : '暂无货款明细数据'}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 说明 */}
+          <div className="text-pdd-gray-400" style={{ fontSize: '9px' }}>
+            <p>说明：秒拍秒退指用户点击广告后极短时间内下单并退款的订单。拼多多声称此类订单不扣推广费。
+            本模块通过订单×售后时间差识别秒退，并对比推广数据声称的成交笔数，同时解析财务002类流水查找推广费退还记录。
+            推广数据中的"成交笔数"已由平台剔除秒拍秒退，此处为跨源验证该声称是否合理。</p>
+          </div>
+        </motion.div>
+      )}
+
       {/* 异常列表 */}
-      {filteredAlerts.length === 0 ? (
+      {alertFilter === 'flashRefund' ? (
+        <div className="text-center py-6 text-pdd-text-secondary">
+          <Zap size={32} className="mx-auto mb-2 opacity-20" />
+          <p className="text-xs">推广秒退为汇总分析，无逐单列表。上方面板显示跨源验证详情。</p>
+        </div>
+      ) : filteredAlerts.length === 0 ? (
         <div className="text-center py-12 text-pdd-text-secondary">
           <AlertTriangle size={40} className="mx-auto mb-3 opacity-20" />
           <p className="text-sm">{alertFilter === 'all' ? '未检测到成本异常，一切正常' : '该类型无异常订单'}</p>

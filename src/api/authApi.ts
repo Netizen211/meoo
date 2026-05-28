@@ -38,7 +38,7 @@ export async function serverRegister(
   });
   if (res.success && res.data) {
     setTokens(res.data.accessToken, res.data.refreshToken);
-    return { success: true, message: res.data.message || '注册成功', user: res.data.user };
+    return { success: true, message: (res.data as any).message || '注册成功', user: res.data.user };
   }
   return { success: false, message: res.error || '注册失败' };
 }

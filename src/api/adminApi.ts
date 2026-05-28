@@ -103,4 +103,18 @@ export const adminApi = {
     const res = await apiClient.delete(`/stores/invite/${code}`);
     return res.success;
   },
+
+  // 充值审核列表
+  async getRechargeList(status?: string, page = 1, pageSize = 20) {
+    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+    if (status) params.set('status', status);
+    const res = await apiClient.get(`/recharge/list?${params.toString()}`);
+    return res;
+  },
+
+  // 审核充值申请
+  async reviewRecharge(orderId: number, action: 'approve' | 'reject', note?: string) {
+    const res = await apiClient.put(`/recharge/review/${orderId}`, { action, note });
+    return res;
+  },
 };

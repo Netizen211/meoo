@@ -154,6 +154,24 @@ export interface AdminLog {
   createdAt?: string;
 }
 
+// ===== 充值申请 =====
+
+export interface RechargeOrder {
+  id?: number;
+  userId: string;
+  username: string;
+  plan: 'pro' | 'enterprise';
+  duration: 'monthly' | 'yearly';
+  amount: number;
+  wechatNickname?: string;
+  remark?: string;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewedBy?: string;
+  reviewNote?: string;
+  reviewedAt?: string;
+  createdAt?: string;
+}
+
 // ===== API 通用响应 =====
 
 export interface ApiResponse<T = any> {

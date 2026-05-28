@@ -866,7 +866,7 @@ export function useProductStats(
     });
 
     return stats;
-  }, [currentDisplayData]);
+  }, [currentDisplayData, productCosts, taxConfigs, customDeductions, defaultCostRatio, packagingFeePerOrder, shippingFeePerOrder, platformCommissionRate, insuranceFeePerOrder, orderFinancialActuals]);
 }
 
 export function useTotalProductStats(productStats: Record<string, ProductStat>) {

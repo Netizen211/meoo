@@ -187,17 +187,54 @@ router.get('/logs', async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/admin/settings — 获取系统设置（简化为从 config 读取）
+// GET /api/admin/settings — 获取系统设置
 router.get('/settings', async (_req: Request, res: Response) => {
-  res.json({
-    success: true,
-    data: {
-      registrationOpen: true,
-      inviteCodeRequired: true,
-      membershipGraceDays: 30,
-      membershipReminderDays: 7,
-    },
-  });
+  try {
+    const aiRows = await db('ai_config').select('config_key', 'config_value');
+    const aiConfig: Record<string, string> = {};
+    for (const row of aiRows as any[]) {
+      aiConfig[row.config_key] = row.config_value;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        registrationOpen: true,
+        inviteCodeRequired: true,
+        membershipGraceDays: 30,
+        membershipReminderDays: 7,
+        aiEnabled: aiConfig.ai_enabled === 'true',
+        aiApiKey: aiConfig.ai_api_key || '',
+        aiDailyLimit: parseInt(aiConfig.ai_daily_limit || '10', 10),
+        aiModel: aiConfig.ai_model || 'claude-sonnet-4-6',
+      },
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: '获取设置失败' });
+  }
+});
+
+// PUT /api/admin/settings — 更新系统设置
+router.put('/settings', async (req: Request, res: Response) => {
+  try {
+    const settings = req.body;
+    if (settings.aiEnabled !== undefined) {
+      await db('ai_config').where('config_key', 'ai_enabled').update({ config_value: settings.aiEnabled ? 'true' : 'false', updated_at: db.fn.now() });
+    }
+    if (settings.aiApiKey !== undefined) {
+      await db('ai_config').where('config_key', 'ai_api_key').update({ config_value: settings.aiApiKey, updated_at: db.fn.now() });
+    }
+    if (settings.aiDailyLimit !== undefined) {
+      await db('ai_config').where('config_key', 'ai_daily_limit').update({ config_value: String(settings.aiDailyLimit), updated_at: db.fn.now() });
+    }
+    if (settings.aiModel !== undefined) {
+      await db('ai_config').where('config_key', 'ai_model').update({ config_value: settings.aiModel, updated_at: db.fn.now() });
+    }
+
+    res.json({ success: true, message: '设置已更新' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: '保存设置失败' });
+  }
 });
 
 export default router;

@@ -1,13 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { requireAuth } from '../middleware/auth';
-import { requirePaid } from '../middleware/requireRole';
 import * as dataService from '../services/dataService';
 import { DATA_CATEGORIES } from '../shared-types';
 
 const router = Router();
 
-// POST /api/data/sync — 全量同步店铺数据（Pro/Enterprise 专用）
-router.post('/sync', requireAuth, requirePaid, async (req: Request, res: Response) => {
+// POST /api/data/sync — 全量同步店铺数据
+router.post('/sync', requireAuth, async (req: Request, res: Response) => {
   try {
     const { storeId, storeName, clientUpdatedAt, data, configs, uploadRecords } = req.body;
 
@@ -73,7 +72,7 @@ router.post('/sync', requireAuth, requirePaid, async (req: Request, res: Respons
 });
 
 // POST /api/data/pull — 拉取店铺数据
-router.post('/pull', requireAuth, requirePaid, async (req: Request, res: Response) => {
+router.post('/pull', requireAuth, async (req: Request, res: Response) => {
   try {
     const { storeId } = req.body;
     if (!storeId) {

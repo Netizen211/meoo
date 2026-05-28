@@ -1,3 +1,555 @@
 git账号：2603630254@QQ.COM
 密码：2603630254@QQ.COM
 仓库连接：https://github.com/Netizen211/meoo.git
+
+阿里云服务器（没有备案域名）
+账号xu_vlog
+密码Xyr19991214
+云密码2603630254ssytyqT
+域名melody.wang
+域名www.melody.wang
+
+【阿里云香港服务器：
+基本信息
+实例ID
+实例名称
+c4f7f9112a834e60bc65324c35c87565
+AlibabaCloudLinux-layr
+运行状态
+规格族
+运行中
+国际型
+地域
+镜像
+中国香港
+an icon
+Alibaba Cloud Linux
+3.21.04
+重置系统
+制作自定义镜像
+DDoS攻击状态
+到期时间
+正常
+更多信息
+2026年8月28日 23:59:59
+续费
+IP地址
+创建时间
+47.82.120.115(公)
+172.21.57.243(私有)
+2026年5月28日 09:48:35】
+
+
+可以，**全部功能都保留**。不是做阉割版，而是做一个“低成本全功能 H5 版”。
+
+区别是：
+
+```text
+功能全部存在
+但商家明细数据存在用户浏览器
+账号/会员/充值存在服务器
+充值先人工确认
+微信支付、小程序、云端大数据同步以后再补
+```
+
+**产品形态**
+
+保留你现在所有页面：
+
+```text
+店铺管理
+数据上传
+数据中心
+商品分析
+用户分析
+时间趋势
+地域分析
+物流履约
+优惠成本
+售后质量
+运费险
+推广利润
+风险预警
+商品关联分析
+成本管理
+会员中心
+系统设置
+后台管理
+AI配置/AI分析
+```
+
+免费用户也能看到这些入口，但高级内容锁定。用户充值后，你后台手动开通，全部功能解锁。
+
+**会员策略建议**
+
+前期不要分太复杂，直接做两个状态：
+
+```text
+free：免费试用，只看基础分析
+full：全功能会员，解锁全部功能
+```
+
+你现在代码里有：
+
+```text
+free
+pro
+enterprise
+test
+```
+
+可以保留，但运营上先这样用：
+
+```text
+free = 免费用户
+pro = 全功能会员
+enterprise = 管理员/测试/以后大客户
+```
+
+也就是说，用户微信充值后，你给他开 `pro`，他就能用全部核心功能。
+
+**存储方案**
+
+全部功能可以有，但数据要这样分：
+
+```text
+服务器存：
+用户账号
+会员等级
+会员到期时间
+充值申请
+邀请码
+后台日志
+AI配置开关
+
+浏览器 IndexedDB 存：
+订单数据
+推广数据
+明星店铺数据
+直播数据
+售后数据
+运费险数据
+财务数据
+成本配置
+商品成本
+异常订单
+上传记录
+分析缓存
+```
+
+这样用户能完整使用全部分析功能，但你不用承担大量服务器存储费用。
+
+**需要改的核心点**
+
+1. **会员不能前端直接解锁**
+
+现在 [MembershipPage.tsx](E:/360/444/meoo_zip_1779612767549/src/pages/MembershipPage.tsx:119) 点击升级会直接调用 `upgradeMembership`。这个必须改掉。
+
+改成：
+
+```text
+点击升级
+弹出微信收款码
+用户提交充值申请
+状态变成待确认
+你后台确认
+服务器修改会员等级
+前端重新拉取会员状态
+功能解锁
+```
+
+2. **所有付费功能统一判断权限**
+
+新增：
+
+```text
+src/utils/permission.ts
+```
+
+里面统一写：
+
+```ts
+export function isFullMember(user) {
+  return user?.role === 'test'
+    || user?.role === 'admin'
+    || user?.membershipLevel === 'pro'
+    || user?.membershipLevel === 'enterprise';
+}
+```
+
+所有页面都用这个判断，不要每个页面自己判断。
+
+3. **后台加充值管理**
+
+新增页面：
+
+```text
+#/admin/recharge
+```
+
+功能：
+
+```text
+查看待确认充值
+查看用户ID
+查看套餐/金额/微信昵称/备注
+点击通过
+点击拒绝
+自动写入会员到期时间
+```
+
+4. **商家数据迁到 IndexedDB**
+
+现在大量数据存在 `localStorage`，数据一多容易爆。全功能必须换 IndexedDB。
+
+新增：
+
+```text
+src/services/localDataStore.ts
+```
+
+负责：
+
+```text
+保存店铺
+保存上传数据
+读取上传数据
+保存成本配置
+保存上传记录
+迁移旧 localStorage 数据
+```
+
+5. **保留全部分析模块**
+
+不要删除任何页面。只做三件事：
+
+```text
+修计算准确性
+统一权限判断
+统一本地存储
+```
+
+**AI 功能怎么处理**
+
+AI 分析可以保留，但要防止你自己亏钱。
+
+建议做成：
+
+```text
+后台 AI 开关
+后台配置 API Key
+设置每日调用次数
+免费用户不能用
+全功能会员可用有限次数
+```
+
+如果你现在没有预算，也可以先做：
+
+```text
+AI 功能入口保留
+后台未配置 API Key 时显示“AI 分析暂未开启”
+```
+
+这样功能结构是完整的，以后有收入再打开。
+
+**最终版本应该是这样**
+
+```text
+用户注册登录
+上传数据
+免费查看基础指标
+高级页面显示锁定
+用户微信转账
+提交充值申请
+你后台确认
+用户变成全功能会员
+全部分析功能解锁
+数据仍然只在用户本地浏览器
+```
+
+**给 AI 的新版执行命令**
+
+你可以把下面这段直接发给 AI：
+
+```text
+请把当前项目改造成低成本全功能 H5 运营版。
+
+要求：
+1. 保留现有所有功能页面，不删除任何分析模块。
+2. 免费用户只能看基础指标，高级指标和高级页面锁定。
+3. 充值后开通 full/pro 会员，解锁全部功能。
+4. 不接微信支付，改成微信人工转账 + 充值申请 + 后台人工确认。
+5. 商家上传的订单、推广、售后、运费险、财务明细不要上传服务器，改存浏览器 IndexedDB。
+6. 服务器只存用户、会员等级、到期时间、充值申请、邀请码、后台日志。
+7. 修复 typecheck 报错。
+8. 新增 recharge_orders 表和充值申请接口。
+9. 新增后台充值审核页面。
+10. 新增统一权限工具 permission.ts，所有付费锁定都走统一判断。
+11. MembershipPage 不允许点击后直接解锁会员，只能提交充值申请。
+12. 保留 AI 功能入口，但 AI 调用必须受后台开关和会员权限控制。
+```
+
+这样做就是：**功能全都有，成本先压到最低，等有收入后再接微信支付、小程序、云同步。**
+
+
+
+
+DS 记录
+复制下方的 DS 记录详情并添加到您的域名注册商。有关说明，请参阅 DNSSEC 文档。
+
+
+DS 记录
+
+melody.wang. 3600 IN DS 2371 13 2 4D9C8EDB1EEC738263198246FAE5845DEF58AEB900956B0FCB033ECE227EADCA
+摘要
+
+4D9C8EDB1EEC738263198246FAE5845DEF58AEB900956B0FCB033ECE227EADCA
+摘要类型 - 2
+
+SHA256
+算法
+
+13
+公钥
+
+mdsswUyr3DPW132mOi8V9xESWE8jTo0dxCjjnopKl+GqJxpVXckHAeF+KkxLbxILfDLUT0rAK9iUzy1L53eKGQ==
+密钥标记
+
+2371
+标志
+
+257 (KSK)
+要使用 Cloudflare，请 更改名称服务器 或权威 DNS 服务器。这些服务器是分配的 Cloudflare 名称服务器。
+
+类型	值
+NS	rosemary.ns.cloudflare.com
+NS	ruben.ns.cloudflare.com
+DNSSEC
+在我们等待 DS 添加到注册机构时，DNSSEC 处于挂起状态。此过程通常需要十分钟，但最长可能需要一小时。
+
+多签名者 DNSSEC
+
+多签名者 DNSSEC 让 Cloudflare 和您的其他权威 DNS 提供商可以提供同一区域，并同时启用 DNSSEC。
+多提供商 DNS
+
+多提供商 DNS 允许使用完整 DNS 设置的域在 Cloudflare 上处于活动状态，此域同时在 Cloudflare 外还使用另一个权威 DNS 提供商。另外还允许域为添加到其在 Cloudflare 的 DNS 配置的任何顶级 NS 记录服务。
+电子邮件安全
+通过创建所需的 DNS 记录，保护您的域免受电子邮件欺骗和网络钓鱼的侵害。
+melody.wang 的 DNS 记录
+管理 Internet 如何查找您的 Web 内容、验证服务以及路由 Traffic。
+
+DNS 设置:
+完全
+
+退出新版 DNS 体验
+分享反馈
+在您按照
+概述页面
+上的说明完成操作，并且我们能够确认所有权之前，melody.wang 会一直处于挂起状态。了解有关
+挂起域
+的更多信息。
+
+推荐
+1
+关于 DNS
+代理与仅 DNS
+TTL & Caching
+DNS 将人类可读的名称（例如 example.com）转换为 IP 地址或其他机器可读的数据，供服务相互查找。例如，DNS 记录可以指向托管您的 Web 内容、电子邮件提供商或验证服务的服务器。 Internet 浏览器和其他客户端据此获知应联系哪些服务器来加载您的网站或应用。
+
+搜索 DNS 记录
+2 条记录
+
+
+
+melody.wang
+A
+121.40.196.79
+已代理
+自动
+—
+—
+—
+
+www.melody.wang
+A
+121.40.196.79
+已代理
+自动
+—
+—
+—
+
+=========================================
+GitHub Actions 自动部署 Secrets 配置
+=========================================
+
+仓库: https://github.com/Netizen211/meoo.git
+部署分支: v2-server-deploy-20260527
+
+在 GitHub 仓库 → Settings → Secrets and variables → Actions 中添加:
+
+1. REMOTE_HOST = 121.40.196.79
+2. REMOTE_USER = root
+3. SSH_PRIVATE_KEY =
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+QyNTUxOQAAACCVYoglPmCrBLpcbp/5RVpLlAroMxzjbLE91TDxLyLhswAAAJCjQYIZo0GC
+GQAAAAtzc2gtZWQyNTUxOQAAACCVYoglPmCrBLpcbp/5RVpLlAroMxzjbLE91TDxLyLhsw
+AAAEAzSkCcMBo6uhpFjNnQAl4EJWPEDuyDY2SJ4sHnlsUEjpViiCU+YKsEulxun/lFWkuU
+CugzHONssT3VMPEvIuGzAAAAC21lb28tZGVwbG95AQI=
+-----END OPENSSH PRIVATE KEY-----
+
+SSH 公钥 (已部署到服务器): ~/.ssh/meoo_deploy.pub
+
+========== 香港新服务器初始化 ==========
+
+【操作说明】
+你现在终端里应该显示 [admin@xxx ~]$，说明你已经在新服务器里了。
+不要再输入 ssh 命令！直接复制下面这条命令执行：
+
+sudo mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINzaSxiPeNkHCjFvbEN9w/UdkLJ6NzPwdmP6zYOHQKmz meoo-temp-setup' | sudo tee -a /root/.ssh/authorized_keys
+
+如果提示输入密码，输入 2603630254ssytyqT（屏幕上不会显示任何字符，这是正常的），然后回车。
+如果 sudo 密码不对，试试 Xyr19991214。
+
+执行完后如果显示 "ssh-ed25519 AAAAC3..." 就说明成功了，告诉我。
+
+Welcome to Alibaba Cloud Elastic Compute Service !
+
+Updates Information Summary: available
+    80 Security notice(s)
+        41 Important Security notice(s)
+        39 Moderate Security notice(s)
+Run "dnf upgrade-minimal --security" to apply all updates.More details please refer to:
+https://help.aliyun.com/document_detail/416274.html
+Last login: Thu May 28 11:13:23 2026 from 100.104.0.191
+[admin@iZj6cixudpz86niewuf9vkZ ~]$ mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINzaSxiPeNkHCjFvbEN9w/UdkLJ6NzPwdmP6zYOHQKmz meoo-temp-setup' >> /root/.ssh/authorized_keys
+mkdir: cannot create directory ‘/root’: Permission denied
+[admin@iZj6cixudpz86niewuf9vkZ ~]$ mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINzaSxiPeNkHCjFvbEN9w/UdkLJ6NzPwdmP6zYOHQKmz meoo-temp-setup' >> /root/.ssh/authorized_keys
+mkdir: cannot create directory ‘/root’: Permission denied
+[admin@iZj6cixudpz86niewuf9vkZ ~]$ 2603630254ssytyqT
+-bash: 2603630254ssytyqT: command not found
+[admin@iZj6cixudpz86niewuf9vkZ ~]$ ssh root@47.82.120.115 "mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINzaSxiPeNkHCjFvbEN9w/UdkLJ6NzPwdmP6zYOHQKmz meoo-temp-setup' >> /root/.ssh/authorized_keys"
+root@47.82.120.115's password: 
+
+
+
+Welcome to Alibaba Cloud Elastic Compute Service !
+
+Updates Information Summary: available
+    80 Security notice(s)
+        41 Important Security notice(s)
+        39 Moderate Security notice(s)
+Run "dnf upgrade-minimal --security" to apply all updates.More details please refer to:
+https://help.aliyun.com/document_detail/416274.html
+Last login: Thu May 28 11:16:10 2026 from 100.104.189.40
+[admin@iZj6cixudpz86niewuf9vkZ ~]$ ssh admin@47.82.120.115 "sudo mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINzaSxiPeNkHCjFvbEN9w/UdkLJ6NzPwdmP6zYOHQKmz meoo-temp-setup' | sudo tee -a /root/.ssh/authorized_keys"
+admin@47.82.120.115's password: 
+
+Welcome to Alibaba Cloud Elastic Compute Service !
+
+Updates Information Summary: available
+    80 Security notice(s)
+        41 Important Security notice(s)
+        39 Moderate Security notice(s)
+Run "dnf upgrade-minimal --security" to apply all updates.More details please refer to:
+https://help.aliyun.com/document_detail/416274.html
+Last login: Thu May 28 11:16:10 2026 from 100.104.189.40
+[admin@iZj6cixudpz86niewuf9vkZ ~]$ ssh admin@47.82.120.115 "sudo mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINzaSxiPeNkHCjFvbEN9w/UdkLJ6NzPwdmP6zYOHQKmz meoo-temp-setup' | sudo tee -a /root/.ssh/authorized_keys"
+admin@47.82.120.115's password: 
+Permission denied, please try again.
+admin@47.82.120.115's password: 
+Connection closed by 47.82.120.115 port 22
+[admin@iZj6cixudpz86niewuf9vkZ ~]$ ssh admin@47.82.120.115 "sudo mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINzaSxiPeNkHCjFvbEN9w/UdkLJ6NzPwdmP6zYOHQKmz meoo-temp-setup' | sudo tee -a /root/.ssh/authorized_keys"
+admin@47.82.120.115's password: 
+Permission denied, please try again.
+admin@47.82.120.115's password: 
+
+
+
+Welcome to Alibaba Cloud Elastic Compute Service !
+
+Updates Information Summary: available
+    80 Security notice(s)
+        41 Important Security notice(s)
+        39 Moderate Security notice(s)
+Run "dnf upgrade-minimal --security" to apply all updates.More details please refer to:
+https://help.aliyun.com/document_detail/416274.html
+Last login: Thu May 28 11:16:10 2026 from 100.104.189.40
+[admin@iZj6cixudpz86niewuf9vkZ ~]$ ssh admin@47.82.120.115 "sudo mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINzaSxiPeNkHCjFvbEN9w/UdkLJ6NzPwdmP6zYOHQKmz meoo-temp-setup' | sudo tee -a /root/.ssh/authorized_keys"
+admin@47.82.120.115's password: 
+Permission denied, please try again.
+admin@47.82.120.115's password: 
+Connection closed by 47.82.120.115 port 22
+[admin@iZj6cixudpz86niewuf9vkZ ~]$ ssh admin@47.82.120.115 "sudo mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINzaSxiPeNkHCjFvbEN9w/UdkLJ6NzPwdmP6zYOHQKmz meoo-temp-setup' | sudo tee -a /root/.ssh/authorized_keys"
+admin@47.82.120.115's password: 
+Permission denied, please try again.
+admin@47.82.120.115's password: 
+Connection closed by 47.82.120.115 port 22
+[admin@iZj6cixudpz86niewuf9vkZ ~]$ sudo mkdir -p /root/.ssh && echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINzaSxiPeNkHCjFvbEN9w/UdkLJ6NzPwdmP6zYOHQKmz meoo-temp-setup' | sudo tee -a /root/.ssh/authorized_keys
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAINzaSxiPeNkHCjFvbEN9w/UdkLJ6NzPwdmP6zYOHQKmz meoo-temp-setup
+[admin@iZj6cixudpz86niewuf9vkZ ~]$
+
+========== 服务器环境安装完成！已安装：Node.js 20 + Git + Nginx ==========
+
+========== 下一步 1：更新 GitHub Secrets ==========
+
+去 GitHub 仓库 → Settings → Secrets and variables → Actions，修改三个值：
+
+REMOTE_HOST = 47.82.120.115
+（原来是 121.40.196.79，改为新服务器 IP）
+
+REMOTE_USER = root
+（不变）
+
+SSH_PRIVATE_KEY 改成下面这整段（从 BEGIN 到 END 全部复制）：
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+QyNTUxOQAAACDY2Fyz91AXLVqf58Y01QhXFeH3bwY9vEqfv1+/k68ZXgAAAJC/GvMPvxrz
+DwAAAAtzc2gtZWQyNTUxOQAAACDY2Fyz91AXLVqf58Y01QhXFeH3bwY9vEqfv1+/k68ZXg
+AAAEA3U8/PSNbO8bAKLm/ZPmgGz9SugKuaDUNVlo8eMt4NqtjYXLP3UBctWp/nxjTVCFcV
+4fdvBj28Sp+/X7+TrxleAAAAC21lb28tZGVwbG95AQI=
+-----END OPENSSH PRIVATE KEY-----
+
+========== 下一步 2：更新 Cloudflare DNS ==========
+
+Cloudflare 控制台 → melody.wang → DNS 记录，把两条 A 记录都改成新 IP：
+
+melody.wang    A    47.82.120.115
+www.melody.wang  A    47.82.120.115
+
+（原来指向 121.40.196.79）
+
+========== 下一步 3：触发部署 ==========
+
+DNS 改完后等几分钟生效，然后 push 代码到 v2-server-deploy-20260527 分支就会自动部署。
+
+=========================================
+2026-05-28 更新：代码已提交并推送
+=========================================
+
+所有改造已完成并推送到 v2-server-deploy-20260527 分支：
+
+【已完成改造】
+1. ProductDeepAnalysis.tsx - 对比化+交互化重设计（10步全部完成）
+   - 每个指标都有 vs 店铺均值 / vs TOP20% / vs 上周期 对比
+   - SKU 表格可点击展开，显示退款原因+利润拆解
+   - 诊断面板可交互，点击展开关联数据
+   - 健康度仪表盘可展开各维度计算公式
+   - 全页面对比模式切换器
+2. CostManagementPage.tsx - 修复 TypeScript 错误
+3. 新增文件：
+   - src/utils/permission.ts - 统一权限判断
+   - src/services/localDataStore.ts - IndexedDB 本地存储
+   - src/pages/admin/AdminRecharge.tsx - 充值审核页面
+   - src/api/rechargeApi.ts - 充值 API
+   - server/src/routes/recharge.ts - 充值后端路由
+   - server/src/migrations/002_recharge.ts - 充值表迁移
+4. MembershipPage.tsx - 改为提交充值申请（不能直接解锁）
+5. 所有页面统一使用 permission.ts 判断权限
+
+【TypeScript 编译】零错误通过
+
+【GitHub Secrets 更新完后】
+到 GitHub Actions 页面，找到失败的 workflow run，点 "Re-run all jobs" 即可重新部署。
+

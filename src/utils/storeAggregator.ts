@@ -122,6 +122,35 @@ export function mergeAbnormalOrders(
   return result;
 }
 
+/** 将售后数据的退款金额合并到订单记录中，使各页面KPI能正确读取退款金额 */
+export function enrichOrdersWithAfterSale(orders: any[], afterSaleRecords: any[]): any[] {
+  if (!orders.length || !afterSaleRecords.length) return orders;
+
+  const refundByOrder: Record<string, number> = {};
+  afterSaleRecords.forEach((r: any) => {
+    const orderNo = String(r['订单编号'] || r['订单号'] || '').trim();
+    if (!orderNo) return;
+    const amt = parseFloat(String(r['退款金额'] || '0').replace(/[^\d.\-]/g, '')) || 0;
+    refundByOrder[orderNo] = (refundByOrder[orderNo] || 0) + amt;
+  });
+
+  let enriched = 0;
+  const result = orders.map((o: any) => {
+    const orderNo = String((o['订单号'] || o['orderId'] || '')).trim();
+    const refundAmt = refundByOrder[orderNo];
+    if (refundAmt && refundAmt > 0) {
+      enriched++;
+      return { ...o, '退款金额(元)': String(refundAmt) };
+    }
+    return o;
+  });
+
+  if (enriched > 0) {
+    console.log(`[enrichOrders] Merged refund data into ${enriched} orders (from ${afterSaleRecords.length} after-sale records)`);
+  }
+  return result;
+}
+
 /** 判断是否为"全部店铺"模式 */
 export const ALL_STORES_ID = '__all__';
 export function isAllStores(filter: string): boolean {

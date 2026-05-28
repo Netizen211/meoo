@@ -10,6 +10,7 @@ import dataRoutes from './routes/data';
 import membershipRoutes from './routes/membership';
 import storeRoutes from './routes/stores';
 import adminRoutes from './routes/admin';
+import rechargeRoutes from './routes/recharge';
 import { startCleanupCron } from './services/cleanupService';
 
 const app = express();
@@ -76,6 +77,7 @@ app.use('/api/data', dataRoutes);
 app.use('/api/membership', membershipRoutes);
 app.use('/api/stores', storeRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/recharge', rechargeRoutes);
 
 // 全局错误处理
 app.use(errorHandler);

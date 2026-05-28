@@ -20,7 +20,7 @@ export default function AdminLogs() {
   useEffect(() => {
     setLoading(true);
     adminApi.getLogs(page).then(res => {
-      if (res.success) { setLogs(res.data); setTotal(res.total); }
+      if (res.success) { setLogs(res.data); setTotal((res as any).total); }
       setLoading(false);
     });
   }, [page]);

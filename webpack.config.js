@@ -6,15 +6,8 @@ const TerserPlugin = require('terser-webpack-plugin');
 module.exports = (env, argv) => {
   const isDev = argv.mode !== 'production';
 
-  return {
+  const common = {
     mode: isDev ? 'development' : 'production',
-    entry: './src/index.tsx',
-    output: {
-      path: path.resolve(__dirname, 'dist'),
-      filename: 'bundle.js',
-      publicPath: 'auto'
-    },
-    // 生产环境不生成 source map，防止源码泄露
     devtool: isDev ? 'eval-source-map' : false,
     optimization: isDev ? undefined : {
       minimize: true,
@@ -44,9 +37,7 @@ module.exports = (env, argv) => {
           test: /\.mjs$/,
           include: /node_modules/,
           type: 'javascript/auto',
-          resolve: {
-            fullySpecified: false,
-          },
+          resolve: { fullySpecified: false },
         },
         {
           test: /\.(ts|tsx|js|jsx)$/,
@@ -55,13 +46,7 @@ module.exports = (env, argv) => {
             loader: 'babel-loader',
             options: {
               presets: [
-                [
-                  '@babel/preset-react',
-                  {
-                    runtime: 'automatic',
-                    development: isDev
-                  }
-                ],
+                ['@babel/preset-react', { runtime: 'automatic', development: isDev }],
                 '@babel/preset-env',
                 '@babel/preset-typescript'
               ]
@@ -82,7 +67,6 @@ module.exports = (env, argv) => {
           type: 'asset/resource'
         },
         {
-          // 兜底规则：PDF、文档、音视频等所有其他文件一律输出为独立资源文件
           exclude: /\.(js|jsx|ts|tsx|mjs|css|json|html)$/i,
           type: 'asset/resource'
         }
@@ -91,31 +75,91 @@ module.exports = (env, argv) => {
     resolve: {
       extensions: ['.mjs', '.ts', '.tsx', '.js', '.jsx']
     },
-    devServer: {
-      port: 3015,
-      allowedHosts: 'all',
-      // 关闭浏览器内全屏红/黄 overlay，避免预览 iframe 内遮挡画面（编译错误仍会在终端输出）
-      client: {
-        overlay: {
-          errors: false,
-          warnings: false,
-        },
-      },
-      historyApiFallback: {
-        index: '/index.html',
-        rewrites: [
-          { from: /^\/_p\/\d+\//, to: '/index.html' }
-        ]
-      }
-    },
     plugins: [
       new webpack.DefinePlugin({
         'process.env.NODE_ENV': JSON.stringify(isDev ? 'development' : 'production'),
       }),
-      new HtmlWebpackPlugin({
-        template: './index.html',
-        inject: 'body'
-      })
     ]
   };
+
+  // Dev mode: single entry with devServer
+  if (isDev) {
+    return {
+      ...common,
+      entry: './src/index.tsx',
+      output: {
+        path: path.resolve(__dirname, 'dist'),
+        filename: 'bundle.js',
+        publicPath: 'auto'
+      },
+      devServer: {
+        port: 3015,
+        allowedHosts: 'all',
+        client: { overlay: { errors: false, warnings: false } },
+        historyApiFallback: {
+          index: '/index.html',
+          rewrites: [
+            { from: /^\/_p\/\d+\//, to: '/index.html' }
+          ]
+        }
+      },
+      plugins: [
+        ...common.plugins,
+        new HtmlWebpackPlugin({
+          template: './index.html',
+          inject: 'body',
+          filename: 'index.html',
+          chunks: ['main']
+        }),
+        new HtmlWebpackPlugin({
+          template: './admin.html',
+          inject: 'body',
+          filename: 'admin.html',
+          chunks: ['admin']
+        })
+      ]
+    };
+  }
+
+  // Production: dual entry (user + admin)
+  return [
+    // 用户端
+    {
+      ...common,
+      entry: { main: './src/index.tsx' },
+      output: {
+        path: path.resolve(__dirname, 'dist'),
+        filename: 'bundle.[contenthash:8].js',
+        publicPath: 'auto'
+      },
+      plugins: [
+        ...common.plugins,
+        new HtmlWebpackPlugin({
+          template: './index.html',
+          inject: 'body',
+          filename: 'index.html',
+          chunks: ['main']
+        })
+      ]
+    },
+    // 管理端
+    {
+      ...common,
+      entry: { admin: './src/adminIndex.tsx' },
+      output: {
+        path: path.resolve(__dirname, 'dist-admin'),
+        filename: 'admin.[contenthash:8].js',
+        publicPath: 'auto'
+      },
+      plugins: [
+        ...common.plugins,
+        new HtmlWebpackPlugin({
+          template: './admin.html',
+          inject: 'body',
+          filename: 'index.html',
+          chunks: ['admin']
+        })
+      ]
+    }
+  ];
 };

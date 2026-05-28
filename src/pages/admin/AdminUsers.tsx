@@ -16,7 +16,7 @@ export default function AdminUsers() {
   useEffect(() => {
     setLoading(true);
     adminApi.getUsers(page, 20, search).then(res => {
-      if (res.success) { setUsers(res.data); setTotal(res.total); }
+      if (res.success) { setUsers(res.data); setTotal((res as any).total); }
       setLoading(false);
     });
   }, [page, search]);

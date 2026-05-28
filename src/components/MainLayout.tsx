@@ -9,7 +9,7 @@ import {
   Search, Bell, Download, RefreshCw, Maximize2, Menu, X, Home,
   ChevronLeft, Zap, Star, GripVertical, Plus,
   Moon, Sun, Link as LinkIcon, Activity, Layers, Pencil, Check, Landmark,
-  ShieldAlert, Key, FileText, BarChart3, Users as UsersIcon
+  ShieldAlert
 } from 'lucide-react';
 import { useAuth, useStore, useData } from '../App';
 import SampleDataImporter from './SampleDataImporter';
@@ -283,36 +283,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           ))}
         </nav>
 
-        {/* Admin section — 仅 admin/test 可见 */}
-        {(user?.role === 'admin' || user?.role === 'test') && (
-          <div className="border-t border-pdd-border pt-3 px-3 pb-1">
-            {!sidebarCollapsed && (
-              <div className="text-[10px] text-amber-400 uppercase tracking-widest mb-2 px-1 font-semibold">后台管理</div>
-            )}
-            {[
-              { path: '/admin', label: '系统概览', icon: BarChart3 },
-              { path: '/admin/users', label: '用户管理', icon: UsersIcon },
-              { path: '/admin/members', label: '会员管理', icon: Crown },
-              { path: '/admin/invite', label: '邀请码', icon: Key },
-              { path: '/admin/data', label: '数据监控', icon: Activity },
-              { path: '/admin/logs', label: '操作日志', icon: FileText },
-              { path: '/admin/settings', label: '系统设置', icon: Settings },
-            ].map(item => (
-              <NavLink key={item.path} to={item.path}>
-                {({ isActive }) => (
-                  <div className={`flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer transition-all duration-200 ${
-                    isActive
-                      ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                      : 'text-pdd-text-secondary hover:text-pdd-text hover:bg-pdd-card'
-                  }`}>
-                    <item.icon size={18} className={`flex-shrink-0 ${isActive ? 'text-amber-400' : ''}`} />
-                    {!sidebarCollapsed && <span className="text-sm whitespace-nowrap font-medium">{item.label}</span>}
-                  </div>
-                )}
-              </NavLink>
-            ))}
-          </div>
-        )}
 
         {/* Upload button */}
         <NavLink to="/upload">

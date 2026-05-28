@@ -107,7 +107,7 @@ export function buildTrendData(
       const shipD = new Date(String(shipT));
       if (!isNaN(payT.getTime()) && !isNaN(shipD.getTime())) g.shipHourSum += (shipD.getTime() - payT.getTime()) / 3600000;
     }
-    g.buyerSet.add(String(findField(o, '订单号') || '').trim().slice(0, 6));
+    g.buyerSet.add(String(findField(o, '订单号') || '').trim().slice(-4));
     g.productSet.add(String(findField(o, '商品id', '商品ID') || '').trim());
     g.totalQty += safeFloat(findField(o, '商品数量(件)', '商品数量', '数量'));
   });
@@ -200,7 +200,7 @@ export function buildCompareTrendData(
       const shipD = new Date(String(shipT));
       if (!isNaN(payT.getTime()) && !isNaN(shipD.getTime())) g.shipHourSum += (shipD.getTime() - payT.getTime()) / 3600000;
     }
-    g.buyerSet.add(String(findField(o, '订单号') || '').trim().slice(0, 6));
+    g.buyerSet.add(String(findField(o, '订单号') || '').trim().slice(-4));
     g.productSet.add(String(findField(o, '商品id', '商品ID') || '').trim());
     g.totalQty += safeFloat(findField(o, '商品数量(件)', '商品数量', '数量'));
   });
