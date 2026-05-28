@@ -454,11 +454,11 @@ export async function importSampleData(): Promise<{ storeId: string; storeName: 
 
   // 要导入的文件列表（全功能演示数据）
   const filesToImport = [
-    '/演示数据_订单.csv',
-    '/演示数据_商品推广.xlsx',
-    '/演示数据_售后.xlsx',
-    '/演示数据_运费险.xlsx',
-    '/演示数据_货款明细.csv',
+    '/demo_orders.csv',
+    '/demo_promo.xlsx',
+    '/demo_aftersale.xlsx',
+    '/demo_insurance.xlsx',
+    '/demo_finance.csv',
   ];
 
   for (const file of filesToImport) {
