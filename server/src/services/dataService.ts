@@ -27,6 +27,8 @@ export async function saveStoreData(
 export async function loadStoreData(storeId: string): Promise<StoreDataItem | null> {
   const rows = await db('store_data').where('store_id', storeId);
 
+  if (rows.length === 0) return null;
+
   const data: any = {
     orders: [],
     promotionSummary: [],
@@ -91,10 +93,10 @@ export async function saveAvailableFields(
   availableFields: StoreAvailableFields
 ): Promise<void> {
   const sources: Array<{ source: string; fields: string[] }> = [
-    { source: 'csv', fields: availableFields.csv },
-    { source: 'promotion', fields: availableFields.promotion },
-    { source: 'insurance', fields: availableFields.insurance },
-    { source: 'afterSale', fields: availableFields.afterSale },
+    { source: 'csv', fields: availableFields.csv || [] },
+    { source: 'promotion', fields: availableFields.promotion || [] },
+    { source: 'insurance', fields: availableFields.insurance || [] },
+    { source: 'afterSale', fields: availableFields.afterSale || [] },
   ];
 
   for (const { source, fields } of sources) {
