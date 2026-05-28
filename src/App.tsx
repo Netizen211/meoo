@@ -539,16 +539,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
               localStorage.setItem('dianfx_current_store', JSON.stringify(storesList[0]));
               setDataFilter(firstStoreId);
             }
-            return; // 已有服务器数据，无需加载演示数据
+            return; // 已有真实数据
           }
         }
-        // 2. 如果服务器没有数据，且本地也没有，自动加载演示数据
-        if (!hasSampleData()) {
+        // 2. 检查是否已有任何数据（本地IndexedDB或演示数据）
+        const needDemo = Object.keys(result).length === 0 && !hasSampleData();
+        if (needDemo) {
           await importSampleData();
           window.location.reload();
         }
       } catch {
-        // 服务器不可达时，直接加载演示数据
         if (!hasSampleData()) {
           importSampleData().then(() => window.location.reload()).catch(() => {});
         }

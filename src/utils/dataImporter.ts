@@ -538,8 +538,18 @@ export async function importSampleData(): Promise<{ storeId: string; storeName: 
 
 // 检查是否已导入示例数据
 export function hasSampleData(): boolean {
-  const stores = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
-  return stores.some((s: any) => s.name && s.name.includes('演示'));
+  const stores: { id: string; name: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
+  // 不仅要店名含"演示"，还必须确认有实际订单数据
+  return stores.some(s => {
+    if (!s.name || !s.name.includes('演示')) return false;
+    const key = `dianfx_store_data_${s.id}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return false;
+    try {
+      const data = JSON.parse(raw);
+      return (data.orders?.length > 0) || (data.promotionSummary?.length > 0);
+    } catch { return false; }
+  });
 }
 
 // 清除示例数据
