@@ -375,7 +375,6 @@ const EMPTY_STORE_DATA: StoreDataItem = {
 };
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
   const [idbReady, setIdbReady] = useState(false);
   const [dataFilter, setDataFilter] = useState<string>(() => {
     const saved = localStorage.getItem('dianfx_data_filter');
@@ -477,79 +476,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           }
           if (hasServerData) {
             setStoreDataMap({ ...result });
+          } else if (!hasSampleData()) {
+            // 服务器也没数据，加载演示数据
+            await importSampleData();
+            window.location.reload();
+            return;
           }
         } catch {
-          // 服务器不可达，使用本地数据
+          // 服务器不可达，如有本地数据就用，否则加载演示
+          if (Object.keys(result).length === 0 && !hasSampleData()) {
+            try { await importSampleData(); window.location.reload(); return; } catch {}
+          }
         }
       }
     };
     initStore();
   }, []);
 
-  // 登录后拉取服务器数据 OR 自动加载演示数据
-  const serverPulledRef = useRef(false);
-  useEffect(() => {
-    if (!user || !idbReady || !hasTokens() || serverPulledRef.current) return;
-    serverPulledRef.current = true;
-    (async () => {
-      try {
-        // 1. 先尝试从服务器拉取数据
-        const storesRes = await apiClient.get<{ id: string; name: string; createdAt: string }[]>('/stores');
-        if (storesRes.success && storesRes.data?.length) {
-          const localStores: { id: string; name: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
-          const localIds = new Set(localStores.map((s: any) => s.id));
-          for (const ss of storesRes.data) {
-            if (!localIds.has(ss.id)) localStores.push(ss);
-          }
-          localStorage.setItem('dianfx_stores', JSON.stringify(localStores));
-          const storesList: { id: string }[] = storesRes.data;
-          const result: Record<string, any> = {};
-          for (const store of storesList) {
-            const serverData = await pullStoreData(store.id);
-            if (serverData?.data) {
-              const sd = serverData.data;
-              result[store.id] = {
-                orders: sd.orders || [],
-                promotionSummary: sd.promotionSummary || [],
-                promotionProducts: sd.promotionProducts || [],
-                starStoreSummary: sd.starStoreSummary || [],
-                liveStreamSummary: sd.liveStreamSummary || [],
-                shippingInsurance: sd.shippingInsurance || [],
-                afterSaleRecords: sd.afterSaleRecords || [],
-                financialRecords: sd.financialRecords || [],
-                availableFields: {
-                  csv: new Set(Array.isArray(sd.availableFields?.csv) ? sd.availableFields.csv : []),
-                  promotion: new Set(Array.isArray(sd.availableFields?.promotion) ? sd.availableFields.promotion : []),
-                  insurance: new Set(Array.isArray(sd.availableFields?.insurance) ? sd.availableFields.insurance : []),
-                  afterSale: new Set(Array.isArray(sd.availableFields?.afterSale) ? sd.availableFields.afterSale : [])
-                }
-              };
-              if (serverData.configs) {
-                for (const [key, value] of Object.entries(serverData.configs)) {
-                  localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
-                }
-              }
-            }
-          }
-          if (Object.keys(result).length > 0) {
-            // 数据已恢复到 localStorage，reload 让 initStore 从 IndexedDB 正确加载
-            window.location.reload();
-            return;
-          }
-        }
-        // 2. 检查是否已有任何数据（本地IndexedDB或演示数据）
-        const needDemo = Object.keys(result).length === 0 && !hasSampleData();
-        if (needDemo) {
-          await importSampleData();
-          window.location.reload();
-        }
-      } catch {
-        if (!hasSampleData()) {
-          importSampleData().then(() => window.location.reload()).catch(() => {});
-        }
-      }
-    })();
-  }, [user, idbReady]);
   // 辅助：读取当前店铺的配置（兼容旧格式无 storeId 后缀的键值）
   const getStoreScopedKey = (baseKey: string, storeId: string): string => `${baseKey}_${storeId}`;
 
