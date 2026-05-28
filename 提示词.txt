@@ -577,14 +577,28 @@ deploy.yml 已改造为双服务器并行部署：
 
   REMOTE_USER_HK = root
 
-  SSH_PRIVATE_KEY_HK = 下面整段（从 BEGIN 到 END 全部复制）：
-  -----BEGIN OPENSSH PRIVATE KEY-----
-  b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
-  QyNTUxOQAAACDY2Fyz91AXLVqf58Y01QhXFeH3bwY9vEqfv1+/k68ZXgAAAJC/GvMPvxrz
-  DwAAAAtzc2gtZWQyNTUxOQAAACDY2Fyz91AXLVqf58Y01QhXFeH3bwY9vEqfv1+/k68ZXg
-  AAAEA3U8/PSNbO8bAKLm/ZPmgGz9SugKuaDUNVlo8eMt4NqtjYXLP3UBctWp/nxjTVCFcV
-  4fdvBj28Sp+/X7+TrxleAAAAC21lb28tZGVwbG95AQI=
-  -----END OPENSSH PRIVATE KEY-----
+  SSH_PRIVATE_KEY_HK = 见下面"2026-05-28 更新：新密钥"部分
 
 一共 6 个 Secrets：3 个国内 + 3 个香港。
+
+=========================================
+2026-05-28 更新：SSH_PRIVATE_KEY_HK 换新密钥
+=========================================
+
+旧密钥因格式问题导致 GitHub Actions SSH 连不上。
+以下是新生成的密钥对（公钥已加到服务器），请更新 GitHub Secret：
+
+打开 https://github.com/Netizen211/meoo/settings/secrets/actions
+找到 SSH_PRIVATE_KEY_HK → 点编辑（铅笔图标）→ 把内容替换为下面这段：
+
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+QyNTUxOQAAACCk/dMQuJprdiNHOnRd2CorfarYtuN8VpHI7kAf/8BeLAAAAJjxLsmv8S7J
+rwAAAAtzc2gtZWQyNTUxOQAAACCk/dMQuJprdiNHOnRd2CorfarYtuN8VpHI7kAf/8BeLA
+AAAEDhu48uagD/gYADkX6DRl7HEIExtDq3/7lHC/mmryP1nqT90xC4mmt2I0c6dF3YKit9
+qti243xWkcjuQB//wF4sAAAADm1lb28taGstZGVwbG95AQIDBAUGBw==
+-----END OPENSSH PRIVATE KEY-----
+
+注意：BEGIN 和 END 行前面不要有空格，每行顶格。
+更新完后告诉我，我重新触发部署测试。
 
