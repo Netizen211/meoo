@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "webpack serve",
     "build": "webpack --mode production",
+    "postbuild": "node -e \"const{cpSync}=require('fs');['演示数据_订单.csv','演示数据_商品推广.xlsx','演示数据_售后.xlsx','演示数据_运费险.xlsx','演示数据_货款明细.csv'].forEach(f=>{try{cpSync('public/assets/'+f,'dist/'+f)}catch(e){}})\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
