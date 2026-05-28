@@ -1,13 +1,16 @@
 name: 部署到服务器
 
 on:
+  push:
+    branches:
+      - v2-server-deploy-20260527
   workflow_dispatch:
     inputs:
       target:
         description: '部署目标'
         required: true
         type: choice
-        default: 'hk'
+        default: 'both'
         options:
           - cn
           - hk
@@ -67,7 +70,7 @@ jobs:
   # ========== 国内服务器 ==========
   deploy-cn:
     needs: build
-    if: ${{ github.event.inputs.target == 'cn' || github.event.inputs.target == 'both' }}
+    if: ${{ github.event_name == 'push' || github.event.inputs.target == 'cn' || github.event.inputs.target == 'both' }}
     runs-on: ubuntu-latest
     steps:
       - name: 下载产物
@@ -103,7 +106,7 @@ jobs:
   # ========== 香港服务器 ==========
   deploy-hk:
     needs: build
-    if: ${{ github.event.inputs.target == 'hk' || github.event.inputs.target == 'both' }}
+    if: ${{ github.event_name == 'push' || github.event.inputs.target == 'hk' || github.event.inputs.target == 'both' }}
     runs-on: ubuntu-latest
     steps:
       - name: 下载产物
