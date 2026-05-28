@@ -4,9 +4,15 @@ export interface ChangelogEntry {
   changes: string[];
 }
 
+/**
+ * 版本号规则（MAJOR.MINOR.PATCH）：
+ * - MAJOR（大版本）：产品方向级变更，如 v1 → v2
+ * - MINOR（功能版本）：新增功能/模块，如 v2.1 → v2.2
+ * - PATCH（修复版本）：Bug 修复/小优化，如 v2.1.0 → v2.1.1
+ */
 export const changelog: ChangelogEntry[] = [
   {
-    version: 'v2.5',
+    version: 'v2.2.0',
     date: '2026-05-28',
     changes: [
       '新增充值申请功能 — 提交充值后等待管理员审核开通',
@@ -16,7 +22,7 @@ export const changelog: ChangelogEntry[] = [
     ],
   },
   {
-    version: 'v2.4',
+    version: 'v2.1.3',
     date: '2026-05-26',
     changes: [
       '修复风险预警页时间筛选和趋势图不更新的问题',
@@ -27,21 +33,21 @@ export const changelog: ChangelogEntry[] = [
     ],
   },
   {
-    version: 'v2.3',
+    version: 'v2.1.2',
     date: '2026-05-20',
     changes: [
       '网站和管理后台同步更新',
     ],
   },
   {
-    version: 'v2.2',
+    version: 'v2.1.1',
     date: '2026-05-18',
     changes: [
       '修复商品分析推广费遗漏问题',
     ],
   },
   {
-    version: 'v2.1',
+    version: 'v2.1.0',
     date: '2026-05-15',
     changes: [
       '支持账号注册登录，换设备数据不丢失',
@@ -49,7 +55,7 @@ export const changelog: ChangelogEntry[] = [
     ],
   },
   {
-    version: 'v2.0',
+    version: 'v2.0.0',
     date: '2026-05-10',
     changes: [
       '新增中国地图地域分析',
@@ -60,7 +66,7 @@ export const changelog: ChangelogEntry[] = [
     ],
   },
   {
-    version: 'v1.0',
+    version: 'v1.0.0',
     date: '2026-04-01',
     changes: [
       '店分析正式上线 — 支持 CSV/XLSX/ZIP 数据上传',

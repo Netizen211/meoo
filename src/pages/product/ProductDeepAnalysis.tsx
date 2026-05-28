@@ -1125,13 +1125,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       const refundRate = info.orderCount > 0 ? (refund.refundCount / info.orderCount) * 100 : 0;
       const avgRefundDays = refund.refundDays.length > 0 ? refund.refundDays.reduce((a, b) => a + b, 0) / refund.refundDays.length : 0;
       const topRefundReason = Object.entries(refund.reasons || {}).sort((a, b) => b[1] - a[1])[0]?.[0];
-      // 查找SKU成本
-      let skuCost: number | undefined;
-      const pc = productCosts?.[selectedId];
-      if (pc && typeof pc === 'object') {
-        const skuCosts = (pc as any).skuCosts;
-        if (skuCosts && skuCosts[info.skuId]) skuCost = skuCosts[info.skuId];
-      }
+      const skuCost = productCosts?.[info.skuId];
       const profitRate = info.revenue > 0 && skuCost != null ? ((info.revenue - skuCost * info.sales - refund.refundAmount) / info.revenue) * 100 : undefined;
       return {
         skuId: info.skuId,
