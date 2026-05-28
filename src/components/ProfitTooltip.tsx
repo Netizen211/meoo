@@ -45,23 +45,27 @@ export default function ProfitTooltip({
   const calcPosition = useCallback(() => {
     if (!triggerRef.current || !popupRef.current) return;
     const triggerRect = triggerRef.current.getBoundingClientRect();
-    const popupRect = popupRef.current.getBoundingClientRect();
-    const viewportH = window.innerHeight;
+    const popupHeight = Math.min(popupRef.current.scrollHeight, window.innerHeight - 16);
+    const popupWidth = Math.min(popupRef.current.scrollWidth, window.innerWidth - 16);
     const gap = 8;
 
     let top: number;
     // 优先上方
-    if (triggerRect.top - popupRect.height - gap > 0) {
-      top = triggerRect.top - popupRect.height - gap;
-    } else {
+    if (triggerRect.top - popupHeight - gap > 0) {
+      top = triggerRect.top - popupHeight - gap;
+    } else if (triggerRect.bottom + popupHeight + gap < window.innerHeight) {
+      // 上方不够，试试下方
       top = triggerRect.bottom + gap;
+    } else {
+      // 上下都不够，强制下方 + 滚动
+      top = Math.max(8, window.innerHeight - popupHeight - 8);
     }
 
     // 水平居中，防止超出视口
-    let left = triggerRect.left + triggerRect.width / 2 - popupRect.width / 2;
+    let left = triggerRect.left + triggerRect.width / 2 - popupWidth / 2;
     if (left < 8) left = 8;
-    if (left + popupRect.width > window.innerWidth - 8) {
-      left = window.innerWidth - 8 - popupRect.width;
+    if (left + popupWidth > window.innerWidth - 8) {
+      left = window.innerWidth - 8 - popupWidth;
     }
 
     setPopupPos({ top, left });
@@ -78,17 +82,26 @@ export default function ProfitTooltip({
 
   useEffect(() => {
     if (showPopup) {
-      // 延迟一帧让 popup 渲染后再计算位置
-      requestAnimationFrame(calcPosition);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(calcPosition);
+      });
     }
   }, [showPopup, calcPosition]);
 
-  // 窗口 resize 时重新计算
+  // 窗口 resize 或 scroll 时重新计算/隐藏
   useEffect(() => {
     if (!showPopup) return;
-    const onResize = () => calcPosition();
-    window.addEventListener('resize', onResize);
-    return () => window.removeEventListener('resize', onResize);
+    const onUpdate = () => calcPosition();
+    const onScroll = () => {
+      // 滚动时隐藏（避免弹窗卡在错误位置）
+      setShowPopup(false);
+    };
+    window.addEventListener('resize', onUpdate);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      window.removeEventListener('resize', onUpdate);
+      window.removeEventListener('scroll', onScroll, true);
+    };
   }, [showPopup, calcPosition]);
 
   const isMissingCost = !hasRealCost && costSource.productCost === 'missing';
@@ -402,7 +415,7 @@ export default function ProfitTooltip({
         <div
           ref={popupRef}
           className="fixed z-[9999] bg-pdd-card rounded-lg shadow-2xl border border-pdd-gray-200 text-xs animate-in fade-in duration-150"
-          style={{ top: popupPos.top, left: popupPos.left }}
+          style={{ top: popupPos.top, left: popupPos.left, maxHeight: 'calc(100vh - 16px)', overflowY: 'auto' }}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
         >
