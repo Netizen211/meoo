@@ -34,12 +34,11 @@ export default function LoginPage() {
       if (serverResult.success) {
         if (serverResult.user) {
           setUser(serverResult.user);
-          // 同步写入 localStorage，确保页面跳转前用户状态已持久化
           localStorage.setItem('dianfx_user', JSON.stringify(serverResult.user));
         }
         if (rememberMe) localStorage.setItem('dianfx_remember_username', username);
         else localStorage.removeItem('dianfx_remember_username');
-        window.location.href = '/#/stores';
+        navigate('/stores');
         return;
       }
       // 服务端返回错误（非网络错误），直接显示

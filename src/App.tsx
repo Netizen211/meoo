@@ -375,6 +375,7 @@ const EMPTY_STORE_DATA: StoreDataItem = {
 };
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const [idbReady, setIdbReady] = useState(false);
   const [dataFilter, setDataFilter] = useState<string>(() => {
     const saved = localStorage.getItem('dianfx_data_filter');
@@ -492,6 +493,51 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
     initStore();
   }, []);
+
+  // 用户登录后触发服务器数据拉取（仅当 storeDataMap 为空时）
+  const prevUserRef = useRef(user);
+  useEffect(() => {
+    if (user && !prevUserRef.current && idbReady && hasTokens()) {
+      (async () => {
+        const storesRes = await apiClient.get<{ id: string; name: string }[]>('/stores');
+        if (!storesRes.success || !storesRes.data?.length) return;
+        const result: Record<string, any> = {};
+        for (const store of storesRes.data) {
+          const serverData = await pullStoreData(store.id);
+          if (serverData?.data) {
+            const sd = serverData.data;
+            result[store.id] = {
+              orders: sd.orders || [], promotionSummary: sd.promotionSummary || [],
+              promotionProducts: sd.promotionProducts || [], starStoreSummary: sd.starStoreSummary || [],
+              liveStreamSummary: sd.liveStreamSummary || [], shippingInsurance: sd.shippingInsurance || [],
+              afterSaleRecords: sd.afterSaleRecords || [], financialRecords: sd.financialRecords || [],
+              availableFields: {
+                csv: new Set(Array.isArray(sd.availableFields?.csv) ? sd.availableFields.csv : []),
+                promotion: new Set(Array.isArray(sd.availableFields?.promotion) ? sd.availableFields.promotion : []),
+                insurance: new Set(Array.isArray(sd.availableFields?.insurance) ? sd.availableFields.insurance : []),
+                afterSale: new Set(Array.isArray(sd.availableFields?.afterSale) ? sd.availableFields.afterSale : []),
+              }
+            };
+            if (serverData.configs) {
+              for (const [key, value] of Object.entries(serverData.configs)) {
+                localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+              }
+            }
+          }
+        }
+        if (Object.keys(result).length > 0) {
+          setStoreDataMap(prev => ({ ...prev, ...result }));
+          const firstId = storesRes.data[0]?.id;
+          if (firstId && !localStorage.getItem('dianfx_data_filter')) {
+            localStorage.setItem('dianfx_data_filter', firstId);
+            localStorage.setItem('dianfx_current_store', JSON.stringify(storesRes.data[0]));
+            setDataFilter(firstId);
+          }
+        }
+      })();
+    }
+    prevUserRef.current = user;
+  }, [user, idbReady]);
 
   // 辅助：读取当前店铺的配置（兼容旧格式无 storeId 后缀的键值）
   const getStoreScopedKey = (baseKey: string, storeId: string): string => `${baseKey}_${storeId}`;
