@@ -484,6 +484,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         } catch {
           // 服务器不可达，使用本地数据
         }
+
+        // 新注册用户自动加载演示数据
+        const hasLocalData = Object.values(result).some((d: any) => d.orders?.length > 0 || d.promotionSummary?.length > 0);
+        if (!hasServerData && !hasLocalData && !hasSampleData()) {
+          try {
+            await importSampleData();
+            window.location.reload();
+            return;
+          } catch { /* 演示数据加载失败不阻塞 */ }
+        }
       }
     };
     initStore();

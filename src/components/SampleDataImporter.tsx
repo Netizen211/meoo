@@ -94,27 +94,23 @@ export default function SampleDataImporter() {
                       <div className="space-y-3 mb-6">
                         <div className="flex items-center gap-3 text-pdd-text">
                           <CheckCircle size={20} className="text-pdd-success" />
-                          <span>订单数据（约 1,600 条）</span>
+                          <span>订单数据（520 笔，64 个字段）</span>
                         </div>
                         <div className="flex items-center gap-3 text-pdd-text">
                           <CheckCircle size={20} className="text-pdd-success" />
-                          <span>商品推广数据（约 7,600 条）</span>
+                          <span>商品推广数据（464 条）</span>
                         </div>
                         <div className="flex items-center gap-3 text-pdd-text">
                           <CheckCircle size={20} className="text-pdd-success" />
-                          <span>明星店铺数据（约 90 条）</span>
+                          <span>售后数据（118 条）</span>
                         </div>
                         <div className="flex items-center gap-3 text-pdd-text">
                           <CheckCircle size={20} className="text-pdd-success" />
-                          <span>直播推广数据（约 40 条）</span>
+                          <span>运费险数据（338 条）</span>
                         </div>
                         <div className="flex items-center gap-3 text-pdd-text">
                           <CheckCircle size={20} className="text-pdd-success" />
-                          <span>售后数据（约 40 条）</span>
-                        </div>
-                        <div className="flex items-center gap-3 text-pdd-text">
-                          <CheckCircle size={20} className="text-pdd-success" />
-                          <span>运费险数据（约 60 条）</span>
+                          <span>货款明细（1,063 条）</span>
                         </div>
                       </div>
 

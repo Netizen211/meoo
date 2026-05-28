@@ -448,33 +448,17 @@ async function importFile(filePath: string, existing: StoreDataItem): Promise<{ 
 // 主导入函数
 export async function importSampleData(): Promise<{ storeId: string; storeName: string; results: { file: string; type: string; rowCount: number }[] }> {
   const storeId = 'demo-store-' + Date.now();
-  const storeName = '示例店铺';
+  const storeName = '演示店铺（可删除）';
   const existing: StoreDataItem = { ...EMPTY_STORE_DATA };
   const results: { file: string; type: string; rowCount: number }[] = [];
 
-  // 要导入的文件列表
+  // 要导入的文件列表（全功能演示数据）
   const filesToImport = [
-    // 订单数据
-    '/assets/订单数据.csv',
-    '/assets/订单.csv',
-    '/assets/红豆.csv',
-    // 商品推广数据
-    '/assets/商品推广_分天数据_20260216至20260516.xlsx',
-    '/assets/商品推广_分天数据_20260217至20260517.xlsx',
-    '/assets/商品推广_分天数据_20260222至20260522.xlsx',
-    // 明星店铺数据
-    '/assets/明星店铺_分天数据_20260216至20260516.xlsx',
-    '/assets/明星店铺_分天数据_20260217至20260517.xlsx',
-    '/assets/明星店铺_分天数据_20260222至20260522.xlsx',
-    // 直播推广数据
-    '/assets/直播推广_分天数据_20260216至20260516.xlsx',
-    '/assets/直播推广_分天数据_20260217至20260517.xlsx',
-    '/assets/直播推广_分天数据_20260222至20260522.xlsx',
-    // 售后数据
-    '/assets/售后数据.xlsx',
-    // 运费险数据
-    '/assets/运费险.xlsx',
-    '/assets/运费险数据.xlsx',
+    '/演示数据_订单.csv',
+    '/演示数据_商品推广.xlsx',
+    '/演示数据_售后.xlsx',
+    '/演示数据_运费险.xlsx',
+    '/演示数据_货款明细.csv',
   ];
 
   for (const file of filesToImport) {
