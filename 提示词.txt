@@ -553,3 +553,38 @@ DNS 改完后等几分钟生效，然后 push 代码到 v2-server-deploy-2026052
 【GitHub Secrets 更新完后】
 到 GitHub Actions 页面，找到失败的 workflow run，点 "Re-run all jobs" 即可重新部署。
 
+=========================================
+2026-05-28 更新：双服务器同时部署
+=========================================
+
+deploy.yml 已改造为双服务器并行部署：
+- 构建只跑一次，产物上传为 artifact
+- deploy-cn 和 deploy-hk 两个 job 并行下载产物、部署到各自服务器
+
+【GitHub Secrets 配置】
+
+打开 https://github.com/Netizen211/meoo/settings/secrets/actions
+
+原有 3 个（国内服务器，保持不变）：
+  REMOTE_HOST = 121.40.196.79
+  REMOTE_USER = root
+  SSH_PRIVATE_KEY = (已有的国内服务器密钥，不要改)
+
+新增 3 个（香港服务器）：
+  点 "New repository secret" 依次添加：
+
+  REMOTE_HOST_HK = 47.82.120.115
+
+  REMOTE_USER_HK = root
+
+  SSH_PRIVATE_KEY_HK = 下面整段（从 BEGIN 到 END 全部复制）：
+  -----BEGIN OPENSSH PRIVATE KEY-----
+  b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+  QyNTUxOQAAACDY2Fyz91AXLVqf58Y01QhXFeH3bwY9vEqfv1+/k68ZXgAAAJC/GvMPvxrz
+  DwAAAAtzc2gtZWQyNTUxOQAAACDY2Fyz91AXLVqf58Y01QhXFeH3bwY9vEqfv1+/k68ZXg
+  AAAEA3U8/PSNbO8bAKLm/ZPmgGz9SugKuaDUNVlo8eMt4NqtjYXLP3UBctWp/nxjTVCFcV
+  4fdvBj28Sp+/X7+TrxleAAAAC21lb28tZGVwbG95AQI=
+  -----END OPENSSH PRIVATE KEY-----
+
+一共 6 个 Secrets：3 个国内 + 3 个香港。
+

@@ -6,9 +6,8 @@ on:
       - v2-server-deploy-20260527
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
-
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
@@ -18,16 +17,14 @@ jobs:
         with:
           node-version: 18
 
-      - name: 配置 SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-
       - name: 安装依赖 & 构建前端
         run: |
           npm install
           npm run build
+
+      - name: 构建管理端
+        run: |
+          npm run build:admin 2>/dev/null || echo "管理端构建脚本未配置，跳过"
 
       - name: 构建后端
         working-directory: server
@@ -35,24 +32,96 @@ jobs:
           npm install
           npx tsc
 
-      - name: 部署前端到服务器
+      - name: 打包产物
         run: |
-          cd dist && tar czf /tmp/dist.tar.gz . && cd ..
-          scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key /tmp/dist.tar.gz ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/tmp/
-          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p /www/wwwroot/meoo/dist && rm -rf /www/wwwroot/meoo/dist/* && tar xzf /tmp/dist.tar.gz -C /www/wwwroot/meoo/dist/ && rm /tmp/dist.tar.gz && echo 'frontend ok'"
+          cd dist && tar czf /tmp/frontend.tar.gz . && cd ..
+          cd dist-admin && tar czf /tmp/admin.tar.gz . 2>/dev/null && cd .. || true
+          cd server && tar czf /tmp/backend.tar.gz dist/ package.json && cd ..
 
-      - name: 部署管理端到服务器
-        run: |
-          cd dist-admin && tar czf /tmp/admin-dist.tar.gz . && cd ..
-          scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key /tmp/admin-dist.tar.gz ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/tmp/
-          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p /www/wwwroot/meoo-admin/dist && rm -rf /www/wwwroot/meoo-admin/dist/* && tar xzf /tmp/admin-dist.tar.gz -C /www/wwwroot/meoo-admin/dist/ && rm /tmp/admin-dist.tar.gz && echo 'admin ok'"
+      - name: 上传前端产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend
+          path: /tmp/frontend.tar.gz
 
-      - name: 部署后端到服务器
+      - name: 上传管理端产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: admin
+          path: /tmp/admin.tar.gz
+
+      - name: 上传后端产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend
+          path: /tmp/backend.tar.gz
+
+  # ========== 国内服务器 ==========
+  deploy-cn:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载产物
+        uses: actions/download-artifact@v4
+
+      - name: 配置 SSH（国内）
         run: |
-          cd server && tar czf /tmp/server-dist.tar.gz dist/ package.json && cd ..
-          scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key /tmp/server-dist.tar.gz ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/tmp/
-          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p /www/wwwroot/meoo/server && tar xzf /tmp/server-dist.tar.gz -C /www/wwwroot/meoo/server/ && rm /tmp/server-dist.tar.gz && echo 'backend ok'"
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: 部署前端
+        run: |
+          scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key frontend/frontend.tar.gz ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/tmp/
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p /www/wwwroot/meoo/dist && rm -rf /www/wwwroot/meoo/dist/* && tar xzf /tmp/frontend.tar.gz -C /www/wwwroot/meoo/dist/ && rm /tmp/frontend.tar.gz && echo '国内前端部署完成'"
+
+      - name: 部署管理端
+        run: |
+          if [ -f admin/admin.tar.gz ]; then
+            scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key admin/admin.tar.gz ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/tmp/
+            ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p /www/wwwroot/meoo-admin/dist && rm -rf /www/wwwroot/meoo-admin/dist/* && tar xzf /tmp/admin.tar.gz -C /www/wwwroot/meoo-admin/dist/ && rm /tmp/admin.tar.gz && echo '国内管理端部署完成'"
+          fi
+
+      - name: 部署后端
+        run: |
+          scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key backend/backend.tar.gz ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:/tmp/
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "mkdir -p /www/wwwroot/meoo/server && tar xzf /tmp/backend.tar.gz -C /www/wwwroot/meoo/server/ && rm /tmp/backend.tar.gz && echo '国内后端部署完成'"
 
       - name: 安装后端依赖 & 重启服务
         run: |
-          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "cd /www/wwwroot/meoo/server && npm install --production 2>&1 && fuser -k 3007/tcp 2>/dev/null; sleep 1; nohup node dist/index.js > /www/wwwlogs/meoo-server.log 2>&1 & sleep 2; netstat -tlnp 2>/dev/null | grep :3007 && echo '部署完成！'"
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }} "cd /www/wwwroot/meoo/server && npm install --production 2>&1 && fuser -k 3007/tcp 2>/dev/null; sleep 1; nohup node dist/index.js > /www/wwwlogs/meoo-server.log 2>&1 & sleep 2; netstat -tlnp 2>/dev/null | grep :3007 && echo '国内服务器部署完成！'"
+
+  # ========== 香港服务器 ==========
+  deploy-hk:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: 下载产物
+        uses: actions/download-artifact@v4
+
+      - name: 配置 SSH（香港）
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY_HK }}" > ~/.ssh/deploy_key_hk
+          chmod 600 ~/.ssh/deploy_key_hk
+
+      - name: 部署前端
+        run: |
+          scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key_hk frontend/frontend.tar.gz ${{ secrets.REMOTE_USER_HK }}@${{ secrets.REMOTE_HOST_HK }}:/tmp/
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key_hk ${{ secrets.REMOTE_USER_HK }}@${{ secrets.REMOTE_HOST_HK }} "mkdir -p /www/wwwroot/meoo/dist && rm -rf /www/wwwroot/meoo/dist/* && tar xzf /tmp/frontend.tar.gz -C /www/wwwroot/meoo/dist/ && rm /tmp/frontend.tar.gz && echo '香港前端部署完成'"
+
+      - name: 部署管理端
+        run: |
+          if [ -f admin/admin.tar.gz ]; then
+            scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key_hk admin/admin.tar.gz ${{ secrets.REMOTE_USER_HK }}@${{ secrets.REMOTE_HOST_HK }}:/tmp/
+            ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key_hk ${{ secrets.REMOTE_USER_HK }}@${{ secrets.REMOTE_HOST_HK }} "mkdir -p /www/wwwroot/meoo-admin/dist && rm -rf /www/wwwroot/meoo-admin/dist/* && tar xzf /tmp/admin.tar.gz -C /www/wwwroot/meoo-admin/dist/ && rm /tmp/admin.tar.gz && echo '香港管理端部署完成'"
+          fi
+
+      - name: 部署后端
+        run: |
+          scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key_hk backend/backend.tar.gz ${{ secrets.REMOTE_USER_HK }}@${{ secrets.REMOTE_HOST_HK }}:/tmp/
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key_hk ${{ secrets.REMOTE_USER_HK }}@${{ secrets.REMOTE_HOST_HK }} "mkdir -p /www/wwwroot/meoo/server && tar xzf /tmp/backend.tar.gz -C /www/wwwroot/meoo/server/ && rm /tmp/backend.tar.gz && echo '香港后端部署完成'"
+
+      - name: 安装后端依赖 & 重启服务
+        run: |
+          ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/deploy_key_hk ${{ secrets.REMOTE_USER_HK }}@${{ secrets.REMOTE_HOST_HK }} "cd /www/wwwroot/meoo/server && npm install --production 2>&1 && fuser -k 3007/tcp 2>/dev/null; sleep 1; nohup node dist/index.js > /www/wwwlogs/meoo-server.log 2>&1 & sleep 2; netstat -tlnp 2>/dev/null | grep :3007 && echo '香港服务器部署完成！'"
