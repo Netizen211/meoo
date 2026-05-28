@@ -405,6 +405,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const keys = await getAllKeys('storeData');
       if (keys.length === 0) {
         setIdbReady(true);
+        // 新用户：IndexedDB 无数据，检查是否需要自动加载演示数据
+        if (hasTokens() && !hasSampleData()) {
+          const storesList: { id: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
+          if (storesList.length === 0) {
+            try {
+              await importSampleData();
+              window.location.reload();
+              return;
+            } catch { /* 演示数据加载失败不阻塞 */ }
+          }
+        }
         return;
       }
 
