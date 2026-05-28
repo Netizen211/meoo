@@ -107,7 +107,7 @@ export function getInitialTheme(): ThemeMode {
     return dataTheme as ThemeMode;
   }
 
-  return 'light';
+  return 'dark';
 }
 
 /**

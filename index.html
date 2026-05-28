@@ -27,7 +27,7 @@
         });
       } else {
         var saved = localStorage.getItem('dianfx_dark_mode');
-        applyThemeToDOM(saved === 'true' ? 'dark' : 'light');
+        applyThemeToDOM(saved === 'false' ? 'light' : 'dark');
       }
       // Enable smooth theme transitions after initial paint
       requestAnimationFrame(function() {

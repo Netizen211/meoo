@@ -35,7 +35,7 @@ export default function LoginPage() {
         if (serverResult.user) setUser(serverResult.user);
         if (rememberMe) localStorage.setItem('dianfx_remember_username', username);
         else localStorage.removeItem('dianfx_remember_username');
-        navigate('/stores');
+        window.location.href = '/#/stores';
         return;
       }
       // 服务端返回错误（非网络错误），直接显示
