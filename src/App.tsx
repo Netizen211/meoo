@@ -403,51 +403,38 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
       // 从 IndexedDB 加载
       const keys = await getAllKeys('storeData');
-      if (keys.length === 0) {
-        setIdbReady(true);
-        // 新用户：IndexedDB 无数据，检查是否需要自动加载演示数据
-        if (hasTokens() && !hasSampleData()) {
-          const storesList: { id: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
-          if (storesList.length === 0) {
-            try {
-              await importSampleData();
-              window.location.reload();
-              return;
-            } catch { /* 演示数据加载失败不阻塞 */ }
-          }
-        }
-        return;
-      }
-
       const result: Record<string, StoreDataItem> = {};
-      for (const storeId of keys) {
-        const sd = await getItem<any>('storeData', storeId);
-        if (sd) {
-          result[storeId] = {
-            orders: sd.orders || [],
-            promotionSummary: sd.promotionSummary || [],
-            promotionProducts: sd.promotionProducts || [],
-            starStoreSummary: sd.starStoreSummary || [],
-            liveStreamSummary: sd.liveStreamSummary || [],
-            shippingInsurance: sd.shippingInsurance || [],
-            afterSaleRecords: sd.afterSaleRecords || [],
-            financialRecords: sd.financialRecords || [],
-            availableFields: {
-              csv: new Set(Array.isArray(sd.availableFields?.csv) ? sd.availableFields.csv : []),
-              promotion: new Set(Array.isArray(sd.availableFields?.promotion) ? sd.availableFields.promotion : []),
-              insurance: new Set(Array.isArray(sd.availableFields?.insurance) ? sd.availableFields.insurance : []),
-              afterSale: new Set(Array.isArray(sd.availableFields?.afterSale) ? sd.availableFields.afterSale : [])
-            }
-          };
+      const hasIdbData = keys.length > 0;
+
+      if (hasIdbData) {
+        for (const storeId of keys) {
+          const sd = await getItem<any>('storeData', storeId);
+          if (sd) {
+            result[storeId] = {
+              orders: sd.orders || [],
+              promotionSummary: sd.promotionSummary || [],
+              promotionProducts: sd.promotionProducts || [],
+              starStoreSummary: sd.starStoreSummary || [],
+              liveStreamSummary: sd.liveStreamSummary || [],
+              shippingInsurance: sd.shippingInsurance || [],
+              afterSaleRecords: sd.afterSaleRecords || [],
+              financialRecords: sd.financialRecords || [],
+              availableFields: {
+                csv: new Set(Array.isArray(sd.availableFields?.csv) ? sd.availableFields.csv : []),
+                promotion: new Set(Array.isArray(sd.availableFields?.promotion) ? sd.availableFields.promotion : []),
+                insurance: new Set(Array.isArray(sd.availableFields?.insurance) ? sd.availableFields.insurance : []),
+                afterSale: new Set(Array.isArray(sd.availableFields?.afterSale) ? sd.availableFields.afterSale : [])
+              }
+            };
+          }
         }
       }
       setStoreDataMap(result);
       setIdbReady(true);
 
-      // 从服务器拉取数据合并（如果已登录且有店铺）
+      // 从服务器拉取数据合并（无论本地有无数据，登录后都要拉取）
       if (hasTokens()) {
         try {
-          // 先从服务器拉取店铺列表，合并到本地（解决换设备后 dianfx_stores 为空的问题）
           const storesRes = await apiClient.get<{ id: string; name: string; createdAt: string }[]>('/stores');
           if (storesRes.success && storesRes.data?.length) {
             const localStores: { id: string; name: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
@@ -463,7 +450,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             const serverData = await pullStoreData(store.id);
             if (serverData?.data) {
               const sd = serverData.data;
-              // 服务器数据优先（更新更全）
               result[store.id] = {
                 orders: sd.orders || [],
                 promotionSummary: sd.promotionSummary || [],
@@ -480,7 +466,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                   afterSale: new Set(Array.isArray(sd.availableFields?.afterSale) ? sd.availableFields.afterSale : [])
                 }
               };
-              // 恢复配置
               if (serverData.configs) {
                 for (const [key, value] of Object.entries(serverData.configs)) {
                   localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
@@ -494,16 +479,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           }
         } catch {
           // 服务器不可达，使用本地数据
-        }
-
-        // 新注册用户自动加载演示数据
-        const hasLocalData = Object.values(result).some((d: any) => d.orders?.length > 0 || d.promotionSummary?.length > 0);
-        if (!hasServerData && !hasLocalData && !hasSampleData()) {
-          try {
-            await importSampleData();
-            window.location.reload();
-            return;
-          } catch { /* 演示数据加载失败不阻塞 */ }
         }
       }
     };
