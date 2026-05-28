@@ -5,6 +5,8 @@ import { Trash2, AlertTriangle, ChevronRight, Database, Shield, FileText, Trendi
 import { useAuth, useData, useStore } from '../App';
 import { useNavigate } from 'react-router-dom';
 import { readLogs, clearLogs, type OperationLog } from '../utils/operationLog';
+import { clearSampleData } from '../utils/dataImporter';
+import { apiClient } from '../api/client';
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -187,6 +189,25 @@ export default function SettingsPage() {
         disabled: scopeMode === 'current',
         warning: '清除后需重新添加店铺，但数据仍保留',
         onlyAllStores: true,
+      },
+      {
+        id: 'demo',
+        label: '清除演示数据',
+        description: '一键清除演示店铺及其全部数据（含云端同步数据）',
+        icon: Database,
+        color: 'var(--pdd-danger)',
+        bgColor: '#fff1f0',
+        action: async () => {
+          const stores: { id: string; name: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
+          const demoStore = stores.find(s => s.name && s.name.includes('演示'));
+          if (demoStore) {
+            try { await apiClient.delete(`/data/store/${demoStore.id}`); } catch {}
+          }
+          clearSampleData();
+          window.location.reload();
+        },
+        disabled: false,
+        warning: '将删除演示店铺及全部数据（订单/推广/售后/成本等），不可恢复。云端数据同步删除。',
       },
     ];
   }, [scopeMode, selectedStoreId, scopeSuffix, orderCount, promoCount, financialCount, uploadCount, selectedStoreId, clearOrderData, clearPromotionData, clearFinancialData, clearCostData, clearUploadRecords, clearStoreList]);

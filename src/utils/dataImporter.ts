@@ -509,19 +509,43 @@ export async function importSampleData(): Promise<{ storeId: string; storeName: 
   });
   localStorage.setItem('dianfx_upload_records', JSON.stringify(uploadRecords));
 
+  // === 写入演示 SKU 成本（与 CostManagementPage 相同格式）===
+  const demoCosts: Record<string, number> = {
+    'PD00001_SKU001': 28, 'PD00001_SKU002': 33, 'PD00001_SKU003': 28,
+    'PD00002_SKU004': 45, 'PD00002_SKU005': 65,
+    'PD00003_SKU006': 18, 'PD00003_SKU007': 30,
+    'PD00004_SKU008': 15, 'PD00004_SKU009': 20,
+    'PD00005_SKU010': 42, 'PD00005_SKU011': 42, 'PD00005_SKU012': 42,
+    'PD00006_SKU013': 22, 'PD00006_SKU014': 22,
+    'PD00007_SKU015': 12, 'PD00007_SKU016': 22,
+    'PD00008_SKU017': 5,  'PD00008_SKU018': 8,
+  };
+  localStorage.setItem(`dianfx_product_costs_${storeId}`, JSON.stringify(demoCosts));
+
+  // === 写入默认费用配置 ===
+  const costConfigs = {
+    packagingFeePerOrder: 1.5,    // 包装费(元/单)
+    shippingFeePerOrder: 3.0,     // 快递费(元/单)
+    platformCommissionRate: 0.6,  // 平台佣金(%)
+    insuranceFeePerOrder: 1.0,    // 运费险(元/单)
+    defaultCostRatio: 30,         // 默认成本比例(%)
+    laborFeePerOrder: 2.0,        // 人工费(元/单)
+  };
+  localStorage.setItem(`dianfx_cost_configs_${storeId}`, JSON.stringify(costConfigs));
+
   return { storeId, storeName, results };
 }
 
 // 检查是否已导入示例数据
 export function hasSampleData(): boolean {
   const stores = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
-  return stores.some((s: any) => s.name === '示例店铺');
+  return stores.some((s: any) => s.name && s.name.includes('演示'));
 }
 
 // 清除示例数据
 export function clearSampleData(): void {
   const stores = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
-  const demoStore = stores.find((s: any) => s.name === '示例店铺');
+  const demoStore = stores.find((s: any) => s.name && s.name.includes('演示'));
   if (demoStore) {
     const id = demoStore.id;
     const keysToRemove = [
