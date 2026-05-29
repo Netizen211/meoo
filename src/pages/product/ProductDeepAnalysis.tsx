@@ -17,7 +17,11 @@ import { useData } from '../../App';
 import { findField } from '../../utils';
 import { useAnalysis } from '../../context/analysisContext';
 import AnalysisControlBar from '../../components/analysis/AnalysisControlBar';
+import MultiProductCompare from '../../components/analysis/MultiProductCompare';
+import AnomalyBanner from '../../components/analysis/AnomalyBanner';
+import PromoChannelROI from '../../components/analysis/PromoChannelROI';
 import MiniRanking from '../../components/analysis/MiniRanking';
+import { detectAnomalies } from '../../utils/anomalyDetector';
 
 const COLORS = ['var(--pdd-primary)', 'var(--pdd-primary-light)', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'];
 const WATERFALL_POSITIVE = '#22c55e';
@@ -1402,6 +1406,17 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       .slice(0, 10);
   }, [selectedId, timeFilteredAfterSales, comparisonMode]);
 
+  // ─── 增强计算 #7a：异常检测 ──────────────────────────
+  const anomalyResults = useMemo(() => {
+    if (!selectedStats?.dailySales?.length) return [];
+    const gmvData = selectedStats.dailySales.map((d: any) => ({ date: d.date, value: d.gmv || 0 }));
+    const refundData = (refundDailyTrend as any)?.trend?.map((d: any) => ({ date: d.date, value: d.rate || 0 })) || [];
+    return [
+      ...detectAnomalies(gmvData, 'GMV', 14, 2.0, 3.0),
+      ...detectAnomalies(refundData, '退款率', 14, 2.0, 3.0),
+    ];
+  }, [selectedStats, refundDailyTrend]);
+
   // ─── 增强计算 #7a：运营事件节点检测 ──────────────────────
   const eventMarkers = useMemo(() => {
     const markers: { date: string; label: string; color: string; type: string }[] = [];
@@ -1721,6 +1736,9 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                   {/* A. KPI 卡片行 */}
                   <KpiCardRow stats={selectedStats} prevStats={prevStats} benchmark={storeBenchmark} getBenchmark={getBenchmark} comparisonMode={comparisonMode} healthScore={healthScore} cm3={cmLayers?.cm3?.value ?? 0} allProductStats={productStats} />
 
+                  {/* 异常预警横幅 */}
+                  <AnomalyBanner anomalies={anomalyResults} />
+
                   {/* B. 转化漏斗 + 销售趋势 */}
                   <div className="grid grid-cols-12 gap-4" id="kpi-gmv">
                     <div className="col-span-5 pdd-card rounded-xl border border-pdd-gray-200">
@@ -1757,6 +1775,14 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                   <div className="pdd-card rounded-xl border border-pdd-gray-200" id="kpi-cm3">
                     <CmLayerCascade layers={cmLayers} allProductStats={productStats} comparisonMode={comparisonMode} />
                   </div>
+
+                  {/* 推广渠道ROI对比（从全局数据计算） */}
+                  <PromoChannelROI
+                    promoProducts={currentDisplayData?.promotionProducts?.filter((p: any) => String(p['商品ID'] || p['商品id'] || '') === selectedId) || []}
+                    promotionSummary={currentDisplayData?.promotionSummary || []}
+                    starStoreSummary={currentDisplayData?.starStoreSummary || []}
+                    liveStreamSummary={currentDisplayData?.liveStreamSummary || []}
+                  />
 
                   {/* D. 推广渠道 + E. 流量来源 */}
                   <div className="grid grid-cols-2 gap-4">
