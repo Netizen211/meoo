@@ -1042,6 +1042,15 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   const [filter, setFilter] = useState<'all' | 'champion' | 'profit' | 'hidden' | 'dead'>('all');
   const [comparisonMode, setComparisonMode] = useState<'storeAvg' | 'topProduct' | 'prevPeriod' | 'none'>('storeAvg');
   const [expandedDiagnosis, setExpandedDiagnosis] = useState<number | null>(null);
+  const [activeMetrics, setActiveMetrics] = useState<Set<string>>(new Set(['gmv', 'sales']));
+
+  const toggleMetric = (key: string) => {
+    setActiveMetrics(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   // 读取全局分析上下文（时间筛选、面包屑等）
   const analysis = useAnalysis();
@@ -1060,15 +1069,91 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   // 按时间范围过滤订单（基于 AnalysisContext 的 timeFilter）
   const timeFilteredOrders = useMemo(() => {
     const { rangeA } = timeFilter;
-    const start = rangeA.start;
-    const end = rangeA.end;
     return orders.filter(o => {
       const payTime = String(o['支付时间'] || '').trim();
-      if (!payTime) return true; // 无支付时间的保留
-      const datePart = payTime.split(' ')[0]; // "2026-05-20"
-      return datePart >= start && datePart <= end;
+      if (!payTime) return true;
+      const datePart = payTime.split(' ')[0];
+      return datePart >= rangeA.start && datePart <= rangeA.end;
     });
   }, [orders, timeFilter]);
+
+  // 时间过滤后的每日销售数据（从timeFilteredOrders聚合所有指标）
+  const timeFilteredDailySales = useMemo(() => {
+    if (!selectedId) return [];
+    const { rangeA } = timeFilter;
+    const productOrds = timeFilteredOrders.filter(o =>
+      String(o['商品ID'] || o['商品id'] || '') === selectedId
+    );
+    // 按日聚合
+    const daily: Record<string, any> = {};
+    productOrds.forEach(o => {
+      const d = String(o['支付时间'] || '').slice(0, 10);
+      if (!d || d < rangeA.start || d > rangeA.end) return;
+      if (!daily[d]) daily[d] = { date: d, sales: 0, gmv: 0, revenue: 0, profit: 0, refund: 0, orders: 0 };
+      daily[d].sales += parseInt(o['商品数量(件)'] || '1') || 1;
+      daily[d].gmv += parseFloat(o['商品总价(元)'] || '0') || 0;
+      daily[d].revenue += parseFloat(o['商家实收金额(元)'] || '0') || 0;
+      daily[d].refund += parseFloat(o['退款金额(元)'] || '0') || 0;
+      daily[d].orders++;
+    });
+    // 从推广数据补充利润信息
+    const promoForProduct = timeFilteredPromoProducts.filter((p: any) => String(p['商品ID'] || '') === selectedId);
+    const promoByDate: Record<string, number> = {};
+    promoForProduct.forEach((p: any) => {
+      const d = String(p['日期'] || '').slice(0, 10);
+      promoByDate[d] = (promoByDate[d] || 0) + (parseFloat(p['总花费(元)'] || '0') || 0);
+    });
+    // 估算每日利润 = 实收 - 退款 - 推广费
+    Object.values(daily).forEach((d: any) => {
+      const promo = promoByDate[d.date] || 0;
+      d.profit = d.revenue - d.refund - promo;
+    });
+    return Object.values(daily).sort((a: any, b: any) => a.date.localeCompare(b.date));
+  }, [selectedId, timeFilteredOrders, timeFilteredPromoProducts, timeFilter]);
+
+  // 时间过滤后的推广产品数据
+  const timeFilteredPromoProducts = useMemo(() => {
+    const allPromo = currentDisplayData?.promotionProducts || [];
+    const { rangeA } = timeFilter;
+    return allPromo.filter((p: any) => {
+      const d = String(p['日期'] || '').slice(0, 10);
+      return d >= rangeA.start && d <= rangeA.end;
+    });
+  }, [currentDisplayData, timeFilter]);
+
+  // 从时间过滤订单重新计算 KPI 汇总
+  const timeFilteredKpis = useMemo(() => {
+    if (!selectedId) return null;
+    const ords = timeFilteredOrders.filter(o =>
+      String(o['商品ID'] || o['商品id'] || '') === selectedId
+    );
+    const sum = (key: string) => ords.reduce((s, o) => s + (parseFloat(o[key]) || 0), 0);
+    const cnt = (key: string) => ords.filter(o => {
+      const v = o[key]; return v !== undefined && v !== null && String(v).trim() !== '' && String(v).trim() !== '0';
+    }).length;
+    const totalGmv = sum('商品总价(元)');
+    const totalRevenue = sum('商家实收金额(元)');
+    const totalOrders = ords.length;
+    const totalSales = ords.reduce((s, o) => s + (parseInt(o['商品数量(件)']) || 1), 0);
+    const totalRefund = sum('退款金额(元)');
+    const refundCnt = ords.filter(o => parseFloat(o['退款金额(元)'] || '0') > 0).length;
+    const promoCost = timeFilteredPromoProducts
+      .filter((p: any) => String(p['商品ID'] || '') === selectedId)
+      .reduce((s: number, p: any) => s + (parseFloat(p['总花费(元)'] || p['花费(元)'] || '0')), 0);
+    const promoGmv = timeFilteredPromoProducts
+      .filter((p: any) => String(p['商品ID'] || '') === selectedId)
+      .reduce((s: number, p: any) => s + (parseFloat(p['交易额(元)'] || '0')), 0);
+    return {
+      gmv: totalGmv, revenue: totalRevenue, orders: totalOrders, sales: totalSales,
+      refund: totalRefund, refundCount: refundCnt,
+      refundRate: totalOrders > 0 ? (refundCnt / totalOrders) * 100 : 0,
+      profitRate: totalRevenue > 0 ? ((totalRevenue - promoCost - totalRefund) / totalRevenue) * 100 : 0,
+      roi: promoCost > 0 ? promoGmv / promoCost : 0,
+      avgOrderValue: totalOrders > 0 ? totalRevenue / totalOrders : 0,
+      promoCost, promoGmv,
+      turnoverDays: selectedStats?.turnoverDays ?? 0,
+    };
+  }, [selectedId, timeFilteredOrders, timeFilteredPromoProducts, selectedStats]);
 
   // 筛选该商品的订单（加上时间过滤）
   const productOrders = useMemo(() => {
@@ -1432,28 +1517,39 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       if (promoDates[0]) markers.push({ date: promoDates[0], label: '推广开始', color: '#7c3aed', type: 'promo' });
     }
 
-    // 2. 价格变动检测：按日计算均价，相邻日变化>10%标记
-    const dailyPrice: Record<string, { total: number; count: number }> = {};
+    // 2. SKU级价格变动检测：按SKU分组取单价，任意SKU价格变化>15%标记
+    const skuPrices: Record<string, Record<string, number[]>> = {}; // skuId -> date -> prices[]
     productOrders.forEach(o => {
       const date = String(o['支付时间'] || '').slice(0, 10);
       if (!date) return;
-      const price = parseFloat(o['商品单价(元)'] || o['商家实收金额(元)'] || '0') / Math.max(1, parseFloat(o['商品数量(件)'] || '1'));
-      if (!price) return;
-      if (!dailyPrice[date]) dailyPrice[date] = { total: 0, count: 0 };
-      dailyPrice[date].total += price;
-      dailyPrice[date].count++;
+      const skuId = findField(o, '商家编码-SKU维度', '规格编码', 'SKU编码') || '默认';
+      const price = parseFloat(o['商品单价(元)'] || '0') || (parseFloat(o['商家实收金额(元)'] || '0') / Math.max(1, parseFloat(o['商品数量(件)'] || '1')));
+      if (!price || price <= 0) return;
+      if (!skuPrices[skuId]) skuPrices[skuId] = {};
+      if (!skuPrices[skuId][date]) skuPrices[skuId][date] = [];
+      skuPrices[skuId][date].push(price);
     });
-    const sortedDates = Object.keys(dailyPrice).sort();
-    for (let i = 1; i < sortedDates.length; i++) {
-      const prevAvg = dailyPrice[sortedDates[i-1]].total / dailyPrice[sortedDates[i-1]].count;
-      const currAvg = dailyPrice[sortedDates[i]].total / dailyPrice[sortedDates[i]].count;
-      const pctChange = ((currAvg - prevAvg) / prevAvg) * 100;
-      if (Math.abs(pctChange) > 10) {
-        const dir = pctChange > 0 ? '↑' : '↓';
-        const amt = Math.abs(currAvg - prevAvg).toFixed(1);
-        markers.push({ date: sortedDates[i], label: `调价${dir}¥${amt}`, color: pctChange > 0 ? '#16a34a' : '#e02e24', type: 'price' });
+    const markedDates = new Set<string>();
+    Object.entries(skuPrices).forEach(([skuId, datePrices]) => {
+      const sortedDates = Object.keys(datePrices).sort();
+      for (let i = 1; i < sortedDates.length; i++) {
+        const prevPrices = datePrices[sortedDates[i-1]];
+        const currPrices = datePrices[sortedDates[i]];
+        const prevAvg = prevPrices.reduce((a,b) => a+b, 0) / prevPrices.length;
+        const currAvg = currPrices.reduce((a,b) => a+b, 0) / currPrices.length;
+        const pctChange = ((currAvg - prevAvg) / prevAvg) * 100;
+        if (Math.abs(pctChange) > 15 && !markedDates.has(sortedDates[i])) {
+          markedDates.add(sortedDates[i]);
+          const dir = pctChange > 0 ? '↑' : '↓';
+          markers.push({
+            date: sortedDates[i],
+            label: `${skuId.length>8?skuId.slice(-6):skuId}调价${dir}${Math.abs(pctChange).toFixed(0)}%`,
+            color: pctChange > 0 ? '#16a34a' : '#e02e24',
+            type: 'price'
+          });
+        }
       }
-    }
+    });
 
     // 3. 百亿补贴检测：从货款明细中找 0030002/0030003 扣费发生的日期
     const financials = currentDisplayData?.financialRecords || [];
@@ -1745,24 +1841,36 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                       <ConversionFunnel stats={selectedStats} orders={productOrders} allProductStats={productStats} comparisonMode={comparisonMode} />
                     </div>
                     <div className="col-span-7 pdd-card rounded-xl border border-pdd-gray-200 p-4">
-                      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1.5"><TrendingUp size={13} color="#16a34a" />销售趋势</h3>
-                      {selectedStats.dailySales && selectedStats.dailySales.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={220}>
-                          <ComposedChart data={selectedStats.dailySales}>
+                      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1.5"><TrendingUp size={13} color="#16a34a" />趋势图 · 点击上方指标切换曲线</h3>
+                      {timeFilteredDailySales.length > 0 ? (
+                        <ResponsiveContainer width="100%" height={240}>
+                          <ComposedChart data={timeFilteredDailySales}>
                             <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
                             <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'var(--pdd-text-secondary)' }} />
                             <YAxis tick={{ fontSize: 9, fill: 'var(--pdd-text-secondary)' }} />
                             <Tooltip />
-                            <Bar dataKey="sales" fill="var(--pdd-primary-light)" opacity={0.6} name="销售额" />
-                            <Line type="monotone" dataKey="gmv" stroke="var(--pdd-primary)" strokeWidth={2} dot={false} name="GMV" />
-                            {/* 运营事件标记线 */}
+                            {activeMetrics.has('sales') && <Bar dataKey="sales" fill="var(--pdd-primary-light)" opacity={0.5} name="销量" />}
+                            {activeMetrics.has('gmv') && <Line type="monotone" dataKey="gmv" stroke="#e02e24" strokeWidth={2} dot={false} name="GMV" />}
+                            {activeMetrics.has('revenue') && <Line type="monotone" dataKey="revenue" stroke="#16a34a" strokeWidth={1.5} dot={false} name="实收" />}
+                            {activeMetrics.has('profit') && <Line type="monotone" dataKey="profit" stroke="#7c3aed" strokeWidth={2} dot={false} name="利润" />}
+                            {activeMetrics.has('refund') && <Line type="monotone" dataKey="refund" stroke="#f97316" strokeWidth={1.5} dot={false} name="退款" />}
+                            {activeMetrics.has('orders') && <Line type="monotone" dataKey="orders" stroke="#0891b2" strokeWidth={1.5} dot={false} name="订单数" yAxisId="right" />}
                             {eventMarkers.map((m, i) => (
                               <ReferenceLine key={i} x={m.date} stroke={m.color} strokeWidth={1.5} strokeDasharray="4 3"
-                                label={{ value: m.label, position: 'top', fill: m.color, fontSize: 9, fontWeight: 'bold' }} />
+                                label={{ value: m.label, position: 'top', fill: m.color, fontSize: 9 }} />
                             ))}
                           </ComposedChart>
                         </ResponsiveContainer>
-                      ) : <div className="h-[220px] flex items-center justify-center text-xs text-pdd-gray-400">暂无每日销售数据</div>}
+                      ) : <div className="h-[240px] flex items-center justify-center text-xs text-pdd-gray-400">当前时间范围无数据</div>}
+                      {/* 指标图例 */}
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        {[{k:'gmv',c:'#e02e24',l:'GMV'},{k:'sales',c:'var(--pdd-primary-light)',l:'销量'},{k:'revenue',c:'#16a34a',l:'实收'},{k:'profit',c:'#7c3aed',l:'利润'},{k:'refund',c:'#f97316',l:'退款'},{k:'orders',c:'#0891b2',l:'订单数'}].map(m => (
+                          <button key={m.k} onClick={() => toggleMetric(m.k)}
+                            className={`text-[10px] px-1.5 py-0.5 rounded-full transition-colors ${activeMetrics.has(m.k) ? 'text-white font-medium' : 'text-pdd-text-secondary border border-pdd-border'}`}
+                            style={activeMetrics.has(m.k) ? {backgroundColor:m.c} : {}}
+                          >{m.l}</button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 

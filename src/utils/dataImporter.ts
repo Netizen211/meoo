@@ -4,6 +4,7 @@
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { findField } from './index';
+import { setItem, isIndexedDBAvailable } from '../services/localDataStore';
 
 export interface StoreDataItem {
   orders: any[];
@@ -483,6 +484,11 @@ export async function importSampleData(): Promise<{ storeId: string; storeName: 
   const existingMap = JSON.parse(localStorage.getItem('dianfx_store_data_map') || '{}');
   existingMap[storeId] = storeDataForSave;
   localStorage.setItem('dianfx_store_data_map', JSON.stringify(existingMap));
+
+  // 直接写入 IndexedDB（绕过一次性迁移的 bug）
+  if (isIndexedDBAvailable()) {
+    setItem('storeData', storeId, storeDataForSave).catch(() => {});
+  }
 
   // 创建店铺
   const stores = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');

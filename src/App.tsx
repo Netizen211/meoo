@@ -403,7 +403,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       await migrateFromLocalStorage();
 
       // 从 IndexedDB 加载
-      const keys = await getAllKeys('storeData');
+      let keys = await getAllKeys('storeData');
+      // 如果 IndexedDB 为空但 localStorage 有数据，强制重新迁移
+      if (keys.length === 0) {
+        const storeDataMap = localStorage.getItem('dianfx_store_data_map');
+        if (storeDataMap) {
+          localStorage.removeItem('dianfx_idb_migrated'); // 清除迁移标记
+          await migrateFromLocalStorage();
+          keys = await getAllKeys('storeData');
+        }
+      }
       const result: Record<string, StoreDataItem> = {};
       const hasIdbData = keys.length > 0;
 
