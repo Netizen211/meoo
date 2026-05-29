@@ -455,7 +455,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem('dianfx_stores', JSON.stringify(localStores));
           }
           const storesList: { id: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
+          // 按数据量排序：有数据的店铺优先
           let hasServerData = false;
+          let firstDataStoreId = '';
           for (const store of storesList) {
             const serverData = await pullStoreData(store.id);
             if (serverData?.data) {
@@ -482,10 +484,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                 }
               }
               hasServerData = true;
+              if (!firstDataStoreId) firstDataStoreId = store.id;
             }
           }
           if (hasServerData) {
             setStoreDataMap({ ...result });
+            // 自动选中第一个有数据的店铺
+            if (firstDataStoreId && !localStorage.getItem('dianfx_data_filter')) {
+              localStorage.setItem('dianfx_data_filter', firstDataStoreId);
+            }
           }
         } catch {
           // 服务器不可达，使用本地数据
@@ -495,10 +502,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     initStore();
   }, []);
 
-  // 用户登录后触发服务器数据拉取（仅当 storeDataMap 为空时）
+  // 用户登录后触发服务器数据拉取
   const prevUserRef = useRef(user);
+  const hasPulledRef = useRef(false);
   useEffect(() => {
-    if (user && !prevUserRef.current && idbReady && hasTokens()) {
+    if (user && idbReady && hasTokens() && !hasPulledRef.current) {
+      // 只拉一次：首次登录 或 已登录但storeData为空
+      if (!prevUserRef.current || Object.keys(storeDataMap).length === 0) {
+        hasPulledRef.current = true;
       (async () => {
         const storesRes = await apiClient.get<{ id: string; name: string }[]>('/stores');
         if (!storesRes.success || !storesRes.data?.length) return;
@@ -534,8 +545,44 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             localStorage.setItem('dianfx_current_store', JSON.stringify(storesRes.data[0]));
             setDataFilter(firstId);
           }
+        } else {
+          // 演示数据可能还在服务端生成中，轮询重试(1.5s间隔，最多5次)
+          let retries = 0;
+          const maxRetries = 5;
+          const poll = async () => {
+            if (retries >= maxRetries) return;
+            retries++;
+            for (const store of storesRes.data) {
+              const retryData = await pullStoreData(store.id);
+              if (retryData?.data) {
+                const sd = retryData.data;
+                const retryResult: Record<string, any> = {};
+                retryResult[store.id] = {
+                  orders: sd.orders || [], promotionSummary: sd.promotionSummary || [],
+                  promotionProducts: sd.promotionProducts || [], starStoreSummary: sd.starStoreSummary || [],
+                  liveStreamSummary: sd.liveStreamSummary || [], shippingInsurance: sd.shippingInsurance || [],
+                  afterSaleRecords: sd.afterSaleRecords || [], financialRecords: sd.financialRecords || [],
+                  availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() }
+                };
+                if (retryData.configs) {
+                  for (const [key, value] of Object.entries(retryData.configs)) {
+                    localStorage.setItem(key, typeof value === 'string' ? value : JSON.stringify(value));
+                  }
+                }
+                setStoreDataMap(prev => ({ ...prev, ...retryResult }));
+                if (!localStorage.getItem('dianfx_data_filter')) {
+                  localStorage.setItem('dianfx_data_filter', store.id);
+                  setDataFilter(store.id);
+                }
+                return; // 拉到数据了，停止轮询
+              }
+            }
+            setTimeout(poll, 1500); // 1.5秒后再试
+          };
+          setTimeout(poll, 1500);
         }
       })();
+      }
     }
     prevUserRef.current = user;
   }, [user, idbReady]);
@@ -808,9 +855,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     saveToIDB();
   }, [storeDataMap, idbReady]);
 
-  // 数据变更后即时同步到服务器
+  // 数据变更后即时同步到服务器（带保护）
   const syncingRef = useRef(false);
   const pendingRef = useRef(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
   useEffect(() => {
     if (!idbReady || !hasTokens()) return;
     if (syncingRef.current) {
@@ -821,15 +869,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const doSync = async () => {
       syncingRef.current = true;
       pendingRef.current = false;
+      setSyncStatus('syncing');
       try {
         const storesList: { id: string; name: string }[] = JSON.parse(localStorage.getItem('dianfx_stores') || '[]');
         for (const [storeId, storeData] of Object.entries(storeDataMap)) {
+          // 保护：不传空数据
           if (!storeData.orders?.length && !storeData.promotionSummary?.length) continue;
           const storeName = storesList.find(s => s.id === storeId)?.name || '';
           const configs: Record<string, any> = {};
           for (let i = 0; i < localStorage.length; i++) {
             const key = localStorage.key(i);
-            if (key && key.startsWith(`dianfx_`) && key.endsWith(`_${storeId}`)) {
+            if (key && key.startsWith('dianfx_') && key.endsWith(`_${storeId}`)) {
               const val = localStorage.getItem(key);
               if (val) {
                 try { configs[key] = JSON.parse(val); } catch { configs[key] = val; }
@@ -839,7 +889,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           const storeUploads = uploadRecords.filter(r => r.storeId === storeId);
           await syncStoreData(storeId, storeName, storeData, configs, storeUploads);
         }
-      } catch {} finally {
+        setSyncStatus('done');
+      } catch {
+        setSyncStatus('error');
+        // 失败后30秒自动重试
+        setTimeout(() => { syncingRef.current = false; }, 30000);
+      } finally {
         syncingRef.current = false;
         if (pendingRef.current) {
           pendingRef.current = false;

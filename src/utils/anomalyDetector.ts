@@ -35,7 +35,7 @@ export function detectAnomalies(
     const window = dailyData.slice(i - lookbackDays, i);
     const values = window.map(d => d.value);
     const mean = values.reduce((a, b) => a + b, 0) / values.length;
-    const variance = values.reduce((s, v) => s + (v - mean) ** 2, 0) / values.length;
+    const variance = values.length > 1 ? values.reduce((s, v) => s + (v - mean) ** 2, 0) / (values.length - 1) : 0; // 样本方差 N-1
     const stdDev = Math.sqrt(variance) || 1;
     const zScore = (dailyData[i].value - mean) / stdDev;
 

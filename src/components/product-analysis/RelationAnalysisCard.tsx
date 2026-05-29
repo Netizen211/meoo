@@ -42,7 +42,7 @@ export default function RelationAnalysisCard({ productStat, orders }: RelationAn
   const bundleAnalysis = useMemo(() => {
     const buyerOrders: Record<string, any[]> = {};
     orders.forEach(order => {
-      const orderNo = String(order['订单号'] || '').slice(-4);
+      const orderNo = String(order['订单号'] || ''); // 完整订单号
       if (!buyerOrders[orderNo]) buyerOrders[orderNo] = [];
       buyerOrders[orderNo].push(order);
     });
@@ -72,7 +72,7 @@ export default function RelationAnalysisCard({ productStat, orders }: RelationAn
   const repurchaseStats = useMemo(() => {
     const buyerOrders: Record<string, number> = {};
     orders.forEach(order => {
-      const orderNo = String(order['订单号'] || '').slice(-4);
+      const orderNo = String(order['订单号'] || ''); // 完整订单号
       buyerOrders[orderNo] = (buyerOrders[orderNo] || 0) + 1;
     });
 

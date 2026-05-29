@@ -373,7 +373,7 @@ export default function DashboardPage() {
     financialRecords.forEach((r: any) => {
       const desc = String(findField(r, '业务描述', '描述') || '').trim();
       if (desc.startsWith('004')) {
-        const amount = Math.abs(safeFloat(findField(r, '发生金额', '金额(元)', '金额')));
+        const amount = Math.abs(safeFloat(findField(r, '支出金额（-元）', '支出金额(元)', '支出金额', '发生金额')));
         penaltyAmount += amount;
         penaltyCount++;
       }
@@ -472,7 +472,7 @@ export default function DashboardPage() {
     { label: '客单价', value: kpi?.avg, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: TrendingUp, color: 'var(--pdd-success)', change: compareEnabled ? changePct(kpi?.avg || 0, compareKpi?.avg || 0) : null },
     { label: '售后率', value: kpi?.asRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: AlertTriangle, color: 'var(--pdd-warning)', change: null },
     { label: '退款率', value: kpi?.rfRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: RotateCcw, color: 'var(--pdd-danger)', change: null },
-    { label: '买家数', value: new Set(filteredOrders.map(o => { const no = String(findField(o, '订单号') || '').trim(); return no.length >= 4 ? no.slice(-4) : no; }).filter(Boolean)).size || (filteredOrders.length > 0 ? 1 : 0), fmt: (v: number) => v.toFixed(0), icon: Users, color: '#722ed1', change: null },
+    { label: '买家数', value: new Set(filteredOrders.map(o => { const no = String(findField(o, '订单号') || '').trim(); return no;}).filter(Boolean)).size || (filteredOrders.length > 0 ? 1 : 0), fmt: (v: number) => v.toFixed(0), icon: Users, color: '#722ed1', change: null },
     { label: '商品数', value: new Set(filteredOrders.map(o => String(findField(o, '商品id', '商品ID') || '').trim()).filter(id => id && id !== '-' && id !== '')).size, fmt: (v: number) => v.toFixed(0), icon: Package, color: '#eb2f96', change: null },
     { label: '罚款金额', value: penaltySummary.penaltyAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: AlertTriangle, color: 'var(--pdd-danger)', change: null },
     { label: '退款金额', value: kpi?.rfAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: RotateCcw, color: '#ff7875', change: null },
@@ -531,7 +531,7 @@ export default function DashboardPage() {
       '用户实付': 'paid', '退款金额': 'refundAmount',
       '优惠总额': 'discount', '售后率': 'asRate', '退款率': 'rfRate',
       '推广花费': 'promoCost', '推广GMV': 'promoGmv', '推广ROI': 'promoRoi',
-      '买家数': 'buyerCount', '商品数': 'productCount', '罚款金额': 'refundAmount', '利润金额': 'gmv',
+      '买家数': 'buyerCount', '商品数': 'productCount', '罚款金额': 'penaltyAmount', '利润金额': 'profit',
       '平均发货时长': 'avgShipHours', '点击率': 'ctr', '转化率': 'cvr',
       '平均点击成本': 'cpc', '平均获客成本': 'cpa', '推广占比': 'promoRatio', '全店投产': 'shopRoi',
     };

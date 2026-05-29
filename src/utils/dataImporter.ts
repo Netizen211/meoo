@@ -579,9 +579,13 @@ export function clearSampleData(): void {
       'dianfx_abnormal_orders_',
       'dianfx_cost_history_',
       'dianfx_pricing_presets_',
+      'dianfx_promotion_fee_',
+      'dianfx_courier_rates',
     ];
     keysToRemove.forEach(prefix => localStorage.removeItem(`${prefix}${id}`));
     localStorage.removeItem(`dianfx_store_${id}`);
+    localStorage.removeItem(`dianfx_store_data_map`);
+    localStorage.removeItem(`dianfx_courier_rates`);
     localStorage.setItem('dianfx_stores', JSON.stringify(stores.filter((s: any) => s.id !== id)));
   }
 }

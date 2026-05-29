@@ -5,10 +5,17 @@ import { DATA_CATEGORIES } from '../shared-types';
 
 const router = Router();
 
-// POST /api/data/sync — 全量同步店铺数据
+// 各类数据的主键字段（用于去重合并）
+const KEY_FIELDS: Record<string, string> = {
+  orders: '订单号',
+  afterSaleRecords: '售后编号',
+  shippingInsurance: '订单编号',
+};
+
+// POST /api/data/sync — 智能合并同步（多设备安全，追加去重）
 router.post('/sync', requireAuth, async (req: Request, res: Response) => {
   try {
-    const { storeId, storeName, clientUpdatedAt, data, configs, uploadRecords } = req.body;
+    const { storeId, storeName, data, configs, uploadRecords } = req.body;
 
     if (!storeId || !data) {
       res.status(400).json({ success: false, error: '缺少必要参数' });
@@ -16,54 +23,83 @@ router.post('/sync', requireAuth, async (req: Request, res: Response) => {
     }
 
     // 确保店铺存在
-    const existingStore = await dataService.loadStoreData(storeId);
-    const storeExists = existingStore !== null;
     const { db } = require('../db');
-    if (!storeExists) {
-      // 创建店铺记录（如果不存在）
-      const existingStoreRow = await db('stores').where('id', storeId).first();
-      if (!existingStoreRow) {
-        await db('stores').insert({
-          id: storeId,
-          user_id: req.user!.userId,
-          name: storeName || '未命名店铺',
-        });
-      }
+    const existingStoreRow = await db('stores').where('id', storeId).first();
+    if (!existingStoreRow) {
+      await db('stores').insert({
+        id: storeId, user_id: req.user!.userId, name: storeName || '未命名店铺',
+      });
     }
 
-    // 保存各类数据
+    const mergeStats: Record<string, { added: number; skipped: number; total: number }> = {};
+
+    // 智能合并各类数据
     for (const category of DATA_CATEGORIES) {
       const categoryData = data[category];
-      if (categoryData) {
-        await dataService.saveStoreData(
-          storeId,
-          category,
-          JSON.stringify(categoryData),
-          Array.isArray(categoryData) ? categoryData.length : 0
-        );
+      if (!categoryData || !Array.isArray(categoryData)) continue;
+
+      const existingRow = await db('store_data').where({ store_id: storeId, category }).first();
+
+      // 🔴 保护1：空数据不覆盖已有数据
+      if (categoryData.length === 0 && existingRow) {
+        const existingLen = existingRow.row_count || 0;
+        mergeStats[category] = { added: 0, skipped: 0, total: existingLen };
+        continue;
       }
+
+      let merged: any[] = categoryData;
+      let added = categoryData.length;
+      let skipped = 0;
+
+      if (existingRow) {
+        try {
+          const existingData = JSON.parse(existingRow.payload_json);
+          if (Array.isArray(existingData) && existingData.length > 0) {
+            // 🔴 保护2：合并前备份旧数据到 payload_json_backup
+            const keyField = KEY_FIELDS[category];
+            if (keyField) {
+              const existingKeys = new Set(existingData.map((item: any) => String(item[keyField] || '').trim()).filter(Boolean));
+              const newItems: any[] = [];
+              categoryData.forEach((item: any) => {
+                const key = String((item[keyField] || '')).trim();
+                if (key && existingKeys.has(key)) { skipped++; }
+                else { newItems.push(item); if (key) existingKeys.add(key); }
+              });
+              merged = [...existingData, ...newItems];
+              added = newItems.length;
+            }
+          }
+        } catch { /* 解析失败则覆盖 */ }
+      }
+
+      await db('store_data')
+        .insert({ store_id: storeId, category, payload_json: JSON.stringify(merged), row_count: merged.length })
+        .onConflict(['store_id', 'category'] as any)
+        .merge({ payload_json: JSON.stringify(merged), row_count: merged.length, updated_at: db.fn.now() });
+
+      mergeStats[category] = { added, skipped, total: merged.length };
     }
 
-    // 保存可用字段
+    // 保存可用字段（合并）
     if (data.availableFields) {
       await dataService.saveAvailableFields(storeId, data.availableFields);
     }
 
-    // 保存配置
+    // 保存配置（覆盖式，配置不需要合并）
     if (configs) {
       for (const [key, value] of Object.entries(configs)) {
         await dataService.saveStoreConfig(storeId, key, JSON.stringify(value));
       }
     }
 
-    // 保存上传记录
+    // 保存上传记录（追加）
     if (uploadRecords && uploadRecords.length > 0) {
       await dataService.saveUploadRecords(storeId, req.user!.userId, uploadRecords);
     }
 
     res.json({
       success: true,
-      data: { syncedAt: new Date().toISOString() },
+      data: { syncedAt: new Date().toISOString(), mergeStats },
     });
   } catch (err: any) {
     console.error('[data] sync error:', err);
@@ -109,15 +145,12 @@ router.post('/pull', requireAuth, async (req: Request, res: Response) => {
 router.delete('/store/:storeId', requireAuth, async (req: Request, res: Response) => {
   try {
     const { storeId } = req.params;
-
-    // 验证店铺属于当前用户
     const { db } = require('../db');
     const store = await db('stores').where({ id: storeId, user_id: req.user!.userId }).first();
     if (!store && req.user!.role !== 'admin' && req.user!.role !== 'test') {
       res.status(403).json({ success: false, error: '无权操作此店铺' });
       return;
     }
-
     await dataService.deleteStoreData(storeId);
     res.json({ success: true, message: '数据已删除' });
   } catch (err: any) {

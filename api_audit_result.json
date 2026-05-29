@@ -1,0 +1,93 @@
+{
+  "audit_time": "2026-05-29T18:50:03.047753",
+  "auditor": "yunyingA",
+  "store_id": "demo-1780051448525-isliir",
+  "total_orders": 400,
+  "gmv_goods": 65801.5,
+  "gmv_userpaid": 56737.36,
+  "gmv_merchant": 56309.99,
+  "refund_from_orders": 2952.3,
+  "refund_from_aftersale": 2952.3,
+  "refunded_orders": 29,
+  "refund_rate": 7.25,
+  "total_cost": 0.0,
+  "total_tech_fee": 365.37,
+  "profit": 55944.62,
+  "profit_margin": 99.35,
+  "total_buyers_phone": 400,
+  "repeat_buyers": 0,
+  "province_count": 20,
+  "promo_spend": 132141.88,
+  "promo_gmv": 673160.23,
+  "promo_roi": 5.09,
+  "checks_passed": 13,
+  "checks_failed": 1,
+  "checks_unverifiable": 6,
+  "data_sources": {
+    "orders": 400,
+    "promotion_days": 58,
+    "after_sale_records": 29,
+    "financial_records": 432,
+    "shipping_insurance": 257,
+    "product_cost_skus": 18
+  },
+  "status_distribution": {
+    "已签收": 87,
+    "已发货": 73,
+    "已付款": 80,
+    "待发货": 86,
+    "已完成": 74
+  },
+  "province_top10": [
+    [
+      "北京市",
+      4231.0,
+      25
+    ],
+    [
+      "四川省",
+      4208.85,
+      23
+    ],
+    [
+      "河南省",
+      4096.37,
+      29
+    ],
+    [
+      "上海市",
+      3865.29,
+      20
+    ],
+    [
+      "天津市",
+      3501.27,
+      22
+    ],
+    [
+      "安徽省",
+      3416.69,
+      26
+    ],
+    [
+      "浙江省",
+      3185.44,
+      22
+    ],
+    [
+      "山东省",
+      3059.2,
+      19
+    ],
+    [
+      "广西",
+      2976.3,
+      21
+    ],
+    [
+      "陕西省",
+      2909.63,
+      21
+    ]
+  ]
+}

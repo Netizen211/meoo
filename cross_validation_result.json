@@ -1,0 +1,57 @@
+{
+  "audit_time": "2026-05-29T20:39:37.012356",
+  "auditor": "project_manager_cross_validation",
+  "checks": {
+    "1. Cross-Page GMV Consistency": "PASS",
+    "2. Refund Amount Consistency": "PASS",
+    "3. Time Filter Data Sync": "PASS",
+    "4. SKU Cost Correctness (18 SKUs)": "PASS",
+    "5. Profit Calculation Consistency": "PASS",
+    "6. Shipping Tracking Completeness": "PASS"
+  },
+  "passed": 6,
+  "failed": 0,
+  "metrics": {
+    "dashboard": {
+      "gmv": 68814.8,
+      "paid": 59216.71,
+      "merchant": 58799.01,
+      "refund": 1702.07,
+      "profit": 35938.31,
+      "cost": 22482.0,
+      "tech_fee": 378.7,
+      "buyers": 400,
+      "total_qty": 847
+    },
+    "product": {
+      "gmv": 68814.8,
+      "paid": 59216.71,
+      "profit": 35938.31,
+      "products": 8
+    },
+    "region": {
+      "gmv": 68814.8,
+      "provinces": 20
+    },
+    "trend": {
+      "days": 57,
+      "gmv": 68814.8
+    },
+    "after_sale": {
+      "records": 25,
+      "refund": 1702.07
+    },
+    "shipping": {
+      "with_tracking": 400,
+      "without_tracking": 0
+    },
+    "counts": {
+      "orders": 400,
+      "promotion": 58,
+      "after_sale": 25,
+      "financial": 419,
+      "insurance": 252,
+      "skus": 18
+    }
+  }
+}

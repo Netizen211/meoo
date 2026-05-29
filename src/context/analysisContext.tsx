@@ -76,11 +76,11 @@ function toLocalDate(d: Date): string {
 
 function defaultTimeFilter(): TimeFilter {
   const end = new Date();
-  const start = new Date(end.getTime() - 30 * 86400000);
+  const start = new Date(end.getTime() - 7 * 86400000);
   return {
     mode: 'single',
     rangeA: { start: toLocalDate(start), end: toLocalDate(end) },
-    preset: '30d',
+    preset: '7d',
   };
 }
 

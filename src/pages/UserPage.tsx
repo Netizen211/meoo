@@ -30,7 +30,9 @@ export default function UserPage() {
     const buyerMap: Record<string, { count: number; totalPaid: number; totalQty: number; lastOrder: string; firstOrder: string; orders: any[]; orderDates: string[] }> = {};
     filteredOrders.forEach((o: any, i: number) => {
       const orderNo = String(o['订单号'] || '').trim();
-      const key = orderNo.length >= 4 ? orderNo.slice(-4) : (orderNo || `anon-${i}`);
+      // 用收货人手机号识别买家（无手机号时用完整订单号兜底）
+      const phone = String(o['收货人手机'] || o['收货人电话'] || o['手机号'] || '').trim();
+      const key = phone || orderNo || `anon-${i}`;
       if (!buyerMap[key]) buyerMap[key] = { count: 0, totalPaid: 0, totalQty: 0, lastOrder: '', firstOrder: '', orders: [], orderDates: [] };
       buyerMap[key].count++;
       buyerMap[key].totalPaid += safeFloat(o['用户实付金额(元)']);
@@ -165,7 +167,7 @@ export default function UserPage() {
     const valuePrediction = rfmData.slice(0, 10).map((u, i) => ({
       user: `用户${i + 1}`,
       current: u.monetary,
-      predicted: u.monetary * (1 + Math.random() * 0.5),
+      predicted: u.monetary * u.count * 1.2  // LTV = 人均消费 × 频次 × 增长系数,
     }));
 
     return {
@@ -198,7 +200,7 @@ export default function UserPage() {
     return segmentData.slice(0, 10).map((u, i) => ({
       user: `用户${i + 1}`,
       current: u.monetary,
-      predicted: u.monetary * (1 + Math.random() * 0.5),
+      predicted: u.monetary * u.count * 1.2  // LTV = 人均消费 × 频次 × 增长系数,
     }));
   }, [stats, selectedSegment, segmentUserKeys]);
 

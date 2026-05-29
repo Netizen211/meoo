@@ -38,6 +38,7 @@ interface SkuItem {
   orderCount: number;
   itemCount: number;
   shippingOrderCount: number;
+  actualShippingCost: number;
   insuredOrderCount: number;
   uniqueOrderNos: Set<string>;
 }
@@ -310,7 +311,7 @@ export default function CostManagementPage() {
           hasProductCode: !!productCode,
           hasSkuCode: !!skuCode,
           prices: [], orderCount: 0, itemCount: 0,
-          shippingOrderCount: 0, insuredOrderCount: 0,
+          shippingOrderCount: 0, actualShippingCost: 0, insuredOrderCount: 0,
           uniqueOrderNos: new Set<string>()
         };
         skuMap.set(skuKey, skuItem);
@@ -330,8 +331,13 @@ export default function CostManagementPage() {
       group.totalItems += itemQty;
       if (price > 0) sku.prices.push(price);
 
-      // 快递费统计：所有订单都计入（商家实际承担快递成本，不论是否包邮）
-      sku.shippingOrderCount++;
+      // 快递费统计：仅有快递单号的订单才计入（未发货不产生快递费）
+      const trackingNo = String(findField(o, '快递单号') || '').trim();
+      const actualPostage = parseFloat(String(o['邮费(元)'] || '0')) || 0;
+      if (trackingNo) {
+        sku.shippingOrderCount++;
+        sku.actualShippingCost = (sku.actualShippingCost || 0) + actualPostage;
+      }
 
       // 运费险统计：匹配运费险数据
       const hasInsurance = insurance.some((r: any) => {
@@ -347,6 +353,7 @@ export default function CostManagementPage() {
 
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [batchCost, setBatchCost] = useState('');
+  const [costRatio, setCostRatio] = useState('40');
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [expandedPrices, setExpandedPrices] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
@@ -692,7 +699,30 @@ export default function CostManagementPage() {
     const totalRawCost = rawCost > 0 ? rawCost * sku.itemCount : effectiveRawCost * sku.itemCount;
     const totalPackaging = packagingFeePerOrder * uniqueOrderCnt;
     const totalLabor = laborFeePerOrder * uniqueOrderCnt;
-    const totalShipping = (shippingFeePerOrder || 0) * uniqueOrderCnt;
+    // 快递费：优先用订单实际邮费；其次按快递公司费率；最后用默认费率
+    let totalShipping: number;
+    if (sku.actualShippingCost > 0) {
+      totalShipping = sku.actualShippingCost;
+    } else {
+      // 按快递公司分别计算
+      const courierRates = JSON.parse(localStorage.getItem('dianfx_courier_rates') || '{}');
+      let shippingTotal = 0;
+      // 遍历该SKU的订单，按快递公司匹配费率
+      const skuOrders = orders.filter(o => {
+        const oId = String(findField(o, '商品id', '商品ID', 'productId') || '');
+        const skuId = String(findField(o, '商家编码-SKU维度', '规格编码', 'SKU编码') || '');
+        const key = skuId ? `${oId}_${skuId}` : oId;
+        return key === skuKey;
+      });
+      skuOrders.forEach(o => {
+        const trackingNo = String(findField(o, '快递单号') || '').trim();
+        if (!trackingNo) return; // 无快递单号不计
+        const courier = String(findField(o, '快递公司') || '').trim();
+        const rate = courierRates[courier] || shippingFeePerOrder || 0;
+        shippingTotal += rate;
+      });
+      totalShipping = shippingTotal;
+    }
     const totalPromotionFee = (promotionFeePerOrder || 0) * uniqueOrderCnt;
 
     // 实际财务数据覆盖：以公式为基准，有货款明细的订单用实际值替换
@@ -1368,12 +1398,16 @@ export default function CostManagementPage() {
                 <div className="flex items-center justify-between py-0.5">
                   <span className="text-pdd-text-secondary">快递费</span>
                   <span className="font-mono text-pdd-text">
-                    ¥{shippingFeePerOrder.toFixed(2)} × {costInfo.shippingOrderCount}单 = <b>¥{costInfo.totalShipping.toFixed(2)}</b>
+                    {sku.actualShippingCost > 0 ? (
+                      <span>实际邮费 <b>¥{costInfo.totalShipping.toFixed(2)}</b> ({costInfo.shippingOrderCount}单有快递)</span>
+                    ) : (
+                      <span>¥{shippingFeePerOrder.toFixed(2)} × {costInfo.shippingOrderCount}单 = <b>¥{costInfo.totalShipping.toFixed(2)}</b></span>
+                    )}
                   </span>
                 </div>
               )}
-              {shippingFeePerOrder > 0 && costInfo.shippingOrderCount < sku.orderCount && (
-                <div className="text-[10px] text-pdd-text-secondary ml-2">&middot; {sku.orderCount}单中{costInfo.shippingOrderCount}单产生快递费，{sku.orderCount - costInfo.shippingOrderCount}单无快递</div>
+              {costInfo.shippingOrderCount < sku.orderCount && (
+                <div className="text-[10px] text-pdd-text-secondary ml-2">&middot; {sku.orderCount}单中{costInfo.shippingOrderCount}单产生快递费（有快递单号），{sku.orderCount - costInfo.shippingOrderCount}单未发货不计</div>
               )}
               {insuranceFeePerOrder > 0 && (
                 <div className="flex items-center justify-between py-0.5">
@@ -1672,7 +1706,11 @@ export default function CostManagementPage() {
                   统一设置
                 </button>
                 <span className="text-pdd-text-secondary text-xs">或</span>
+                <span className="text-xs text-pdd-text-secondary">按售价</span>
+                <input type="number" value={costRatio} onChange={e => setCostRatio(e.target.value)}
+                  className="w-14 px-1.5 py-1 border border-pdd-border rounded text-xs text-center" min="1" max="99" />%
                 <button onClick={() => {
+                  const ratio = parseFloat(costRatio) / 100;
                   let total = 0; let cnt = 0;
                   productGroups.forEach(g => g.skus.forEach(s => {
                     const key = s.skuId ? `${s.productId}_${s.skuId}` : s.productId;
@@ -1681,9 +1719,9 @@ export default function CostManagementPage() {
                       cnt++;
                     }
                   }));
-                  if (cnt > 0) setBatchCost((total/cnt*0.4).toFixed(0));
+                  if (cnt > 0) setBatchCost((total/cnt*ratio).toFixed(1));
                 }} className="px-2 py-1 text-xs border border-pdd-border rounded text-pdd-text-secondary hover:text-pdd-primary">
-                  按售价40%估算
+                  估算成本
                 </button>
               </div>
             )}
@@ -1712,7 +1750,7 @@ export default function CostManagementPage() {
               </button>
               <span>|</span>
               <button onClick={() => {
-                const csv = '﻿' + displayGroups.flatMap(g => g.skus.map(s => {
+                const csv = '﻿商品ID,SKU_ID,商品名称,规格,当前成本(元/件)\n' + displayGroups.flatMap(g => g.skus.map(s => {
                   const k = s.skuId ? `${s.productId}_${s.skuId}` : s.productId;
                   return [s.productId, s.skuId||'', `"${(s.productName||'').replace(/"/g,'""')}"`, `"${(s.skuName||'').replace(/"/g,'""')}"`, productCosts[k]||''].join(',');
                 })).join('\n');
@@ -2986,8 +3024,37 @@ export default function CostManagementPage() {
                     <label className="text-xs text-pdd-text-secondary">快递费/单(元)</label>
                     <input type="number" className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1"
                       value={tempShippingFee} onChange={e => setTempShippingFee(e.target.value)} placeholder="0.00" />
-                    <p className="text-xs text-pdd-text-secondary mt-1">每单固定快递费用</p>
+                    <p className="text-xs text-pdd-text-secondary mt-1">默认快递费（未匹配快递公司时使用）</p>
                   </div>
+                  {/* 按快递公司费率 */}
+                  {(() => {
+                    const couriers = [...new Set(orders.map((o: any) => String(findField(o, '快递公司') || '').trim()).filter(Boolean))].sort();
+                    if (!couriers.length) return null;
+                    return (
+                      <div>
+                        <label className="text-xs text-pdd-text-secondary">按快递公司费率 (元/单)</label>
+                        <div className="mt-1 space-y-1 max-h-32 overflow-y-auto">
+                          {couriers.map((c: string) => {
+                            const saved = JSON.parse(localStorage.getItem('dianfx_courier_rates') || '{}');
+                            const val = saved[c] || shippingFeePerOrder || 0;
+                            return (
+                              <div key={c} className="flex items-center gap-2">
+                                <span className="text-xs text-pdd-text w-20 truncate">{c}</span>
+                                <input type="number" step="0.1" className="w-20 px-1.5 py-0.5 border border-pdd-border rounded text-xs"
+                                  defaultValue={val}
+                                  onBlur={e => {
+                                    const rates = JSON.parse(localStorage.getItem('dianfx_courier_rates') || '{}');
+                                    rates[c] = parseFloat(e.target.value) || 0;
+                                    localStorage.setItem('dianfx_courier_rates', JSON.stringify(rates));
+                                  }} />
+                                <span className="text-[10px] text-pdd-text-secondary">元/单</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })()}
                   <div className="flex items-center gap-2 pt-2">
                     <button onClick={savePackagingFee} className="px-4 py-1.5 bg-pdd-primary text-white rounded-lg text-sm hover:opacity-90">
                       保存设置

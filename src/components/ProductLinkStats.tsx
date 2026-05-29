@@ -346,7 +346,7 @@ export function useProductStats(
         if (orderFinancialActuals[orderNo]?.hasData) orderCountWithActual++;
       }
 
-      const buyerKey = orderNo.length >= 4 ? orderNo.slice(-4) : orderNo;
+      const buyerKey = orderNo; // 使用完整订单号
 
       if (payTime) orderDetails[pid].dates.push(payTime);
       if (price > 0) orderDetails[pid].prices.push(price);
@@ -832,10 +832,10 @@ export function useProductStats(
         s.afterSaleBreakdown = breakdown;
       }
 
-      // Inventory & turnover estimates
-      s.inventoryEstimate = Math.max(0, Math.round(s.sales * 1.5));
-      s.turnoverDays = s.avgDailySales > 0 ? Math.round(s.inventoryEstimate / s.avgDailySales) : 999;
-      s.sellThroughRate = s.inventoryEstimate > 0 ? (s.sales / (s.sales + s.inventoryEstimate)) * 100 : 0;
+      // 周转天数：按日均销量估算可售天数（缺真实库存数据时为估算值）
+      s.turnoverDays = s.avgDailySales > 0 ? Math.round(30 / s.avgDailySales) : 999;
+      // 售罄率：需要真实期初期末库存数据，缺数据时置0并标注
+      s.sellThroughRate = 0;
     });
 
     // Build related products (co-purchase analysis)

@@ -1103,9 +1103,11 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       const d = String(p['日期'] || '').slice(0, 10);
       promoByDate[d] = (promoByDate[d] || 0) + (parseFloat(p['总花费(元)'] || '0') || 0);
     });
+    // 估算每日商品成本 = GMV × 30%（默认成本比例）
     Object.values(daily).forEach((d: any) => {
       const promo = promoByDate[d.date] || 0;
-      d.profit = d.revenue - d.refund - promo;
+      const estProductCost = d.gmv * 0.30;
+      d.profit = d.revenue - d.refund - promo - estProductCost;
     });
     return Object.values(daily).sort((a: any, b: any) => a.date.localeCompare(b.date));
   }, [selectedId, timeFilteredOrders, timeFilteredPromoProducts, timeFilter]);
@@ -1166,7 +1168,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   // ─── 增强计算 #1：SKU 深度矩阵 ─────────────────────────────
   const skuDeepMatrix = useMemo(() => {
     if (!selectedId) return [];
-    const skuFields = ['商家编码-SKU维度', '规格编码', 'SKU编码', 'sku_code'];
+    const skuFields = ['商家编码-规格维度', '商家编码-SKU维度', '规格编码', 'SKU编码', '规格id', 'sku_code'];
     const specFields = ['商品规格', '规格', '商品属性', 'spec'];
 
     // 按SKU分组商品订单
@@ -1226,6 +1228,11 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
     // 组装输出
     const totalSales = Object.values(skuMap).reduce((s, v) => s + v.sales, 0);
+    const totalRevenue = Object.values(skuMap).reduce((s, v) => s + v.revenue, 0);
+    // 推广费汇总（按商品匹配）
+    const totalPromoCost = timeFilteredPromoProducts
+      .filter((p: any) => String(p['商品ID'] || '') === selectedId)
+      .reduce((s: number, p: any) => s + (parseFloat(p['总花费(元)'] || p['花费(元)'] || '0') || 0), 0);
     const meanRefundRate = Object.values(skuRefundMap).reduce((s, v) => s + (v.refundCount / Math.max(Object.values(skuMap).find(m => Object.keys(skuRefundMap).length > 0) ? 1 : 1)), 0) / Math.max(Object.keys(skuMap).length, 1);
 
     return Object.entries(skuMap).map(([key, info]) => {
@@ -1236,7 +1243,17 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       // SKU成本：productId_skuId 优先，productId 兜底
       const skuKey = `${selectedId}_${info.skuId}`;
       const skuCost = productCosts?.[skuKey] ?? productCosts?.[selectedId];
-      const profitRate = info.revenue > 0 && skuCost != null ? ((info.revenue - skuCost * info.sales - refund.refundAmount) / info.revenue) * 100 : undefined;
+      // 推广费按SKU销量占比分摊
+      const skuPromoCost = totalPromoCost > 0 ? (info.sales / Math.max(totalSales, 1)) * totalPromoCost : 0;
+      // 订单级费用按订单数分摊（平台佣金+运费险按实收比例）
+      const totalPlatformFee = (currentDisplayData?.financialRecords || [])
+        .filter((f: any) => String(f['业务描述'] || '').includes('技术服务费'))
+        .reduce((s: number, f: any) => s + (parseFloat(f['支出金额（-元）'] || f['支出金额(元)'] || '0') || 0), 0);
+      const skuPlatformFee = info.revenue > 0 && totalRevenue > 0 ? (info.revenue / totalRevenue) * totalPlatformFee : 0;
+      const totalProfit = info.revenue > 0 && skuCost != null
+        ? info.revenue - skuCost * info.sales - refund.refundAmount - skuPromoCost - skuPlatformFee - (info.orderCount * 1.5) - (info.orderCount * 3.0)
+        : undefined;
+      const profitRate = info.revenue > 0 && totalProfit != null ? (totalProfit / info.revenue) * 100 : undefined;
       return {
         skuId: info.skuId,
         spec: info.spec,
@@ -1250,6 +1267,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
         avgRefundDays,
         topRefundReason,
         profitRate,
+        totalProfit,
         orderCount: info.orderCount,
         isHighRefund: refundRate > meanRefundRate * 2,
         isMainSku: totalSales > 0 && (info.sales / totalSales) > 0.5,
@@ -1757,14 +1775,20 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
   // 获取对比基准值（根据对比模式返回不同基准）
   const getBenchmark = useCallback((metric: keyof typeof storeBenchmark extends never ? string : string, currentValue: number) => {
-    if (comparisonMode === 'none' || !storeBenchmark) return null;
+    if (comparisonMode === 'none') return null;
+    if (comparisonMode === 'prevPeriod' && prevStats) {
+      const pv = (prevStats as any)[metric];
+      if (pv != null) return { label: '上周期', value: pv, lowIsGood: false };
+      return null;
+    }
+    if (!storeBenchmark) return null;
     const bm = storeBenchmark as any;
     const entry = bm[metric];
     if (!entry) return null;
     if (comparisonMode === 'storeAvg') return { label: '店铺均值', value: entry.avg, lowIsGood: entry.lowIsGood };
     if (comparisonMode === 'topProduct') return { label: 'TOP20%', value: entry.top20, lowIsGood: entry.lowIsGood };
-    return { label: '中位数', value: entry.median, lowIsGood: entry.lowIsGood };
-  }, [comparisonMode, storeBenchmark]);
+    return null;
+  }, [comparisonMode, storeBenchmark, prevStats]);
 
   const diagnoses = enhancedDiagnoses;
 
