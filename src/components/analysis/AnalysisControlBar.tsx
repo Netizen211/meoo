@@ -14,20 +14,22 @@ const TIME_PRESETS: { key: TimeFilter['preset']; label: string; days: number }[]
   { key: 'all', label: '全部', days: 0 },
 ];
 
+function toLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+
 function getNaturalRange(preset: string): { start: string; end: string } {
   const now = new Date();
   if (preset === 'thisWeek') {
-    const day = now.getDay() || 7; // 周日=7
+    const day = now.getDay() || 7;
     const mon = new Date(now); mon.setDate(now.getDate() - day + 1);
-    return { start: mon.toISOString().slice(0,10), end: now.toISOString().slice(0,10) };
+    return { start: toLocal(mon), end: toLocal(now) };
   }
   if (preset === 'thisMonth') {
-    return { start: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10), end: now.toISOString().slice(0,10) };
+    return { start: toLocal(new Date(now.getFullYear(), now.getMonth(), 1)), end: toLocal(now) };
   }
   if (preset === 'lastMonth') {
-    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const end = new Date(now.getFullYear(), now.getMonth(), 0);
-    return { start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10) };
+    return { start: toLocal(new Date(now.getFullYear(), now.getMonth()-1, 1)), end: toLocal(new Date(now.getFullYear(), now.getMonth(), 0)) };
   }
   return { start: '', end: '' };
 }
@@ -56,8 +58,8 @@ export default function AnalysisControlBar() {
     } else {
       const now = new Date();
       const days = TIME_PRESETS.find(p => p.key === preset)?.days || 30;
-      end = now.toISOString().slice(0,10);
-      start = days > 0 ? new Date(now.getTime() - days * 86400000).toISOString().slice(0,10) : '2020-01-01';
+      end = toLocal(now);
+      start = days > 0 ? toLocal(new Date(now.getTime() - days * 86400000)) : '2020-01-01';
     }
     setTimeFilter({ mode: 'single', rangeA: { start, end }, preset });
   };

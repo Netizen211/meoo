@@ -67,12 +67,19 @@ type AnalysisContextType = AnalysisState & AnalysisActions & {
 const ctx = createContext<AnalysisContextType>(null!);
 export const useAnalysis = () => useContext(ctx);
 
+function toLocalDate(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function defaultTimeFilter(): TimeFilter {
   const end = new Date();
   const start = new Date(end.getTime() - 30 * 86400000);
   return {
     mode: 'single',
-    rangeA: { start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10) },
+    rangeA: { start: toLocalDate(start), end: toLocalDate(end) },
     preset: '30d',
   };
 }

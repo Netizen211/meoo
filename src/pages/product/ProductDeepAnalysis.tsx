@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, ComposedChart, Area
+  BarChart, Bar, PieChart as RechartsPieChart, Pie, Cell, ComposedChart, Area, ReferenceLine
 } from 'recharts';
 import { ProductStat, CostBreakdown } from '../../components/ProductLinkStats';
 import { useData } from '../../App';
@@ -1392,6 +1392,59 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       .slice(0, 10);
   }, [selectedId, afterSaleRecords, comparisonMode]);
 
+  // ─── 增强计算 #7a：运营事件节点检测 ──────────────────────
+  const eventMarkers = useMemo(() => {
+    const markers: { date: string; label: string; color: string; type: string }[] = [];
+    if (!selectedId || productOrders.length === 0) return markers;
+
+    // 1. 推广开始日：从 promotionProducts 中找该商品最早有花费的日期
+    const promoData = (currentDisplayData?.promotionProducts || []);
+    const productPromo = promoData.filter((p: any) =>
+      String(p['商品ID'] || p['商品id'] || '') === selectedId && parseFloat(p['总花费(元)'] || p['花费(元)'] || '0') > 0
+    );
+    if (productPromo.length > 0) {
+      const promoDates = productPromo.map((p: any) => String(p['日期'] || '').slice(0, 10)).filter(Boolean).sort();
+      if (promoDates[0]) markers.push({ date: promoDates[0], label: '推广开始', color: '#7c3aed', type: 'promo' });
+    }
+
+    // 2. 价格变动检测：按日计算均价，相邻日变化>10%标记
+    const dailyPrice: Record<string, { total: number; count: number }> = {};
+    productOrders.forEach(o => {
+      const date = String(o['支付时间'] || '').slice(0, 10);
+      if (!date) return;
+      const price = parseFloat(o['商品单价(元)'] || o['商家实收金额(元)'] || '0') / Math.max(1, parseFloat(o['商品数量(件)'] || '1'));
+      if (!price) return;
+      if (!dailyPrice[date]) dailyPrice[date] = { total: 0, count: 0 };
+      dailyPrice[date].total += price;
+      dailyPrice[date].count++;
+    });
+    const sortedDates = Object.keys(dailyPrice).sort();
+    for (let i = 1; i < sortedDates.length; i++) {
+      const prevAvg = dailyPrice[sortedDates[i-1]].total / dailyPrice[sortedDates[i-1]].count;
+      const currAvg = dailyPrice[sortedDates[i]].total / dailyPrice[sortedDates[i]].count;
+      const pctChange = ((currAvg - prevAvg) / prevAvg) * 100;
+      if (Math.abs(pctChange) > 10) {
+        const dir = pctChange > 0 ? '↑' : '↓';
+        const amt = Math.abs(currAvg - prevAvg).toFixed(1);
+        markers.push({ date: sortedDates[i], label: `调价${dir}¥${amt}`, color: pctChange > 0 ? '#16a34a' : '#e02e24', type: 'price' });
+      }
+    }
+
+    // 3. 百亿补贴检测：从货款明细中找 0030002/0030003 扣费发生的日期
+    const financials = currentDisplayData?.financialRecords || [];
+    let subsidyDate = '';
+    for (const f of financials) {
+      const desc = String(f['业务描述'] || '');
+      if (desc.startsWith('0030002') || desc.startsWith('0030003')) {
+        const finDate = String(f['发生时间'] || '').slice(0, 10);
+        if (finDate && (!subsidyDate || finDate < subsidyDate)) subsidyDate = finDate;
+      }
+    }
+    if (subsidyDate) markers.push({ date: subsidyDate, label: '百亿补贴', color: '#f97316', type: 'subsidy' });
+
+    return markers.sort((a, b) => a.date.localeCompare(b.date));
+  }, [selectedId, productOrders, currentDisplayData]);
+
   // ─── 增强计算 #7：退款日趋势（替代假数据）──────────────────
   const refundDailyTrend = useMemo(() => {
     if (!selectedId) return { trend: [], spikeDays: [] as string[] };
@@ -1659,7 +1712,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                   <KpiCardRow stats={selectedStats} prevStats={prevStats} benchmark={storeBenchmark} getBenchmark={getBenchmark} comparisonMode={comparisonMode} healthScore={healthScore} cm3={cmLayers?.cm3?.value ?? 0} allProductStats={productStats} />
 
                   {/* B. 转化漏斗 + 销售趋势 */}
-                  <div className="grid grid-cols-12 gap-4">
+                  <div className="grid grid-cols-12 gap-4" id="kpi-gmv">
                     <div className="col-span-5 pdd-card rounded-xl border border-pdd-gray-200">
                       <ConversionFunnel stats={selectedStats} orders={productOrders} allProductStats={productStats} comparisonMode={comparisonMode} />
                     </div>
@@ -1674,6 +1727,11 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                             <Tooltip />
                             <Bar dataKey="sales" fill="var(--pdd-primary-light)" opacity={0.6} name="销售额" />
                             <Line type="monotone" dataKey="gmv" stroke="var(--pdd-primary)" strokeWidth={2} dot={false} name="GMV" />
+                            {/* 运营事件标记线 */}
+                            {eventMarkers.map((m, i) => (
+                              <ReferenceLine key={i} x={m.date} stroke={m.color} strokeWidth={1.5} strokeDasharray="4 3"
+                                label={{ value: m.label, position: 'top', fill: m.color, fontSize: 9, fontWeight: 'bold' }} />
+                            ))}
                           </ComposedChart>
                         </ResponsiveContainer>
                       ) : <div className="h-[220px] flex items-center justify-center text-xs text-pdd-gray-400">暂无每日销售数据</div>}
@@ -1681,12 +1739,12 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                   </div>
 
                   {/* C. 利润瀑布图 */}
-                  <div className="pdd-card rounded-xl border border-pdd-gray-200">
+                  <div className="pdd-card rounded-xl border border-pdd-gray-200" id="kpi-profit">
                     <ProfitWaterfall stats={selectedStats} allProductStats={productStats} comparisonMode={comparisonMode} />
                   </div>
 
                   {/* N1. CM1/CM2/CM3 层级联 */}
-                  <div className="pdd-card rounded-xl border border-pdd-gray-200">
+                  <div className="pdd-card rounded-xl border border-pdd-gray-200" id="kpi-cm3">
                     <CmLayerCascade layers={cmLayers} allProductStats={productStats} comparisonMode={comparisonMode} />
                   </div>
 
