@@ -17,10 +17,9 @@ import { useData } from '../../App';
 import { findField } from '../../utils';
 import { useAnalysis } from '../../context/analysisContext';
 import AnalysisControlBar from '../../components/analysis/AnalysisControlBar';
-import MultiProductCompare from '../../components/analysis/MultiProductCompare';
 import AnomalyBanner from '../../components/analysis/AnomalyBanner';
 import PromoChannelROI from '../../components/analysis/PromoChannelROI';
-import MiniRanking from '../../components/analysis/MiniRanking';
+import ProfitBreakdownDrawer from '../../components/analysis/ProfitBreakdownDrawer';
 import { detectAnomalies } from '../../utils/anomalyDetector';
 
 const COLORS = ['var(--pdd-primary)', 'var(--pdd-primary-light)', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'];
@@ -1036,25 +1035,18 @@ function HealthScoreGauge({ score, allProductStats, comparisonMode }: {
 
 // ─── 主组件 ───────────────────────────────────────────────
 export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId, productStats, products, orders, prevProductStats }: Props) {
+  console.log('XDEBUG_PDA_LOADED_v2');
   const [selectedId, setSelectedId] = useState<string | null>(initialProductId || null);
   const [search, setSearch] = useState('');
   const [showSidebar, setShowSidebar] = useState(!initialProductId);
   const [filter, setFilter] = useState<'all' | 'champion' | 'profit' | 'hidden' | 'dead'>('all');
   const [comparisonMode, setComparisonMode] = useState<'storeAvg' | 'topProduct' | 'prevPeriod' | 'none'>('storeAvg');
   const [expandedDiagnosis, setExpandedDiagnosis] = useState<number | null>(null);
-  const [activeMetrics, setActiveMetrics] = useState<Set<string>>(new Set(['gmv', 'sales']));
-
-  const toggleMetric = (key: string) => {
-    setActiveMetrics(prev => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return next;
-    });
-  };
+  const [showProfitDrawer, setShowProfitDrawer] = useState(false);
 
   // 读取全局分析上下文（时间筛选、面包屑等）
   const analysis = useAnalysis();
-  const { timeFilter, breadcrumbs, highlightMetric, setHighlight } = analysis;
+  const { timeFilter } = analysis;
 
   // 获取全局数据
   const { currentDisplayData, productCosts } = useData();
@@ -1077,6 +1069,16 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     });
   }, [orders, timeFilter]);
 
+  // 时间过滤后的推广产品数据（必须先于 timeFilteredDailySales 声明）
+  const timeFilteredPromoProducts = useMemo(() => {
+    const allPromo = currentDisplayData?.promotionProducts || [];
+    const { rangeA } = timeFilter;
+    return allPromo.filter((p: any) => {
+      const d = String(p['日期'] || '').slice(0, 10);
+      return d >= rangeA.start && d <= rangeA.end;
+    });
+  }, [currentDisplayData, timeFilter]);
+
   // 时间过滤后的每日销售数据（从timeFilteredOrders聚合所有指标）
   const timeFilteredDailySales = useMemo(() => {
     if (!selectedId) return [];
@@ -1084,7 +1086,6 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     const productOrds = timeFilteredOrders.filter(o =>
       String(o['商品ID'] || o['商品id'] || '') === selectedId
     );
-    // 按日聚合
     const daily: Record<string, any> = {};
     productOrds.forEach(o => {
       const d = String(o['支付时间'] || '').slice(0, 10);
@@ -1096,30 +1097,18 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       daily[d].refund += parseFloat(o['退款金额(元)'] || '0') || 0;
       daily[d].orders++;
     });
-    // 从推广数据补充利润信息
     const promoForProduct = timeFilteredPromoProducts.filter((p: any) => String(p['商品ID'] || '') === selectedId);
     const promoByDate: Record<string, number> = {};
     promoForProduct.forEach((p: any) => {
       const d = String(p['日期'] || '').slice(0, 10);
       promoByDate[d] = (promoByDate[d] || 0) + (parseFloat(p['总花费(元)'] || '0') || 0);
     });
-    // 估算每日利润 = 实收 - 退款 - 推广费
     Object.values(daily).forEach((d: any) => {
       const promo = promoByDate[d.date] || 0;
       d.profit = d.revenue - d.refund - promo;
     });
     return Object.values(daily).sort((a: any, b: any) => a.date.localeCompare(b.date));
   }, [selectedId, timeFilteredOrders, timeFilteredPromoProducts, timeFilter]);
-
-  // 时间过滤后的推广产品数据
-  const timeFilteredPromoProducts = useMemo(() => {
-    const allPromo = currentDisplayData?.promotionProducts || [];
-    const { rangeA } = timeFilter;
-    return allPromo.filter((p: any) => {
-      const d = String(p['日期'] || '').slice(0, 10);
-      return d >= rangeA.start && d <= rangeA.end;
-    });
-  }, [currentDisplayData, timeFilter]);
 
   // 从时间过滤订单重新计算 KPI 汇总
   const timeFilteredKpis = useMemo(() => {
@@ -1491,17 +1480,6 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       .slice(0, 10);
   }, [selectedId, timeFilteredAfterSales, comparisonMode]);
 
-  // ─── 增强计算 #7a：异常检测 ──────────────────────────
-  const anomalyResults = useMemo(() => {
-    if (!selectedStats?.dailySales?.length) return [];
-    const gmvData = selectedStats.dailySales.map((d: any) => ({ date: d.date, value: d.gmv || 0 }));
-    const refundData = (refundDailyTrend as any)?.trend?.map((d: any) => ({ date: d.date, value: d.rate || 0 })) || [];
-    return [
-      ...detectAnomalies(gmvData, 'GMV', 14, 2.0, 3.0),
-      ...detectAnomalies(refundData, '退款率', 14, 2.0, 3.0),
-    ];
-  }, [selectedStats, refundDailyTrend]);
-
   // ─── 增强计算 #7a：运营事件节点检测 ──────────────────────
   const eventMarkers = useMemo(() => {
     const markers: { date: string; label: string; color: string; type: string }[] = [];
@@ -1565,6 +1543,58 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
     return markers.sort((a, b) => a.date.localeCompare(b.date));
   }, [selectedId, productOrders, currentDisplayData]);
+
+  // 利润核算数据（用于 ProfitBreakdownDrawer）
+  const profitBreakdownData = useMemo(() => {
+    if (!selectedId) return null;
+    const ords = productOrders;
+    const totalGmv = ords.reduce((s, o) => s + (parseFloat(o['商品总价(元)'] || '0') || 0), 0);
+    const totalRevenue = ords.reduce((s, o) => s + (parseFloat(o['商家实收金额(元)'] || '0') || 0), 0);
+    const totalItems = ords.reduce((s, o) => s + (parseInt(o['商品数量(件)'] || '1') || 1), 0);
+    const totalOrders = ords.length;
+    // 从 SKU 成本配置汇总商品成本
+    let totalProductCost = 0;
+    ords.forEach(o => {
+      const skuId = findField(o, '商家编码-SKU维度', '规格编码', 'SKU编码') || '';
+      const pid = String(o['商品ID'] || o['商品id'] || '');
+      const skuKey = skuId ? `${pid}_${skuId}` : pid;
+      const qty = parseInt(o['商品数量(件)'] || '1') || 1;
+      const unitCost = productCosts?.[skuKey] ?? productCosts?.[pid] ?? 0;
+      totalProductCost += unitCost * qty;
+    });
+    // 推广费
+    const promoForProduct = timeFilteredPromoProducts.filter((p: any) => String(p['商品ID'] || '') === selectedId);
+    const totalPromoCost = promoForProduct.reduce((s: number, p: any) => s + (parseFloat(p['总花费(元)'] || '0') || 0), 0);
+    // 运费险
+    const totalInsurance = (currentDisplayData?.shippingInsurance || [])
+      .filter((r: any) => ords.some(o => String(o['订单号'] || '') === String(r['订单编号'] || r['订单号'] || '')))
+      .reduce((s: number, r: any) => s + (parseFloat(r['服务费用（元）'] || r['服务费用(元)'] || r['保费（元）'] || '0') || 0), 0);
+    // 平台佣金 (按 0.6% 估算 + 货款明细实际扣费)
+    const estPlatformFee = totalRevenue * 0.006;
+    const actualPlatformFee = (currentDisplayData?.financialRecords || [])
+      .filter((f: any) => ords.some(o => String(o['订单号'] || '') === String(f['商户订单号'] || '')))
+      .filter((f: any) => String(f['业务描述'] || '').includes('技术服务费'))
+      .reduce((s: number, f: any) => s + (parseFloat(f['支出金额（-元）'] || f['支出金额(元)'] || '0') || 0), 0);
+    // 罚款
+    const totalPenalties = (currentDisplayData?.financialRecords || [])
+      .filter((f: any) => ords.some(o => String(o['订单号'] || '') === String(f['商户订单号'] || '')))
+      .filter((f: any) => { const d = String(f['业务描述'] || ''); return d.startsWith('004') || d.startsWith('006'); })
+      .reduce((s: number, f: any) => s + (parseFloat(f['支出金额（-元）'] || f['支出金额(元)'] || '0') || 0), 0);
+    // 包装费+快递费（按配置估算）
+    const pkgFee = totalOrders * 1.5;
+    const shipFee = totalOrders * 3.0;
+
+    return { gmv: totalGmv, revenue: totalRevenue, productCost: totalProductCost, packagingFee: pkgFee, shippingFee: shipFee,
+      promoCost: totalPromoCost, platformFee: actualPlatformFee || estPlatformFee, insuranceFee: totalInsurance,
+      penaltyFee: totalPenalties, orderCount: totalOrders, itemCount: totalItems };
+  }, [selectedId, productOrders, productCosts, timeFilteredPromoProducts, currentDisplayData]);
+
+  // 异常检测
+  const anomalyAlerts = useMemo(() => {
+    if (!timeFilteredDailySales?.length) return [];
+    const gmvData = timeFilteredDailySales.map((d: any) => ({ date: d.date, value: d.gmv || 0 }));
+    return detectAnomalies(gmvData, 'GMV', 14);
+  }, [timeFilteredDailySales]);
 
   // ─── 增强计算 #7：退款日趋势（替代假数据）──────────────────
   const refundDailyTrend = useMemo(() => {
@@ -1832,8 +1862,15 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                   {/* A. KPI 卡片行 */}
                   <KpiCardRow stats={selectedStats} prevStats={prevStats} benchmark={storeBenchmark} getBenchmark={getBenchmark} comparisonMode={comparisonMode} healthScore={healthScore} cm3={cmLayers?.cm3?.value ?? 0} allProductStats={productStats} />
 
-                  {/* 异常预警横幅 */}
-                  <AnomalyBanner anomalies={anomalyResults} />
+                  {/* 利润核算入口 */}
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => setShowProfitDrawer(true)}
+                      className="px-3 py-1.5 text-xs border border-pdd-border rounded-lg text-pdd-text-secondary hover:text-pdd-primary hover:border-pdd-primary/40 transition-colors flex items-center gap-1">
+                      <DollarSign size={14} /> 查看利润核算明细
+                    </button>
+                  </div>
+
+                  {anomalyAlerts.length > 0 && <AnomalyBanner anomalies={anomalyAlerts} />}
 
                   {/* B. 转化漏斗 + 销售趋势 */}
                   <div className="grid grid-cols-12 gap-4" id="kpi-gmv">
@@ -1841,7 +1878,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                       <ConversionFunnel stats={selectedStats} orders={productOrders} allProductStats={productStats} comparisonMode={comparisonMode} />
                     </div>
                     <div className="col-span-7 pdd-card rounded-xl border border-pdd-gray-200 p-4">
-                      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1.5"><TrendingUp size={13} color="#16a34a" />趋势图 · 点击上方指标切换曲线</h3>
+                      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1.5"><TrendingUp size={13} color="#16a34a" />销售趋势</h3>
                       {timeFilteredDailySales.length > 0 ? (
                         <ResponsiveContainer width="100%" height={240}>
                           <ComposedChart data={timeFilteredDailySales}>
@@ -1849,27 +1886,20 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                             <XAxis dataKey="date" tick={{ fontSize: 9, fill: 'var(--pdd-text-secondary)' }} />
                             <YAxis tick={{ fontSize: 9, fill: 'var(--pdd-text-secondary)' }} />
                             <Tooltip />
-                            {activeMetrics.has('sales') && <Bar dataKey="sales" fill="var(--pdd-primary-light)" opacity={0.5} name="销量" />}
-                            {activeMetrics.has('gmv') && <Line type="monotone" dataKey="gmv" stroke="#e02e24" strokeWidth={2} dot={false} name="GMV" />}
-                            {activeMetrics.has('revenue') && <Line type="monotone" dataKey="revenue" stroke="#16a34a" strokeWidth={1.5} dot={false} name="实收" />}
-                            {activeMetrics.has('profit') && <Line type="monotone" dataKey="profit" stroke="#7c3aed" strokeWidth={2} dot={false} name="利润" />}
-                            {activeMetrics.has('refund') && <Line type="monotone" dataKey="refund" stroke="#f97316" strokeWidth={1.5} dot={false} name="退款" />}
-                            {activeMetrics.has('orders') && <Line type="monotone" dataKey="orders" stroke="#0891b2" strokeWidth={1.5} dot={false} name="订单数" yAxisId="right" />}
-                            {eventMarkers.map((m, i) => (
+                            <Bar dataKey="sales" fill="var(--pdd-primary-light)" opacity={0.6} name="销量" />
+                            <Line type="monotone" dataKey="gmv" stroke="#e02e24" strokeWidth={2} dot={false} name="GMV" />
+                            <Line type="monotone" dataKey="revenue" stroke="#16a34a" strokeWidth={1.5} dot={false} name="实收" />
+                            <Line type="monotone" dataKey="profit" stroke="#7c3aed" strokeWidth={1.5} dot={false} name="利润" />
+                            {eventMarkers.slice(0, 5).map((m: any, i: number) => (
                               <ReferenceLine key={i} x={m.date} stroke={m.color} strokeWidth={1.5} strokeDasharray="4 3"
                                 label={{ value: m.label, position: 'top', fill: m.color, fontSize: 9 }} />
                             ))}
                           </ComposedChart>
                         </ResponsiveContainer>
-                      ) : <div className="h-[240px] flex items-center justify-center text-xs text-pdd-gray-400">当前时间范围无数据</div>}
-                      {/* 指标图例 */}
-                      <div className="flex items-center gap-2 mt-1 flex-wrap">
-                        {[{k:'gmv',c:'#e02e24',l:'GMV'},{k:'sales',c:'var(--pdd-primary-light)',l:'销量'},{k:'revenue',c:'#16a34a',l:'实收'},{k:'profit',c:'#7c3aed',l:'利润'},{k:'refund',c:'#f97316',l:'退款'},{k:'orders',c:'#0891b2',l:'订单数'}].map(m => (
-                          <button key={m.k} onClick={() => toggleMetric(m.k)}
-                            className={`text-[10px] px-1.5 py-0.5 rounded-full transition-colors ${activeMetrics.has(m.k) ? 'text-white font-medium' : 'text-pdd-text-secondary border border-pdd-border'}`}
-                            style={activeMetrics.has(m.k) ? {backgroundColor:m.c} : {}}
-                          >{m.l}</button>
-                        ))}
+                      ) : <div className="h-[240px] flex items-center justify-center text-xs text-pdd-gray-400">暂无每日数据</div>}
+                      {/* 图例 */}
+                      <div className="flex items-center gap-2 mt-1 text-[10px] text-pdd-text-secondary">
+                        <span style={{color:'#e02e24'}}>● GMV</span><span style={{color:'var(--pdd-primary-light)'}}>● 销量</span><span style={{color:'#16a34a'}}>● 实收</span><span style={{color:'#7c3aed'}}>● 利润</span>
                       </div>
                     </div>
                   </div>
@@ -1884,7 +1914,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                     <CmLayerCascade layers={cmLayers} allProductStats={productStats} comparisonMode={comparisonMode} />
                   </div>
 
-                  {/* 推广渠道ROI对比（从全局数据计算） */}
+                  {/* 推广渠道ROI对比 */}
                   <PromoChannelROI
                     promoProducts={currentDisplayData?.promotionProducts?.filter((p: any) => String(p['商品ID'] || p['商品id'] || '') === selectedId) || []}
                     promotionSummary={currentDisplayData?.promotionSummary || []}
@@ -2259,6 +2289,11 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
           </div>
         </motion.div>
       </motion.div>
+      {/* 利润核算明细抽屉 */}
+      {profitBreakdownData && (
+        <ProfitBreakdownDrawer isOpen={showProfitDrawer} onClose={() => setShowProfitDrawer(false)}
+          {...profitBreakdownData} otherFees={[]} />
+      )}
     </AnimatePresence>
   );
 }

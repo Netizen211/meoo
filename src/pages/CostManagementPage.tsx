@@ -1661,17 +1661,68 @@ export default function CostManagementPage() {
               )}
             </AnimatePresence>
 
-            {/* Batch cost bar */}
+            {/* Batch cost bar — 增强版 */}
             {selectedItems.size > 0 && (
-              <div className="flex items-center gap-2 mb-3 p-2 bg-pdd-bg rounded-lg">
-                <span className="text-sm font-medium">已选 {selectedItems.size} 项</span>
-                <input type="number" placeholder="批量设置裸货成本(元/件)" className="flex-1 px-2 py-1.5 border border-pdd-border rounded-lg text-sm"
-                  value={batchCost} onChange={e => setBatchCost(e.target.value)} />
-                <button onClick={applyBatchCost} className="px-3 py-1.5 bg-pdd-danger text-white rounded-lg text-sm hover:bg-pdd-darkRed transition-colors">
-                  应用
+              <div className="flex items-center gap-2 mb-3 p-2 bg-pdd-bg rounded-lg flex-wrap">
+                <span className="text-sm font-bold text-pdd-text">已选 {selectedItems.size} 项</span>
+                <input type="number" placeholder="统一成本(元/件)" className="w-36 px-2 py-1.5 border border-pdd-border rounded-lg text-sm"
+                  value={batchCost} onChange={e => setBatchCost(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') applyBatchCost(); }} />
+                <button onClick={applyBatchCost} className="px-3 py-1.5 bg-pdd-primary text-white rounded-lg text-sm font-medium hover:opacity-90">
+                  统一设置
+                </button>
+                <span className="text-pdd-text-secondary text-xs">或</span>
+                <button onClick={() => {
+                  let total = 0; let cnt = 0;
+                  productGroups.forEach(g => g.skus.forEach(s => {
+                    const key = s.skuId ? `${s.productId}_${s.skuId}` : s.productId;
+                    if (selectedItems.has(key) && s.prices?.length) {
+                      total += s.prices.reduce((a: number,b: number) => a+b, 0) / s.prices.length;
+                      cnt++;
+                    }
+                  }));
+                  if (cnt > 0) setBatchCost((total/cnt*0.4).toFixed(0));
+                }} className="px-2 py-1 text-xs border border-pdd-border rounded text-pdd-text-secondary hover:text-pdd-primary">
+                  按售价40%估算
                 </button>
               </div>
             )}
+            {/* 全选快捷操作（始终显示） */}
+            <div className="flex items-center gap-2 mb-3 text-xs text-pdd-text-secondary">
+              <button onClick={() => {
+                const allKeys = displayGroups.flatMap(g => g.skus.map(s => s.skuId ? `${s.productId}_${s.skuId}` : s.productId));
+                if (selectedItems.size === allKeys.length) setSelectedItems(new Set());
+                else setSelectedItems(new Set(allKeys));
+              }} className="hover:text-pdd-primary transition-colors">
+                {selectedItems.size > 0 ? '取消全选' : '全选所有SKU'}
+              </button>
+              <span>|</span>
+              <button onClick={() => {
+                // 只选没有填成本的SKU
+                const missing = displayGroups.flatMap(g => g.skus.filter(s => {
+                  const k = s.skuId ? `${s.productId}_${s.skuId}` : s.productId;
+                  return !productCosts[k];
+                }).map(s => s.skuId ? `${s.productId}_${s.skuId}` : s.productId));
+                setSelectedItems(new Set(missing));
+              }} className="hover:text-pdd-primary transition-colors">
+                仅选未填成本 ({displayGroups.flatMap(g => g.skus.filter(s => {
+                  const k = s.skuId ? `${s.productId}_${s.skuId}` : s.productId;
+                  return !productCosts[k];
+                })).length}个)
+              </button>
+              <span>|</span>
+              <button onClick={() => {
+                const csv = '﻿' + displayGroups.flatMap(g => g.skus.map(s => {
+                  const k = s.skuId ? `${s.productId}_${s.skuId}` : s.productId;
+                  return [s.productId, s.skuId||'', `"${(s.productName||'').replace(/"/g,'""')}"`, `"${(s.skuName||'').replace(/"/g,'""')}"`, productCosts[k]||''].join(',');
+                })).join('\n');
+                const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+                const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+                a.download = `SKU成本_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+              }} className="hover:text-pdd-primary transition-colors">
+                导出CSV
+              </button>
+            </div>
 
             {/* 异常订单剔除提醒 */}
             {(excludedOrderCount > 0 || adjustedOrderCount > 0) && (

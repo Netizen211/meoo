@@ -970,8 +970,6 @@ export default function DashboardPage() {
             ['= 净利润', <span className={`text-sm font-bold ${netProfit >= 0 ? 'text-pdd-success' : 'text-pdd-danger'}`}>¥{netProfit.toFixed(2)}</span>],
             ['利润率', <span className={`font-semibold ${profitRate >= 0 ? 'text-pdd-success' : 'text-pdd-danger'}`}>{profitRate.toFixed(2)}%</span>],
             ['毛利(实收-推广-包装-快递)', <span className={`text-xs ${grossProfit >= 0 ? 'text-pdd-success' : 'text-pdd-danger'}`}>¥{grossProfit.toFixed(2)}</span>],
-            ['税前利润', <span className={`text-xs ${preTaxProfit >= 0 ? 'text-pdd-success' : 'text-pdd-danger'}`}>¥{preTaxProfit.toFixed(2)}</span>],
-            ['数据可信度', <span className={`text-[10px] font-medium ${confidenceColor}`}>{confidenceLabel}</span>],
           ]},
           { title: '运费险详情', rows: insRecord ? [
             ['服务费用', `¥${insFee.toFixed(2)}`],
