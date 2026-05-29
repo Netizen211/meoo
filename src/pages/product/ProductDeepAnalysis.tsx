@@ -1075,6 +1075,16 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     });
   }, [timeFilteredOrders, selectedId]);
 
+  // 时间过滤后的售后数据
+  const timeFilteredAfterSales = useMemo(() => {
+    const { rangeA } = timeFilter;
+    return afterSaleRecords.filter(r => {
+      const dateStr = String(r['申请时间'] || r['售后创建时间'] || '').slice(0, 10);
+      if (!dateStr) return true;
+      return dateStr >= rangeA.start && dateStr <= rangeA.end;
+    });
+  }, [afterSaleRecords, timeFilter]);
+
   // ─── 增强计算 #1：SKU 深度矩阵 ─────────────────────────────
   const skuDeepMatrix = useMemo(() => {
     if (!selectedId) return [];
@@ -1108,7 +1118,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
     const skuRefundMap: Record<string, { refundCount: number; refundAmount: number; refundDays: number[]; reasons: Record<string, number> }> = {};
     const reasonFields = ['退款原因', '售后原因', '售后类型', '原因', 'reason'];
-    const productAfterSales = afterSaleRecords.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
+    const productAfterSales = timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
     productAfterSales.forEach(r => {
       const orderNo = String(r['订单编号'] || r['订单号'] || '');
       const skuInfo = r['商品规格'] || r['sku信息'] || '';
@@ -1167,13 +1177,13 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
         isMainSku: totalSales > 0 && (info.sales / totalSales) > 0.5,
       };
     }).sort((a, b) => b.sales - a.sales).slice(0, 15);
-  }, [selectedId, productOrders, afterSaleRecords, productCosts]);
+  }, [selectedId, productOrders, timeFilteredAfterSales, productCosts]);
 
   // ─── 增强计算 #2：退款原因 TOP10 ────────────────────────────
   const refundReasonAnalysis = useMemo(() => {
     if (!selectedId) return [];
     const reasonFields = ['退款原因', '售后原因', '售后类型', '原因', 'reason'];
-    const productAfterSales = afterSaleRecords.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
+    const productAfterSales = timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
     const reasonMap: Record<string, { count: number; amount: number }> = {};
     let skipped = 0;
     productAfterSales.forEach(r => {
@@ -1188,7 +1198,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       .map(([reason, data]) => ({ reason, count: data.count, amount: data.amount, ratio: total > 0 ? (data.count / total) * 100 : 0 }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
-  }, [selectedId, afterSaleRecords]);
+  }, [selectedId, timeFilteredAfterSales]);
 
   // ─── 增强计算 #3：退款时间窗口 ──────────────────────────────
   const refundTimeWindow = useMemo(() => {
@@ -1211,7 +1221,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
     let skippedNoPay = 0;
     let skippedNoApply = 0;
-    const productAfterSales = afterSaleRecords.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
+    const productAfterSales = timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
 
     productAfterSales.forEach(r => {
       const applyTime = r['申请时间'] || r['售后创建时间'] || r['退款申请时间'] || '';
@@ -1244,7 +1254,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     buckets.forEach(b => { (b as any).ratio = totalCount > 0 ? (b.count / totalCount) * 100 : 0; });
 
     return { windows: buckets, skippedNoPay, skippedNoApply };
-  }, [selectedId, allOrders, afterSaleRecords]);
+  }, [selectedId, allOrders, timeFilteredAfterSales]);
 
   // ─── 增强计算 #4：地域×售后交叉分析 ─────────────────────────
   const regionAfterSaleAnalysis = useMemo(() => {
@@ -1263,7 +1273,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
     // 按省统计售后
     const provinceAfterSales: Record<string, { count: number; amount: number }> = {};
-    const productAfterSales = afterSaleRecords.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
+    const productAfterSales = timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
     productAfterSales.forEach(r => {
       const orderNo = String(r['订单编号'] || r['订单号'] || '');
       const prov = orderNoToProvince[orderNo];
@@ -1291,7 +1301,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       ...r,
       isAnomaly: !r.lowSample && r.afterSaleRate > mean + 2 * stdDev && stdDev > 0,
     })).sort((a, b) => b.afterSaleCount - a.afterSaleCount);
-  }, [selectedId, allOrders, afterSaleRecords]);
+  }, [selectedId, allOrders, timeFilteredAfterSales]);
 
   // ─── 增强计算 #5：CM1/CM2/CM3 贡献度分层 ──────────────────
   const cmLayers = useMemo(() => {
@@ -1377,7 +1387,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   const storeRefundReasonAnalysis = useMemo(() => {
     if (!selectedId || comparisonMode === 'none') return [];
     const reasonFields = ['退款原因', '售后原因', '售后类型', '原因', 'reason'];
-    const otherAfterSales = afterSaleRecords.filter(r => String(r['商品ID'] || r['商品id'] || '') !== selectedId);
+    const otherAfterSales = timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') !== selectedId);
     const reasonMap: Record<string, { count: number; amount: number }> = {};
     otherAfterSales.forEach(r => {
       const reason = findField(r, ...reasonFields) || '未分类';
@@ -1390,7 +1400,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       .map(([reason, data]) => ({ reason, count: data.count, amount: data.amount, ratio: total > 0 ? (data.count / total) * 100 : 0 }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
-  }, [selectedId, afterSaleRecords, comparisonMode]);
+  }, [selectedId, timeFilteredAfterSales, comparisonMode]);
 
   // ─── 增强计算 #7a：运营事件节点检测 ──────────────────────
   const eventMarkers = useMemo(() => {
@@ -1448,7 +1458,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   // ─── 增强计算 #7：退款日趋势（替代假数据）──────────────────
   const refundDailyTrend = useMemo(() => {
     if (!selectedId) return { trend: [], spikeDays: [] as string[] };
-    const productAfterSales = afterSaleRecords.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
+    const productAfterSales = timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
 
     // 售后按日期分组
     const dailyRefund: Record<string, { count: number; amount: number }> = {};
@@ -1501,7 +1511,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     });
 
     return { trend: withMA, spikeDays };
-  }, [selectedId, afterSaleRecords, productOrders]);
+  }, [selectedId, timeFilteredAfterSales, productOrders]);
 
   // ─── 增强计算 #8：增强诊断（在 generateDiagnoses 基础上增加4条）──
   const enhancedDiagnoses = useMemo(() => {
@@ -2109,9 +2119,9 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
               {' | '}
               <span className={selectedStats && selectedStats.hasPromoData ? 'text-green-500 font-medium' : 'text-pdd-gray-400'}>推广{selectedStats?.hasPromoData ? '✓' : '✗'}</span>
               {' | '}
-              <span className={afterSaleRecords.length > 0 ? 'text-green-500 font-medium' : 'text-pdd-gray-400'}>售后{afterSaleRecords.length > 0 ? '✓' : '✗'}</span>
+              <span className={timeFilteredAfterSales.length > 0 ? 'text-green-500 font-medium' : 'text-pdd-gray-400'}>售后{timeFilteredAfterSales.length > 0 ? '✓' : '✗'}</span>
             </span>
-            <span>活跃：{selectedStats?.activeDays || 0}天 | 售后记录：{afterSaleRecords.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId).length}条</span>
+            <span>活跃：{selectedStats?.activeDays || 0}天 | 售后记录：{timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId).length}条</span>
           </div>
         </motion.div>
       </motion.div>
