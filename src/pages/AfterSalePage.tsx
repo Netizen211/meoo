@@ -45,7 +45,7 @@ function getSkuInfo(row: any): string {
 type TabKey = 'overview' | 'refund' | 'timeWindow' | 'efficiency' | 'logistics' | 'promoCross' | 'region' | 'productRisk' | 'warning' | 'detail';
 
 export default function AfterSalePage() {
-  const { currentDisplayData } = useData();
+  const { currentDisplayData, serverAfterSale } = useData();
   const { isPaid } = useAuth();
   const tf = useTimeFilter('7', 'day');
   const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
@@ -162,12 +162,25 @@ export default function AfterSalePage() {
       compareAfterSaleRate = compareOrders.length > 0 ? (compareAfterSaleCount / compareOrders.length) * 100 : 0;
     }
 
+    // 优先使用服务端MySQL聚合的售后数据
+    if (serverAfterSale && timeRange === 'all') {
+      return {
+        afterSaleCount: serverAfterSale.total,
+        afterSaleRate: serverAfterSale.asRate,
+        refundAmount: serverAfterSale.refundAmount,
+        avgProcessTime,
+        returnRefundRate,
+        totalOrders: filteredOrders.length,
+        overlongCount,
+        compareAfterSaleCount: 0, compareRefundAmount: 0, compareAfterSaleRate: 0,
+      };
+    }
     return {
       afterSaleCount, afterSaleRate, refundAmount, avgProcessTime,
       returnRefundRate, totalOrders, overlongCount,
       compareAfterSaleCount, compareRefundAmount, compareAfterSaleRate,
     };
-  }, [records, filteredOrders, compareEnabled, compareOrders]);
+  }, [records, filteredOrders, compareEnabled, compareOrders, serverAfterSale, timeRange]);
 
   // ========== 售后趋势（精确状态分类 SEVERE-2）==========
   const trendData = useMemo(() => {

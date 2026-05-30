@@ -11,6 +11,8 @@ import membershipRoutes from './routes/membership';
 import storeRoutes from './routes/stores';
 import adminRoutes from './routes/admin';
 import rechargeRoutes from './routes/recharge';
+import analyticsRoutes from './routes/analytics';
+import subAccountRoutes from './routes/subAccounts';
 import { startCleanupCron } from './services/cleanupService';
 
 const app = express();
@@ -78,6 +80,8 @@ app.use('/api/membership', membershipRoutes);
 app.use('/api/stores', storeRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/recharge', rechargeRoutes);
+app.use('/api/analytics', analyticsRoutes);
+app.use('/api/sub-accounts', subAccountRoutes);
 
 // 全局错误处理
 app.use(errorHandler);

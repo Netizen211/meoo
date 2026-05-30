@@ -143,6 +143,11 @@ export default function LoginPage() {
             {loading ? '登录中...' : '登录'} {!loading && <ArrowRight size={16} />}
           </motion.button>
 
+          <div className="flex items-center justify-center gap-3 pt-2 text-[10px] text-pdd-text-secondary">
+            <a href="/terms-of-service.html" target="_blank" className="hover:text-pdd-primary transition-colors">服务条款</a>
+            <span>|</span>
+            <a href="/privacy-policy.html" target="_blank" className="hover:text-pdd-primary transition-colors">隐私政策</a>
+          </div>
           <div className="flex items-center justify-center pt-2">
             <Link to="/register">
               <motion.span whileHover={{ color: 'var(--pdd-primary-light)' }} className="text-sm text-pdd-text-secondary cursor-pointer transition-colors">

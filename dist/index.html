@@ -1,6 +1,18 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>店分析 - 拼多多商家数据分析</title><link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23e02e24'/><text x='16' y='22' text-anchor='middle' font-size='18' font-weight='bold' fill='white'>店</text></svg>"><meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';"><style>html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>店分析 - 拼多多商家数据分析</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23e02e24'/><text x='16' y='22' text-anchor='middle' font-size='18' font-weight='bold' fill='white'>店</text></svg>">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';">
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
     html.light, html.light body { background-color: #ffffff !important; color: #000000; }
-    html.dark, html.dark body { background-color: #1a1a1a !important; color: #ffffff; }</style><script>(function() {
+    html.dark, html.dark body { background-color: #1a1a1a !important; color: #ffffff; }
+  </style>
+  <script>
+    (function() {
       var isInIframe = window.self !== window.top;
       function applyThemeToDOM(theme) {
         document.documentElement.classList.remove('light', 'dark');
@@ -24,7 +36,10 @@
           document.documentElement.classList.add('theme-ready');
         });
       });
-    })();</script><script>// Fix: querySelectorAll throws SyntaxError when selector contains unescaped brackets []
+    })();
+  </script>
+  <script>
+    // Fix: querySelectorAll throws SyntaxError when selector contains unescaped brackets []
     // e.g. Tailwind arbitrary values like .text-[11px] or .bg-[#e02e24]
     // This patch wraps querySelectorAll/querySelector with try-catch to prevent crashes
     (function() {
@@ -64,7 +79,10 @@
       Element.prototype.querySelectorAll = function(s) { return safeQSA(origElQSA, this, s); };
       var origElQS = Element.prototype.querySelector;
       Element.prototype.querySelector = function(s) { return safeQS(origElQS, this, s); };
-    })();</script><script>// 域名绑定检查 — 非授权域名直接白屏
+    })();
+  </script>
+  <script>
+    // 域名绑定检查 — 非授权域名直接白屏
     (function() {
       var allowedHosts = ['localhost', '127.0.0.1', '121.40.196.79', 'melody.wang', 'www.melody.wang', 'admin.melody.wang'];
       try {
@@ -80,7 +98,10 @@
         document.title = '';
         throw new Error('Unauthorized domain');
       }
-    })();</script><script>// 反调试保护
+    })();
+  </script>
+  <script>
+    // 反调试保护
     (function() {
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return;
       setInterval(function() {
@@ -91,4 +112,10 @@
           document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:24px;color:#999;">请关闭开发者工具后刷新页面</div>';
         }
       }, 1000);
-    })();</script></head><body><div id="root"></div><script defer="defer" src="bundle.fbc21bd6.js"></script></body></html>
+    })();
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+<script defer src="bundle.js"></script></body>
+</html>

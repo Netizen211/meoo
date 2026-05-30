@@ -1,26 +1,56 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { UserPlus, User, Lock, Eye, EyeOff, Phone, CheckCircle, KeyRound, Activity, ArrowRight } from 'lucide-react';
+import { UserPlus, User, Lock, Eye, EyeOff, Mail, CheckCircle, KeyRound, Activity, ArrowRight } from 'lucide-react';
 import { useAuth } from '../App';
-import { serverRegister } from '../api/authApi';
+import { serverRegister, sendEmailCode } from '../api/authApi';
 
 export default function RegisterPage() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
-  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [smsCode, setSmsCode] = useState('');
+  const [sending, setSending] = useState(false);
+  const [countdown, setCountdown] = useState(0);
   const { signup, setUser } = useAuth();
   const navigate = useNavigate();
+  const [agreed, setAgreed] = useState(false);
+
+  // 发送邮箱验证码
+  const handleSendCode = async () => {
+    if (!email || sending || countdown > 0) return;
+    // 简单校验邮箱格式
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('请输入有效的邮箱地址');
+      return;
+    }
+    setSending(true);
+    const result = await sendEmailCode(email);
+    setSending(false);
+    if (result.success) {
+      setCountdown(60);
+    } else {
+      setError(result.message);
+    }
+  };
+
+  // 倒计时
+  React.useEffect(() => {
+    if (countdown <= 0) return;
+    const timer = setTimeout(() => setCountdown(c => c - 1), 1000);
+    return () => clearTimeout(timer);
+  }, [countdown]);
 
   const handleRegister = async () => {
     setError('');
+    if (!agreed) { setError('请先阅读并同意服务条款和隐私政策'); return; }
     if (!inviteCode.trim()) { setError('请输入邀请码'); return; }
     if (!username.trim()) { setError('请输入用户名'); return; }
     if (username.trim().length < 3) { setError('用户名至少3个字符'); return; }
@@ -32,7 +62,7 @@ export default function RegisterPage() {
 
     // 优先尝试服务端注册
     try {
-      const serverResult = await serverRegister(username.trim(), password.trim(), inviteCode.trim(), phone.trim());
+      const serverResult = await serverRegister(username.trim(), password.trim(), inviteCode.trim(), email.trim() || undefined, smsCode.trim() || undefined);
       if (serverResult.success) {
         if (serverResult.user) setUser(serverResult.user);
         setSuccess(true);
@@ -49,7 +79,7 @@ export default function RegisterPage() {
     }
 
     // 降级：本地 localStorage 注册
-    const result = signup(username.trim(), password.trim(), phone.trim(), inviteCode.trim());
+    const result = signup(username.trim(), password.trim(), email.trim(), inviteCode.trim());
     if (result.success) {
       setSuccess(true);
       setTimeout(() => navigate('/stores'), 1500);
@@ -137,11 +167,29 @@ export default function RegisterPage() {
           </div>
 
           <div className={inputClass}>
-            <Phone size={18} className={iconClass} />
-            <input type="tel" placeholder="请输入手机号（可选）" value={phone}
-              onChange={e => { setPhone(e.target.value); setError(''); }}
+            <Mail size={18} className={iconClass} />
+            <input type="email" placeholder="请输入邮箱地址" value={email}
+              onChange={e => { setEmail(e.target.value); setError(''); }}
               className={inputFieldClass} />
+            <button
+              type="button"
+              onClick={handleSendCode}
+              disabled={sending || countdown > 0 || !email}
+              className="ml-2 flex-shrink-0 px-3 py-1 rounded-lg text-xs font-medium bg-pdd-primary/20 text-pdd-primary-light hover:bg-pdd-primary/30 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {sending ? '发送中...' : countdown > 0 ? `${countdown}秒` : '发送验证码'}
+            </button>
           </div>
+
+          {email && (
+            <div className={inputClass}>
+              <CheckCircle size={18} className={iconClass} />
+              <input type="text" placeholder="请输入邮箱验证码" value={smsCode}
+                onChange={e => { setSmsCode(e.target.value); setError(''); }}
+                maxLength={6}
+                className={inputFieldClass} />
+            </div>
+          )}
 
           <div className={inputClass}>
             <Lock size={18} className={iconClass} />
@@ -164,6 +212,19 @@ export default function RegisterPage() {
           </div>
 
           {error && <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-pdd-danger text-sm text-center bg-pdd-danger/10 py-2 rounded-lg border border-pdd-danger/20">{error}</motion.p>}
+
+          {/* 法律协议勾选 */}
+          <div className="flex items-start gap-2">
+            <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)}
+              className="mt-0.5 w-4 h-4 rounded border-pdd-border accent-pdd-primary cursor-pointer" />
+            <span className="text-xs text-pdd-text-secondary">
+              我已阅读并同意
+              <a href="/terms-of-service.html" target="_blank" className="text-pdd-primary hover:underline mx-0.5">《服务条款》</a>
+              和
+              <a href="/privacy-policy.html" target="_blank" className="text-pdd-primary hover:underline mx-0.5">《隐私政策》</a>
+              ，承诺不上传含个人隐私信息的数据
+            </span>
+          </div>
 
           <motion.button
             whileHover={loading ? {} : { scale: 1.02, boxShadow: '0 8px 30px rgba(99, 102, 241, 0.3)' }}

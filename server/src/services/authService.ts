@@ -51,7 +51,7 @@ export async function registerUser(
   username: string,
   password: string,
   inviteCode: string,
-  phone?: string
+  email?: string
 ): Promise<{ success: boolean; message: string; user?: User; tokens?: AuthResponse }> {
   // 输入验证
   if (!username || !password || !inviteCode) {
@@ -87,7 +87,7 @@ export async function registerUser(
     password_hash: passwordHash,
     role: 'normal',
     membership_level: 'free',
-    phone: phone ? validator.escape(phone) : '',
+    phone: email ? validator.escape(email) : '',
     invite_code: inviteCode,
   });
 
@@ -103,7 +103,7 @@ export async function registerUser(
     username: safeUsername,
     role: 'normal',
     membershipLevel: 'free',
-    phone: phone || '',
+    phone: email || '',
     inviteCode,
   };
 
@@ -161,6 +161,17 @@ export async function loginUser(
         membership_level: 'free',
         membership_expires_at: null,
       });
+    }
+  }
+
+  // 子账号处理
+  let subPermissions = null;
+  let parentUserId = null;
+  if (row.is_sub_account && row.parent_user_id) {
+    parentUserId = row.parent_user_id;
+    const subRole = await db('sub_roles').where({ parent_user_id: row.parent_user_id, name: '管理员' }).first();
+    if (subRole) {
+      try { subPermissions = typeof subRole.permissions === 'string' ? JSON.parse(subRole.permissions) : subRole.permissions; } catch {}
     }
   }
 

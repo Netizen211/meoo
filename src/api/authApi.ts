@@ -13,6 +13,12 @@ export interface RegisterResult {
   user?: User;
 }
 
+// 发送邮箱验证码
+export async function sendEmailCode(email: string): Promise<{ success: boolean; message: string }> {
+  const res = await apiClient.post('/auth/send-code', { email });
+  return { success: res.success, message: res.success ? (res.data as any)?.message || '验证码已发送' : res.error || '发送失败' };
+}
+
 // 服务端登录
 export async function serverLogin(username: string, password: string): Promise<LoginResult> {
   const res = await apiClient.post<AuthResponse>('/auth/login', { username, password });
@@ -28,13 +34,15 @@ export async function serverRegister(
   username: string,
   password: string,
   inviteCode: string,
-  phone?: string
+  email?: string,
+  smsCode?: string
 ): Promise<RegisterResult> {
   const res = await apiClient.post<AuthResponse>('/auth/register', {
     username,
     password,
     inviteCode,
-    phone,
+    email,
+    smsCode,
   });
   if (res.success && res.data) {
     setTokens(res.data.accessToken, res.data.refreshToken);

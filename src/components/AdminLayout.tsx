@@ -4,12 +4,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   BarChart3, Users as UsersIcon, Crown, Key, Activity,
   FileText, Settings, LogOut, Menu, ChevronRight, ChevronLeft,
-  Sun, Moon, CreditCard
+  Sun, Moon, CreditCard, Eye, Wrench
 } from 'lucide-react';
 import { useAuth } from '../App';
 
 const ADMIN_NAV = [
   { path: '/', label: '系统概览', icon: BarChart3 },
+  { path: '/shadow', label: '影子访问', icon: Eye },
   { path: '/recharge', label: '充值审核', icon: CreditCard },
   { path: '/users', label: '用户管理', icon: UsersIcon },
   { path: '/members', label: '会员管理', icon: Crown },
@@ -17,6 +18,7 @@ const ADMIN_NAV = [
   { path: '/data', label: '数据监控', icon: Activity },
   { path: '/logs', label: '操作日志', icon: FileText },
   { path: '/settings', label: '系统设置', icon: Settings },
+  { path: '/config', label: '全局配置', icon: Wrench },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

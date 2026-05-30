@@ -19,6 +19,7 @@ import PromotionPage from './pages/PromotionPage';
 import RiskPage from './pages/RiskPage';
 import MembershipPage from './pages/MembershipPage';
 import SettingsPage from './pages/SettingsPage';
+import SubAccountsPage from './pages/SubAccountsPage';
 import ProductLinksPage from './pages/ProductLinksPage';
 import FinancePage from './pages/FinancePage';
 import { simpleHash } from './utils';
@@ -30,6 +31,7 @@ import { addLog } from './utils/operationLog';
 import { OrderFinancialActual, UnlinkedFinancials, buildFinancialIndex } from './utils/financialActuals';
 import { getItem, setItem, removeItem, getAllKeys, migrateFromLocalStorage, isIndexedDBAvailable } from './services/localDataStore';
 import { syncStoreData, pullStoreData } from './api/dataApi';
+import { analyticsApi, type DashboardResponse, type ProductKpi, type PromotionResponse, type AfterSaleResponse } from './api/analyticsApi';
 import { apiClient, hasTokens } from './api/client';
 
 interface User {
@@ -357,6 +359,12 @@ interface DataContextType {
   clearCostData: (storeId?: string) => void;
   clearUploadRecords: (storeId?: string) => void;
   clearStoreList: () => void;
+  syncStatus: 'idle' | 'syncing' | 'done' | 'error';
+  /** 服务端MySQL直接聚合的KPI — Dashboard使用 */
+  serverDashboard: DashboardResponse | null;
+  serverProducts: ProductKpi[] | null;
+  serverPromotion: PromotionResponse | null;
+  serverAfterSale: AfterSaleResponse | null;
 }
 
 const DataContext = createContext<DataContextType>(null!);
@@ -858,7 +866,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // 数据变更后即时同步到服务器（带保护）
   const syncingRef = useRef(false);
   const pendingRef = useRef(false);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
+  const [syncStatus, setSyncStatusState] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
+  const setSyncStatus = (s: 'idle' | 'syncing' | 'done' | 'error') => {
+    setSyncStatusState(s);
+    if (s === 'done') setTimeout(() => setSyncStatusState('idle'), 3000);
+  };
+
+  // 服务端KPI（替代浏览器端计算 — 从MySQL直接聚合）
+  const [serverDashboard, setServerDashboard] = useState<DashboardResponse | null>(null);
+  const [serverProducts, setServerProducts] = useState<ProductKpi[] | null>(null);
+  const [serverPromotion, setServerPromotion] = useState<PromotionResponse | null>(null);
+  const [serverAfterSale, setServerAfterSale] = useState<AfterSaleResponse | null>(null);
+  useEffect(() => {
+    if (!idbReady || !hasTokens()) return;
+    const storeId = dataFilter;
+    if (!storeId || storeId === '__all__') return;
+    analyticsApi.getDashboard(storeId).then(setServerDashboard).catch(() => {});
+    analyticsApi.getProducts(storeId).then(setServerProducts).catch(() => {});
+    analyticsApi.getPromotion(storeId).then(setServerPromotion).catch(() => {});
+    analyticsApi.getAfterSale(storeId).then(setServerAfterSale).catch(() => {});
+  }, [idbReady, dataFilter]);
   useEffect(() => {
     if (!idbReady || !hasTokens()) return;
     if (syncingRef.current) {
@@ -892,8 +919,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setSyncStatus('done');
       } catch {
         setSyncStatus('error');
-        // 失败后30秒自动重试
-        setTimeout(() => { syncingRef.current = false; }, 30000);
+        // 失败后3秒快速重试
+        setTimeout(() => { syncingRef.current = false; }, 3000);
       } finally {
         syncingRef.current = false;
         if (pendingRef.current) {
@@ -1483,7 +1510,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       costHistory, addCostHistory,
       clearAllData,
       clearOrderData, clearPromotionData, clearFinancialData, clearCostData,
-      clearUploadRecords: clearUploadRecordsFn, clearStoreList
+      clearUploadRecords: clearUploadRecordsFn, clearStoreList,
+      syncStatus,
+      serverDashboard, serverProducts, serverPromotion, serverAfterSale,
     }}>
       {children}
     </DataContext.Provider>
@@ -1523,6 +1552,7 @@ function App() {
               <Route path="/cost-management" element={<RequireAuth><MainLayout><CostManagementPage /></MainLayout></RequireAuth>} />
               <Route path="/finance" element={<RequireAuth><MainLayout><FinancePage /></MainLayout></RequireAuth>} />
               <Route path="/product-links" element={<RequireAuth><MainLayout><ProductLinksPage /></MainLayout></RequireAuth>} />
+              <Route path="/sub-accounts" element={<RequireAuth><MainLayout><SubAccountsPage /></MainLayout></RequireAuth>} />
               <Route path="*" element={<Navigate to="/login" replace />} />
             </Routes>
           </HashRouter>

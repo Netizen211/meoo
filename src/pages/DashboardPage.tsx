@@ -19,7 +19,8 @@ export default function DashboardPage() {
     productCosts, packagingFeePerOrder, shippingFeePerOrder,
     laborFeePerOrder, insuranceFeePerOrder, platformCommissionRate,
     defaultCostRatio, taxConfigs, customDeductions,
-    abnormalOrders, orderFinancialActuals
+    abnormalOrders, orderFinancialActuals,
+    serverDashboard, serverPromotion, serverAfterSale,
   } = useData();
   const tf = useTimeFilter('7', 'day');
   const { timeRange, granularity, compareEnabled, setTimeRange, setGranularity, setCompareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange, setCustomRange, setQuickRange, savedRanges, saveCurrentRange, deleteSavedRange, applySavedRange } = tf;
@@ -177,13 +178,23 @@ export default function DashboardPage() {
   const categories = useMemo(() => Array.from(new Set(orders.map(o => String(findField(o, '商品一级类目', '一级类目', '类目') || '').trim()).filter(Boolean))), [orders]);
   const provinces = useMemo(() => Array.from(new Set(orders.map(o => String(findField(o, '省', '省份') || '').trim()).filter(Boolean))), [orders]);
 
+  // KPI 优先使用服务端 MySQL 聚合数据（精确、快速），服务端不可用时回退浏览器计算
   const kpi = useMemo(() => {
+    if (serverDashboard?.kpi) {
+      const sk = serverDashboard.kpi;
+      return {
+        gmv: sk.gmv, cnt: sk.orders, avg: sk.avgOrder, paid: sk.paid,
+        asRate: sk.afterSaleRate, rfRate: sk.refundRate, rfAmount: sk.refund,
+        postage: sk.postage ?? 0, discount: sk.discount,
+        conversionRate: sk.conversionRate ?? 0, avgShipHours: sk.avgShipHours ?? 0,
+      };
+    }
+    // 回退：浏览器端计算（服务器未连接时）
     if (!filteredOrders.length) return null;
     const gmv = filteredOrders.reduce((s, o) => s + safeFloat(findField(o, '商品总价(元)', '商品总价')), 0);
     const cnt = filteredOrders.length;
     const paid = filteredOrders.reduce((s, o) => s + safeFloat(findField(o, '用户实付金额(元)', '用户实付金额', '用户实付', '实付金额')), 0);
     const avg = cnt > 0 ? paid / cnt : 0;
-    // 退款率/售后率直接从订单表格的售后状态字段统计
     const asCnt = filteredOrders.filter(o => { const st = String(findField(o, '售后状态') || '').trim(); return st && st !== '无售后或售后取消' && st !== '无'; }).length;
     const rfCnt = filteredOrders.filter(o => String(findField(o, '售后状态') || '').includes('退款')).length;
     const rfAmount = filteredOrders.filter(o => String(findField(o, '售后状态') || '').includes('退款')).reduce((s, o) => s + safeFloat(findField(o, '退款金额(元)', '退款金额', '退款(元)')), 0);
@@ -199,7 +210,7 @@ export default function DashboardPage() {
       return s + (shipT.getTime() - payT.getTime()) / 3600000;
     }, 0) / shipped : 0;
     return { gmv, cnt, avg, paid, asRate, rfRate, rfAmount, postage, discount, conversionRate, avgShipHours };
-  }, [filteredOrders]);
+  }, [serverDashboard, filteredOrders]);
 
   const compareKpi = useMemo(() => {
     if (!compareOrders.length) return null;
@@ -227,11 +238,12 @@ export default function DashboardPage() {
   }, [filteredOrders]);
 
   const statusDist = useMemo(() => {
+    if (serverDashboard?.status?.length) return serverDashboard.status;
     if (!filteredOrders.length) return [];
     const m: Record<string, number> = {};
     filteredOrders.forEach(o => { const st = String(findField(o, '订单状态', '状态') || '').trim() || '未知'; m[st] = (m[st] || 0) + 1; });
     return Object.entries(m).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  }, [filteredOrders]);
+  }, [serverDashboard, filteredOrders]);
 
   const fmtTime = (raw: string): string => {
     // Input: "2026-05-24 14:30:00" or "2026-05-24 14:30"
@@ -332,6 +344,21 @@ export default function DashboardPage() {
   }, [currentDisplayData, allDates, timeRange, customStart, customEnd, quickRange]);
 
   const promoKpi = useMemo(() => {
+    // 优先使用服务端 MySQL 聚合的推广数据
+    if (serverPromotion?.summary?.cost > 0) {
+      const s = serverPromotion.summary;
+      return {
+        totalCost: s.cost, promoGMV: s.gmv, promoOrders: s.orders,
+        roi: s.roi, ctr: s.ctr, cvr: s.cvr,
+        cpc: s.clicks > 0 ? s.cost / s.clicks : 0,
+        cpa: s.orders > 0 ? s.cost / s.orders : 0,
+        totalImpressions: s.impressions, totalClicks: s.clicks,
+        inquiryCost: 0, inquiryCount: 0, avgInquiryCost: 0,
+        favoriteCost: 0, favoriteCount: 0, avgFavoriteCost: 0,
+        followCost: 0, followCount: 0, avgFollowCost: 0,
+      };
+    }
+    // 回退：浏览器端计算
     if (!filteredPromoSummary.length) return null;
     let totalCost = 0, promoGMV = 0, promoOrders = 0, totalImpressions = 0, totalClicks = 0;
     let inquiryCost = 0, inquiryCount = 0, favoriteCost = 0, favoriteCount = 0, followCost = 0, followCount = 0;
@@ -363,7 +390,7 @@ export default function DashboardPage() {
       favoriteCost, favoriteCount, avgFavoriteCost,
       followCost, followCount, avgFollowCost
     };
-  }, [filteredPromoSummary]);
+  }, [serverPromotion, filteredPromoSummary]);
 
   // 罚款汇总（从财务货款明细中提取 004xxxx 罚款记录）
   const penaltySummary = useMemo(() => {
@@ -391,27 +418,33 @@ export default function DashboardPage() {
     return totalFee;
   }, [currentDisplayData]);
 
-  // 自然单 / 自然销售额 + 利润
+  // 自然单 / 自然销售额 + 利润（优先用服务端数据）
   const organicAndProfit = useMemo(() => {
+    if (serverDashboard?.kpi) {
+      const sk = serverDashboard.kpi;
+      return {
+        organicOrders: sk.organicOrders ?? Math.max(0, sk.orders - (sk.promoOrders ?? 0)),
+        organicGmv: sk.organicGmv ?? Math.max(0, sk.gmv - (sk.promoGmv ?? 0)),
+        profit: sk.profit,
+        totalMerchantReceived: sk.revenue,
+        totalPlatformFee: sk.platformFee,
+      };
+    }
+    // 回退浏览器计算
     const totalGmv = kpi?.gmv ?? 0;
     const totalOrders = kpi?.cnt ?? 0;
     const promoOrders = promoKpi?.promoOrders ?? 0;
     const promoGmv = promoKpi?.promoGMV ?? 0;
     const organicOrders = Math.max(0, totalOrders - promoOrders);
     const organicGmv = Math.max(0, totalGmv - promoGmv);
-
-    // 商家实收汇总
     const totalMerchantReceived = filteredOrders.reduce((s, o) =>
       s + safeFloat(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额')), 0);
-    // 平台佣金（技术服务费）汇总
     const totalPlatformFee = filteredOrders.reduce((s, o) =>
       s + safeFloat(findField(o, '平台技术服务费(元)', '技术服务费(元)', '平台技术服务费', '技术服务费')), 0);
-    // 利润 = 商家实收 - 推广花费 - 罚款 - 运费险 - 平台佣金
     const promoCost = promoKpi?.totalCost ?? 0;
     const profit = totalMerchantReceived - promoCost - penaltySummary.penaltyAmount - insuranceSummary - totalPlatformFee;
-
     return { organicOrders, organicGmv, profit, totalMerchantReceived, totalPlatformFee };
-  }, [kpi, promoKpi, filteredOrders, penaltySummary, insuranceSummary]);
+  }, [serverDashboard, kpi, promoKpi, filteredOrders, penaltySummary, insuranceSummary]);
 
   const promoTrendData = useMemo(() => {
     if (!filteredPromoSummary.length) return [];
@@ -472,9 +505,9 @@ export default function DashboardPage() {
     { label: '客单价', value: kpi?.avg, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: TrendingUp, color: 'var(--pdd-success)', change: compareEnabled ? changePct(kpi?.avg || 0, compareKpi?.avg || 0) : null },
     { label: '售后率', value: kpi?.asRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: AlertTriangle, color: 'var(--pdd-warning)', change: null },
     { label: '退款率', value: kpi?.rfRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: RotateCcw, color: 'var(--pdd-danger)', change: null },
-    { label: '买家数', value: new Set(filteredOrders.map(o => { const no = String(findField(o, '订单号') || '').trim(); return no;}).filter(Boolean)).size || (filteredOrders.length > 0 ? 1 : 0), fmt: (v: number) => v.toFixed(0), icon: Users, color: '#722ed1', change: null },
-    { label: '商品数', value: new Set(filteredOrders.map(o => String(findField(o, '商品id', '商品ID') || '').trim()).filter(id => id && id !== '-' && id !== '')).size, fmt: (v: number) => v.toFixed(0), icon: Package, color: '#eb2f96', change: null },
-    { label: '罚款金额', value: penaltySummary.penaltyAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: AlertTriangle, color: 'var(--pdd-danger)', change: null },
+    { label: '买家数', value: (serverDashboard?.kpi?.buyers != null) ? serverDashboard!.kpi!.buyers : (new Set(filteredOrders.map(o => { const no = String(findField(o, '订单号') || '').trim(); return no;}).filter(Boolean)).size || (filteredOrders.length > 0 ? 1 : 0)), fmt: (v: number) => v.toFixed(0), icon: Users, color: '#722ed1', change: null },
+    { label: '商品数', value: (serverDashboard?.kpi?.productCount != null) ? serverDashboard!.kpi!.productCount : new Set(filteredOrders.map(o => String(findField(o, '商品id', '商品ID') || '').trim()).filter(id => id && id !== '-' && id !== '')).size, fmt: (v: number) => v.toFixed(0), icon: Package, color: '#eb2f96', change: null },
+    { label: '罚款金额', value: (serverDashboard?.kpi?.penalties != null) ? serverDashboard!.kpi!.penalties : penaltySummary.penaltyAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: AlertTriangle, color: 'var(--pdd-danger)', change: null },
     { label: '退款金额', value: kpi?.rfAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: RotateCcw, color: '#ff7875', change: null },
     { label: '优惠总额', value: kpi?.discount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, color: '#ffc53d', change: null },
     { label: '利润金额', value: organicAndProfit.profit, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: organicAndProfit.profit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)', change: null },

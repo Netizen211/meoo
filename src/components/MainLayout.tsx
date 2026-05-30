@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useAuth, useStore, useData } from '../App';
 import SampleDataImporter from './SampleDataImporter';
+import SyncStatusBar from './SyncStatusBar';
 
 const NAV_ITEMS = [
   { path: '/dashboard', label: '数据中心', icon: LayoutDashboard, category: 'overview' },
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { path: '/finance', label: '财务管理', icon: Landmark, category: 'finance' },
   { path: '/membership', label: '会员中心', icon: Crown, category: 'system' },
   { path: '/settings', label: '数据清理', icon: Settings, category: 'system' },
+  { path: '/sub-accounts', label: '团队管理', icon: Users, category: 'system' },
 ];
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -44,7 +46,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 export default function MainLayout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth();
   const { stores, currentStore, switchStore, addStore, renameStore } = useStore();
-  const { dataFilter, setDataFilter } = useData();
+  const { dataFilter, setDataFilter, syncStatus } = useData() as any;
   const [storeDropdown, setStoreDropdown] = useState(false);
   const [editingStoreId, setEditingStoreId] = useState<string | null>(null);
   const [editingStoreName, setEditingStoreName] = useState('');
@@ -490,6 +492,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
           </AnimatePresence>
         </main>
       </div>
+      <SyncStatusBar status={syncStatus || 'idle'} />
     </div>
   );
 }

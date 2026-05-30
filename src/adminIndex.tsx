@@ -11,6 +11,7 @@ import AdminInvite from './pages/admin/AdminInvite';
 import AdminData from './pages/admin/AdminData';
 import AdminLogs from './pages/admin/AdminLogs';
 import AdminSettings from './pages/admin/AdminSettings';
+import AdminConfig from './pages/admin/AdminConfig';
 import AdminRecharge from './pages/admin/AdminRecharge';
 import { AuthProvider, useAuth } from './App';
 import { isFullMember } from './utils/permission';
@@ -36,6 +37,7 @@ function AdminApp() {
           <Route path="/data" element={<RequireAdmin><AdminLayout><AdminData /></AdminLayout></RequireAdmin>} />
           <Route path="/logs" element={<RequireAdmin><AdminLayout><AdminLogs /></AdminLayout></RequireAdmin>} />
           <Route path="/settings" element={<RequireAdmin><AdminLayout><AdminSettings /></AdminLayout></RequireAdmin>} />
+          <Route path="/config" element={<RequireAdmin><AdminLayout><AdminConfig /></AdminLayout></RequireAdmin>} />
           <Route path="/recharge" element={<RequireAdmin><AdminLayout><AdminRecharge /></AdminLayout></RequireAdmin>} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

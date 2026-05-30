@@ -1,190 +1,246 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { adminApi } from '../../api/adminApi';
-import { Brain, Key, Hash, Cpu } from 'lucide-react';
+import { adminApi, type SystemSettings } from '../../api/adminApi';
+import {
+  Brain, Key, Hash, Cpu, Shield, Bell, Users, Clock,
+  Trash2, Eye, EyeOff, Save,
+} from 'lucide-react';
 
-interface SystemSettings {
-  registrationOpen: boolean;
-  inviteCodeRequired: boolean;
-  rateLimitPerMinute: number;
-  maxUploadSizeMB: number;
-  freeUserStoreLimit: number;
-  aiEnabled: boolean;
-  aiApiKey: string;
-  aiDailyLimit: number;
-  aiModel: string;
-}
+const DEFAULT_SETTINGS: SystemSettings = {
+  registrationOpen: true,
+  inviteCodeRequired: true,
+  proGraceDays: 30,
+  membershipReminderDays: 7,
+  freeDataRetentionDays: 3,
+  cleanupCron: '0 3 * * *',
+  dataRetentionDays: 365,
+  maxLoginAttempts: 5,
+  tokenExpiresMinutes: 15,
+  wecomWebhook: '',
+  dingtalkWebhook: '',
+  aiEnabled: false,
+  aiApiKey: '',
+  aiDailyLimit: 10,
+  aiModel: 'claude-sonnet-4-6',
+};
 
 export default function AdminSettings() {
-  const [settings, setSettings] = useState<SystemSettings | null>(null);
+  const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [msg, setMsg] = useState('');
+  const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
 
   useEffect(() => {
-    adminApi.getSettings().then(res => {
-      if (res.success && res.data) {
-        setSettings({
-          registrationOpen: res.data.registrationOpen ?? true,
-          inviteCodeRequired: res.data.inviteCodeRequired ?? true,
-          rateLimitPerMinute: res.data.rateLimitPerMinute ?? 200,
-          maxUploadSizeMB: res.data.maxUploadSizeMB ?? 50,
-          freeUserStoreLimit: res.data.freeUserStoreLimit ?? 1,
-          aiEnabled: res.data.aiEnabled ?? false,
-          aiApiKey: res.data.aiApiKey ?? '',
-          aiDailyLimit: res.data.aiDailyLimit ?? 10,
-          aiModel: res.data.aiModel ?? 'claude-sonnet-4-6',
-        });
-      }
+    (async () => {
+      try {
+        const res = await adminApi.getSettings();
+        if (res) setSettings(res);
+      } catch { /* ignore */ }
       setLoading(false);
-    });
+    })();
   }, []);
 
-  const handleSave = async () => {
-    if (!settings) return;
-    setSaving(true);
-    const res = await adminApi.updateSettings(settings);
-    setMsg(res.success ? '保存成功' : '保存失败');
-    setSaving(false);
-    setTimeout(() => setMsg(''), 2000);
+  const showMsg = (type: 'success' | 'error', text: string) => {
+    setMsg({ type, text });
+    setTimeout(() => setMsg(null), 3000);
   };
 
-  if (loading) return <div className="text-pdd-text-secondary">加载中...</div>;
-  if (!settings) return <div className="text-pdd-text-secondary">加载失败</div>;
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await adminApi.updateSettings(settings);
+      showMsg(res.success ? 'success' : 'error', res.success ? '设置保存成功' : (res.error || '保存失败'));
+    } catch {
+      showMsg('error', '保存设置失败，请检查网络连接');
+    }
+    setSaving(false);
+  };
+
+  const update = <K extends keyof SystemSettings>(key: K, value: SystemSettings[K]) => {
+    setSettings(s => ({ ...s, [key]: value }));
+  };
+
+  if (loading) return <div className="text-pdd-text-secondary py-8 text-center">加载设置中...</div>;
 
   return (
-    <div className="space-y-6">
-      <h2 className="text-lg font-semibold">系统设置</h2>
+    <div className="space-y-6 max-w-3xl">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold text-pdd-text-primary">系统设置</h2>
+      </div>
 
       {msg && (
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-sm text-pdd-success bg-pdd-success/10 px-3 py-1 rounded">
-          {msg}
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className={'text-sm px-4 py-2.5 rounded-lg border ' + (
+            msg.type === 'success'
+              ? 'text-green-400 bg-green-500/10 border-green-500/20'
+              : 'text-red-400 bg-red-500/10 border-red-500/20'
+          )}
+        >
+          {msg.text}
         </motion.div>
       )}
 
-      {/* 基础设置 */}
-      <div className="bg-pdd-card p-4 rounded-xl border border-pdd-border space-y-4">
-        <h3 className="text-sm font-semibold flex items-center gap-2">
-          <Cpu size={14} className="text-pdd-primary" />
-          基础设置
-        </h3>
+      {/* 注册设置 */}
+      <SectionCard icon={<Users size={16} className="text-blue-400" />} title="注册设置">
+        <ToggleRow
+          label="开放注册" hint="关闭后仅管理员可创建账号"
+          checked={settings.registrationOpen}
+          onChange={v => update('registrationOpen', v)}
+        />
+        <ToggleRow
+          label="注册需要邀请码" hint="开启后新用户注册必须提供有效邀请码"
+          checked={settings.inviteCodeRequired}
+          onChange={v => update('inviteCodeRequired', v)}
+        />
+      </SectionCard>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm">开放注册</div>
-            <div className="text-xs text-pdd-text-secondary">关闭后仅管理员可创建账号</div>
-          </div>
-          <button
-            onClick={() => setSettings(s => ({ ...s!, registrationOpen: !s!.registrationOpen }))}
-            className={`w-11 h-6 rounded-full transition-colors ${settings.registrationOpen ? 'bg-pdd-primary' : 'bg-pdd-border'}`}
-          >
-            <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.registrationOpen ? 'translate-x-6' : 'translate-x-0.5'}`} />
-          </button>
-        </div>
+      {/* 会员设置 */}
+      <SectionCard icon={<Clock size={16} className="text-amber-400" />} title="会员设置">
+        <NumberRow
+          label="Pro 宽限期（天）" hint="Pro 到期后仍可访问数据的天数"
+          value={settings.proGraceDays}
+          onChange={v => update('proGraceDays', v)}
+          min={0} max={365}
+        />
+        <NumberRow
+          label="到期提醒（天）" hint="会员到期前多少天开始提醒"
+          value={settings.membershipReminderDays}
+          onChange={v => update('membershipReminderDays', v)}
+          min={1} max={30}
+        />
+        <NumberRow
+          label="免费数据保留（天）" hint="免费用户数据自动过期天数"
+          value={settings.freeDataRetentionDays}
+          onChange={v => update('freeDataRetentionDays', v)}
+          min={1} max={365}
+        />
+      </SectionCard>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm">注册需要邀请码</div>
-            <div className="text-xs text-pdd-text-secondary">开启后新用户注册必须提供有效邀请码</div>
-          </div>
-          <button
-            onClick={() => setSettings(s => ({ ...s!, inviteCodeRequired: !s!.inviteCodeRequired }))}
-            className={`w-11 h-6 rounded-full transition-colors ${settings.inviteCodeRequired ? 'bg-pdd-primary' : 'bg-pdd-border'}`}
-          >
-            <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.inviteCodeRequired ? 'translate-x-6' : 'translate-x-0.5'}`} />
-          </button>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm">免费用户店铺上限</div>
-            <div className="text-xs text-pdd-text-secondary">免费用户最多可创建的店铺数量</div>
+      {/* 清理策略 */}
+      <SectionCard icon={<Trash2 size={16} className="text-red-400" />} title="清理策略">
+        <div className="space-y-1.5">
+          <div className="text-sm text-pdd-text-primary">自动清理 Cron 表达式</div>
+          <div className="text-xs text-pdd-text-secondary">
+            格式: 分 时 日 月 星期 (例如 0 3 * * * 表示每天凌晨3点)
           </div>
           <input
-            type="number" min={1} max={50}
-            value={settings.freeUserStoreLimit}
-            onChange={e => setSettings(s => ({ ...s!, freeUserStoreLimit: Number(e.target.value) }))}
-            className="bg-pdd-bg border border-pdd-border rounded-lg px-3 py-2 text-sm w-24 outline-none"
+            type="text" value={settings.cleanupCron}
+            onChange={e => update('cleanupCron', e.target.value)}
+            className="w-full px-3 py-2 rounded-lg border border-pdd-border bg-pdd-bg text-sm outline-none focus:border-pdd-primary"
+            placeholder="0 3 * * *"
           />
         </div>
-      </div>
+        <NumberRow
+          label="数据保留天数" hint="超过该天数的历史数据将被清理"
+          value={settings.dataRetentionDays}
+          onChange={v => update('dataRetentionDays', v)}
+          min={30} max={3650}
+        />
+      </SectionCard>
+
+      {/* 安全设置 */}
+      <SectionCard icon={<Shield size={16} className="text-purple-400" />} title="安全设置">
+        <NumberRow
+          label="登录尝试次数限制" hint="连续失败超过此次数将临时锁定"
+          value={settings.maxLoginAttempts}
+          onChange={v => update('maxLoginAttempts', v)}
+          min={3} max={20}
+        />
+        <NumberRow
+          label="Token 有效期（分钟）" hint="访问令牌的有效时长"
+          value={settings.tokenExpiresMinutes}
+          onChange={v => update('tokenExpiresMinutes', v)}
+          min={5} max={1440}
+        />
+      </SectionCard>
+
+      {/* 通知设置 */}
+      <SectionCard icon={<Bell size={16} className="text-cyan-400" />} title="通知设置">
+        <div className="space-y-1.5">
+          <div className="text-sm text-pdd-text-primary">企业微信 Webhook</div>
+          <div className="text-xs text-pdd-text-secondary">接收系统通知的企业微信机器人 Webhook 地址</div>
+          <input
+            type="text" value={settings.wecomWebhook}
+            onChange={e => update('wecomWebhook', e.target.value)}
+            placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."
+            className="w-full px-3 py-2 rounded-lg border border-pdd-border bg-pdd-bg text-sm outline-none focus:border-pdd-primary"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <div className="text-sm text-pdd-text-primary">钉钉 Webhook</div>
+          <div className="text-xs text-pdd-text-secondary">接收系统通知的钉钉机器人 Webhook 地址</div>
+          <input
+            type="text" value={settings.dingtalkWebhook}
+            onChange={e => update('dingtalkWebhook', e.target.value)}
+            placeholder="https://oapi.dingtalk.com/robot/send?access_token=..."
+            className="w-full px-3 py-2 rounded-lg border border-pdd-border bg-pdd-bg text-sm outline-none focus:border-pdd-primary"
+          />
+        </div>
+      </SectionCard>
 
       {/* AI 配置 */}
-      <div className="bg-pdd-card p-4 rounded-xl border border-pdd-border space-y-4">
-        <h3 className="text-sm font-semibold flex items-center gap-2">
-          <Brain size={14} className="text-purple-500" />
-          AI 分析配置
-        </h3>
-        <p className="text-xs text-pdd-text-secondary">
-          配置 AI 分析功能，免费用户无法使用 AI 分析。如果未配置 API Key，所有用户看到的 AI 入口将显示"AI 分析暂未开启"。
+      <SectionCard icon={<Brain size={16} className="text-purple-400" />} title="AI 分析配置">
+        <p className="text-xs text-pdd-text-secondary -mt-1">
+          配置 AI 分析功能。如果未配置 API Key，所有用户的 AI 入口将显示未开启状态。
         </p>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm">启用 AI 分析</div>
-            <div className="text-xs text-pdd-text-secondary">开启后全功能会员可使用 AI 分析</div>
-          </div>
-          <button
-            onClick={() => setSettings(s => ({ ...s!, aiEnabled: !s!.aiEnabled }))}
-            className={`w-11 h-6 rounded-full transition-colors ${settings.aiEnabled ? 'bg-purple-500' : 'bg-pdd-border'}`}
-          >
-            <div className={`w-5 h-5 bg-white rounded-full shadow transition-transform ${settings.aiEnabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
-          </button>
-        </div>
+        <ToggleRow
+          label="启用 AI 分析"
+          hint="开启后全功能会员可使用 AI 分析"
+          checked={settings.aiEnabled}
+          onChange={v => update('aiEnabled', v)}
+          activeColor="bg-purple-500"
+        />
 
-        <div>
-          <div className="text-sm mb-1 flex items-center gap-2">
-            <Key size={12} className="text-pdd-text-secondary" />
-            API Key
+        <div className="space-y-1.5">
+          <div className="text-sm text-pdd-text-primary flex items-center gap-2">
+            <Key size={12} className="text-pdd-text-secondary" /> API Key
           </div>
-          <div className="text-xs text-pdd-text-secondary mb-2">
+          <div className="text-xs text-pdd-text-secondary">
             填入 AI 服务的 API Key（支持 Claude API / OpenAI API）
           </div>
           <div className="flex gap-2">
             <input
               type={showApiKey ? 'text' : 'password'}
               value={settings.aiApiKey}
-              onChange={e => setSettings(s => ({ ...s!, aiApiKey: e.target.value }))}
+              onChange={e => update('aiApiKey', e.target.value)}
               placeholder="sk-..."
               className="flex-1 px-3 py-2 rounded-lg border border-pdd-border bg-pdd-bg text-sm outline-none focus:border-pdd-primary"
             />
             <button
               onClick={() => setShowApiKey(!showApiKey)}
-              className="px-3 py-2 rounded-lg border border-pdd-border text-xs text-pdd-text-secondary hover:bg-pdd-bg"
+              className="px-3 py-2 rounded-lg border border-pdd-border text-xs text-pdd-text-secondary hover:bg-pdd-bg flex items-center gap-1"
             >
+              {showApiKey ? <EyeOff size={12} /> : <Eye size={12} />}
               {showApiKey ? '隐藏' : '显示'}
             </button>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <div className="text-sm mb-1 flex items-center gap-2">
-              <Hash size={12} className="text-pdd-text-secondary" />
-              每日调用上限
+          <div className="space-y-1.5">
+            <div className="text-sm text-pdd-text-primary flex items-center gap-2">
+              <Hash size={12} className="text-pdd-text-secondary" /> 每日调用上限
             </div>
-            <div className="text-xs text-pdd-text-secondary mb-2">
-              每个全功能会员每天最大调用次数
-            </div>
+            <div className="text-xs text-pdd-text-secondary">每个全功能会员每天最大调用次数</div>
             <input
               type="number" min={1} max={1000}
               value={settings.aiDailyLimit}
-              onChange={e => setSettings(s => ({ ...s!, aiDailyLimit: Number(e.target.value) }))}
+              onChange={e => update('aiDailyLimit', Number(e.target.value))}
               className="w-full px-3 py-2 rounded-lg border border-pdd-border bg-pdd-bg text-sm outline-none focus:border-pdd-primary"
             />
           </div>
-          <div>
-            <div className="text-sm mb-1 flex items-center gap-2">
-              <Brain size={12} className="text-pdd-text-secondary" />
-              AI 模型
+          <div className="space-y-1.5">
+            <div className="text-sm text-pdd-text-primary flex items-center gap-2">
+              <Brain size={12} className="text-pdd-text-secondary" /> AI 模型
             </div>
-            <div className="text-xs text-pdd-text-secondary mb-2">
-              选择使用的 AI 模型
-            </div>
+            <div className="text-xs text-pdd-text-secondary">选择使用的 AI 模型</div>
             <select
               value={settings.aiModel}
-              onChange={e => setSettings(s => ({ ...s!, aiModel: e.target.value }))}
+              onChange={e => update('aiModel', e.target.value)}
               className="w-full px-3 py-2 rounded-lg border border-pdd-border bg-pdd-bg text-sm outline-none"
             >
               <option value="claude-sonnet-4-6">Claude Sonnet 4.6</option>
@@ -194,18 +250,78 @@ export default function AdminSettings() {
             </select>
           </div>
         </div>
-      </div>
+      </SectionCard>
 
       {/* 保存按钮 */}
-      <div className="pt-2">
+      <div className="flex items-center gap-3 pt-2">
         <button
           onClick={handleSave}
           disabled={saving}
-          className="px-6 py-2.5 bg-pdd-primary text-white rounded-lg text-sm disabled:opacity-50 hover:bg-pdd-primary/90 transition-colors"
+          className="px-6 py-2.5 bg-pdd-primary text-white rounded-lg text-sm font-medium
+            disabled:opacity-50 hover:bg-pdd-primary/90 transition-colors flex items-center gap-2"
         >
+          <Save size={14} />
           {saving ? '保存中...' : '保存设置'}
         </button>
       </div>
+    </div>
+  );
+}
+
+/* ==================== 子组件 ==================== */
+
+function SectionCard({ icon, title, children }: {
+  icon: React.ReactNode; title: string; children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-pdd-card p-4 rounded-xl border border-pdd-border space-y-3">
+      <h3 className="text-sm font-semibold text-pdd-text-primary flex items-center gap-2">
+        {icon} {title}
+      </h3>
+      {children}
+    </div>
+  );
+}
+
+function ToggleRow({ label, hint, checked, onChange, activeColor }: {
+  label: string; hint: string; checked: boolean;
+  onChange: (v: boolean) => void; activeColor?: string;
+}) {
+  const color = activeColor || 'bg-pdd-primary';
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <div className="text-sm text-pdd-text-primary">{label}</div>
+        <div className="text-xs text-pdd-text-secondary">{hint}</div>
+      </div>
+      <button
+        onClick={() => onChange(!checked)}
+        className={'w-11 h-6 rounded-full transition-colors ' + (checked ? color : 'bg-pdd-border')}
+      >
+        <div className={'w-5 h-5 bg-white rounded-full shadow transition-transform ' +
+          (checked ? 'translate-x-6' : 'translate-x-0.5')}
+        />
+      </button>
+    </div>
+  );
+}
+
+function NumberRow({ label, hint, value, onChange, min, max }: {
+  label: string; hint: string; value: number;
+  onChange: (v: number) => void; min?: number; max?: number;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <div>
+        <div className="text-sm text-pdd-text-primary">{label}</div>
+        <div className="text-xs text-pdd-text-secondary">{hint}</div>
+      </div>
+      <input
+        type="number" min={min} max={max}
+        value={value}
+        onChange={e => onChange(Number(e.target.value))}
+        className="bg-pdd-bg border border-pdd-border rounded-lg px-3 py-2 text-sm w-24 outline-none text-center"
+      />
     </div>
   );
 }

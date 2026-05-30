@@ -1,23 +1,41 @@
 {
   "version": 1,
   "skills": {
-    "skill-creator": {
-      "source": "anthropics/skills",
+    "debugger": {
+      "source": "shubhamsaboo/awesome-llm-apps",
       "sourceType": "github",
-      "skillPath": "skills/skill-creator/SKILL.md",
-      "computedHash": "7e3c9cd74e9e2b4828527a857170e86310f2dab5ea8030a9043df2c7e6c88857"
-    },
-    "ui-design": {
-      "source": "shajith003/awesome-claude-skills",
-      "sourceType": "github",
-      "skillPath": "ui-design/SKILL.md",
-      "computedHash": "44b4e7f6fe923ac179a556feeea1feecf10227fceca0fc890abf921895d6a665"
+      "skillPath": "awesome_agent_skills/debugger/SKILL.md",
+      "computedHash": "23565496cf079e75ef18f4f06d7703dad0d96b2a2be29f5b9da159fc50278b78"
     },
     "karpathy-guidelines": {
       "source": "forrestchang/andrej-karpathy-skills",
       "sourceType": "github",
       "skillPath": "skills/karpathy-guidelines/SKILL.md",
       "computedHash": "e787761ddd1a416764826cfb3b894161cba62a6fc525a9249ba6cadefe2fc01a"
+    },
+    "skill-creator": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "skillPath": "skills/skill-creator/SKILL.md",
+      "computedHash": "7e3c9cd74e9e2b4828527a857170e86310f2dab5ea8030a9043df2c7e6c88857"
+    },
+    "smart-explore": {
+      "source": "thedotmack/claude-mem",
+      "sourceType": "github",
+      "skillPath": "plugin/skills/smart-explore/SKILL.md",
+      "computedHash": "624fc0e9b63e6e6176f5132eaba4bb4f05fe66fb998bbccc0272eff4e70e36e9"
+    },
+    "test-engineer": {
+      "source": "caomeiyouren/momei",
+      "sourceType": "github",
+      "skillPath": ".github/skills/test-engineer/SKILL.md",
+      "computedHash": "5a176d1ba4c6bd1a2df527afd646446167574c43d983cb8cd17776ac35e44989"
+    },
+    "ui-design": {
+      "source": "shajith003/awesome-claude-skills",
+      "sourceType": "github",
+      "skillPath": "ui-design/SKILL.md",
+      "computedHash": "44b4e7f6fe923ac179a556feeea1feecf10227fceca0fc890abf921895d6a665"
     }
   }
 }

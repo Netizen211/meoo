@@ -42,7 +42,7 @@ function SortableItem({ id, children }: SortableItemProps) {
 }
 
 export default function ProductPage() {
-  const { currentDisplayData, productCosts, customDeductions, taxConfigs, defaultCostRatio, packagingFeePerOrder, shippingFeePerOrder, platformCommissionRate, insuranceFeePerOrder, orderFinancialActuals, abnormalOrders } = useData();
+  const { currentDisplayData, productCosts, customDeductions, taxConfigs, defaultCostRatio, packagingFeePerOrder, shippingFeePerOrder, platformCommissionRate, insuranceFeePerOrder, orderFinancialActuals, abnormalOrders, serverProducts, serverDashboard } = useData();
   const { isPaid } = useAuth();
   const tf = useTimeFilter('7', 'day');
   const { timeRange, granularity, compareEnabled, setTimeRange, setGranularity, setCompareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange, setCustomRange, setQuickRange, savedRanges, saveCurrentRange, deleteSavedRange, applySavedRange } = tf;

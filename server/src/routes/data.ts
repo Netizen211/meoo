@@ -31,6 +31,30 @@ router.post('/sync', requireAuth, async (req: Request, res: Response) => {
       });
     }
 
+    // 隐私合规检查：禁止上传含个人信息的字段
+    const PROHIBITED_FIELDS = ['收货人', '收货人姓名', '收件人', '收货人手机', '收货人电话',
+      '手机号', '买家手机', '收货地址', '详细地址', '街道/镇', '街道', '镇', '区',
+      '买家留言', '商家备注'];
+    const foundProhibited: string[] = [];
+    for (const cat of ['orders', 'afterSaleRecords'] as const) {
+      if (data[cat] && Array.isArray(data[cat]) && data[cat].length > 0) {
+        const fields = Object.keys(data[cat][0]);
+        for (const f of PROHIBITED_FIELDS) {
+          if (fields.includes(f) && !foundProhibited.includes(f)) {
+            foundProhibited.push(f);
+          }
+        }
+      }
+    }
+    if (foundProhibited.length > 0) {
+      res.status(400).json({
+        success: false,
+        error: `数据包含个人信息字段：${foundProhibited.join('、')}。请在导出时去掉这些列后重新上传，保护买家隐私。`,
+        prohibitedFields: foundProhibited,
+      });
+      return;
+    }
+
     const mergeStats: Record<string, { added: number; skipped: number; total: number }> = {};
 
     // 智能合并各类数据
