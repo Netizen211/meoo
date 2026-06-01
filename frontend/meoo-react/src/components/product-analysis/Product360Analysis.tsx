@@ -1615,107 +1615,139 @@ export default function Product360Analysis({
       {/* 概览模式：只展示核心指标卡片 */}
       {activeTab === 'overview' && (
         <div className="space-y-3">
-          {/* 核心数据概览 */}
-          <div className="bg-pdd-card rounded-xl border border-pdd-border p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h4 className="text-sm font-semibold text-pdd-text">核心指标概览</h4>
-              <button
-                onClick={() => setShowFullAnalysis(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-pdd-danger/10 text-pdd-danger hover:bg-pdd-danger/10 transition-colors text-xs font-medium shrink-0"
-              >
-                <Eye size={14} />
-                查看完整分析
-              </button>
+          {/* 核心数据概览 - 重构为现代化卡片 */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-indigo-400 to-indigo-600 flex items-center justify-center">
+                    <BarChart3 size={14} className="text-white" />
+                  </div>
+                  核心指标概览
+                </h4>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                    ID: {product.productId}
+                  </span>
+                  <button
+                    onClick={() => setShowFullAnalysis(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-indigo-500 to-indigo-600 text-white hover:from-indigo-600 hover:to-indigo-700 transition-all text-xs font-medium shadow-sm shadow-indigo-200"
+                  >
+                    <Zap size={13} />
+                    深度解析
+                  </button>
+                </div>
+              </div>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-              <div className="bg-pdd-bg rounded-lg p-3 text-center min-h-[72px] flex flex-col justify-center">
-                <div className="text-xs text-pdd-text-secondary mb-1 whitespace-nowrap">GMV</div>
-                <div className="text-base md:text-lg font-bold text-pdd-info">¥{product.gmv.toFixed(0)}</div>
-              </div>
-              <div className="bg-pdd-bg rounded-lg p-3 text-center min-h-[72px] flex flex-col justify-center">
-                <div className="text-xs text-pdd-text-secondary mb-1 whitespace-nowrap">实收</div>
-                <div className="text-base md:text-lg font-bold text-pdd-success">¥{product.revenue.toFixed(0)}</div>
-              </div>
-              <div className="bg-pdd-bg rounded-lg p-3 text-center min-h-[72px] flex flex-col justify-center">
-                <div className="text-xs text-pdd-text-secondary mb-1 whitespace-nowrap">净利润</div>
-                <div className={`text-base md:text-lg font-bold ${product.netProfit >= 0 ? 'text-pdd-success' : 'text-pdd-danger'}`}>
-                  ¥{product.netProfit.toFixed(0)}
-                </div>
-              </div>
-              <div className="bg-pdd-bg rounded-lg p-3 text-center min-h-[72px] flex flex-col justify-center">
-                <div className="text-xs text-pdd-text-secondary mb-1 whitespace-nowrap">利润率</div>
-                <div className={`text-base md:text-lg font-bold ${product.profitRate >= 0 ? 'text-pdd-success' : 'text-pdd-danger'}`}>
-                  {product.profitRate.toFixed(1)}%
-                </div>
+
+            {/* KPI Grid */}
+            <div className="p-5">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {[
+                  { label: 'GMV', value: `¥${product.gmv.toFixed(0)}`, sub: `${product.orders}笔订单`, color: '#6366f1', bg: 'from-indigo-50 to-indigo-100', icon: '📦', trend: gmvTrend },
+                  { label: '实收金额', value: `¥${product.revenue.toFixed(0)}`, sub: `客单价 ¥${product.avgOrderValue.toFixed(0)}`, color: '#10b981', bg: 'from-emerald-50 to-emerald-100', icon: '💰', trend: undefined },
+                  { label: '净利润', value: `¥${product.netProfit.toFixed(0)}`, sub: `利润率 ${product.profitRate.toFixed(1)}%`, color: product.netProfit >= 0 ? '#8b5cf6' : '#ef4444', bg: product.netProfit >= 0 ? 'from-purple-50 to-purple-100' : 'from-red-50 to-red-100', icon: product.netProfit >= 0 ? '📈' : '📉', trend: undefined },
+                  { label: 'ROI', value: `${product.roi.toFixed(2)}x`, sub: `花费 ¥${product.promoCost.toFixed(0)}`, color: product.roi >= 1 ? '#f59e0b' : '#ef4444', bg: product.roi >= 1 ? 'from-amber-50 to-amber-100' : 'from-red-50 to-red-100', icon: '🎯', trend: undefined },
+                ].map(card => (
+                  <motion.div
+                    key={card.label}
+                    whileHover={{ y: -2, boxShadow: '0 8px 25px rgba(0,0,0,0.08)' }}
+                    className="relative overflow-hidden rounded-xl border border-gray-100 bg-white p-4 transition-all cursor-default group"
+                  >
+                    {/* Background gradient accent */}
+                    <div className={`absolute top-0 right-0 w-20 h-20 bg-gradient-to-bl ${card.bg} rounded-bl-full opacity-30 group-hover:opacity-50 transition-opacity`} />
+
+                    <div className="relative">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">{card.label}</span>
+                        <span className="text-lg">{card.icon}</span>
+                      </div>
+                      <div className="text-xl font-bold font-mono tracking-tight" style={{ color: card.color }}>
+                        {card.value}
+                      </div>
+                      <div className="text-[11px] text-gray-400 mt-1">{card.sub}</div>
+                      {card.trend !== undefined && (
+                        <div className={`flex items-center gap-1 mt-2 text-xs font-medium ${card.trend >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                          {card.trend >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                          {Math.abs(card.trend).toFixed(1)}% vs 上期
+                        </div>
+                      )}
+                    </div>
+                  </motion.div>
+                ))}
               </div>
             </div>
           </div>
 
-          {/* 关键运营指标 */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div className="bg-pdd-card rounded-xl border border-pdd-border p-4">
-              <h4 className="text-sm font-semibold text-pdd-text mb-3">销售数据</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary shrink-0">订单数</span>
-                  <span className="font-mono font-medium ml-2">{product.orders}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary shrink-0">销量</span>
-                  <span className="font-mono font-medium ml-2">{product.sales}件</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary shrink-0">客单价</span>
-                  <span className="font-mono font-medium ml-2">¥{product.avgOrderValue.toFixed(2)}</span>
-                </div>
+          {/* 关键运营指标 - 三列卡片 */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* 销售数据 */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-50 bg-gradient-to-r from-blue-50 to-white">
+                <h4 className="text-xs font-bold text-blue-700 flex items-center gap-2">
+                  <ShoppingCart size={13} /> 销售数据
+                </h4>
+              </div>
+              <div className="p-4 space-y-3">
+                {[
+                  { label: '订单数', value: product.orders, unit: '笔' },
+                  { label: '销量', value: product.sales, unit: '件' },
+                  { label: '客单价', value: `¥${product.avgOrderValue.toFixed(0)}`, unit: '' },
+                ].map((row, i) => (
+                  <div key={i} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500">{row.label}</span>
+                    <span className="text-sm font-semibold font-mono text-gray-800">{row.value}<span className="text-[10px] text-gray-400 ml-0.5">{row.unit}</span></span>
+                  </div>
+                ))}
               </div>
             </div>
-            <div className="bg-pdd-card rounded-xl border border-pdd-border p-4">
-              <h4 className="text-sm font-semibold text-pdd-text mb-3">成本利润</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary shrink-0">总成本</span>
-                  <span className="font-mono font-medium ml-2 text-pdd-danger">¥{(product.totalCost || 0).toFixed(0)}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary shrink-0">毛利润</span>
-                  <span className={`font-mono font-medium ml-2 ${(product.grossProfit || 0) >= 0 ? 'text-pdd-success' : 'text-pdd-danger'}`}>
-                    ¥{(product.grossProfit || 0).toFixed(0)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary shrink-0">净利润</span>
-                  <span className={`font-mono font-medium ml-2 ${product.netProfit >= 0 ? 'text-pdd-success' : 'text-pdd-danger'}`}>
-                    ¥{product.netProfit.toFixed(0)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm pt-2 border-t border-pdd-border">
-                  <span className="text-pdd-text-secondary font-medium shrink-0">是否盈利</span>
-                  <span className={`px-2 py-0.5 rounded text-xs font-bold ml-2 ${product.netProfit >= 0 ? 'bg-pdd-success/10 text-green-700' : 'bg-pdd-danger/10 text-red-700'}`}>
+
+            {/* 成本利润 */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-50 bg-gradient-to-r from-purple-50 to-white">
+                <h4 className="text-xs font-bold text-purple-700 flex items-center gap-2">
+                  <DollarSign size={13} /> 成本利润
+                </h4>
+              </div>
+              <div className="p-4 space-y-3">
+                {[
+                  { label: '总成本', value: `¥${(product.totalCost || 0).toFixed(0)}`, color: 'text-red-500' },
+                  { label: '毛利润', value: `¥${(product.grossProfit || 0).toFixed(0)}`, color: (product.grossProfit || 0) >= 0 ? 'text-emerald-500' : 'text-red-500' },
+                  { label: '净利润', value: `¥${product.netProfit.toFixed(0)}`, color: product.netProfit >= 0 ? 'text-purple-600' : 'text-red-500' },
+                ].map((row, i) => (
+                  <div key={i} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500">{row.label}</span>
+                    <span className={`text-sm font-bold font-mono ${row.color}`}>{row.value}</span>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-gray-100">
+                  <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold ${product.netProfit >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-700'}`}>
+                    {product.netProfit >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
                     {product.netProfit >= 0 ? '盈利' : '亏损'}
                   </span>
                 </div>
               </div>
             </div>
-            <div className="bg-pdd-card rounded-xl border border-pdd-border p-4">
-              <h4 className="text-sm font-semibold text-pdd-text mb-3">售后质量</h4>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary shrink-0">退款率</span>
-                  <span className={`font-mono font-medium ml-2 ${product.refundRate > 10 ? 'text-pdd-danger' : 'text-pdd-success'}`}>
-                    {product.refundRate.toFixed(1)}%
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary shrink-0">售后率</span>
-                  <span className={`font-mono font-medium ml-2 ${product.afterSaleRate > 10 ? 'text-pdd-danger' : 'text-pdd-success'}`}>
-                    {product.afterSaleRate.toFixed(1)}%
-                  </span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary shrink-0">售后订单</span>
-                  <span className="font-mono font-medium ml-2">{product.afterSaleCount}单</span>
-                </div>
+
+            {/* 售后质量 */}
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-50 bg-gradient-to-r from-orange-50 to-white">
+                <h4 className="text-xs font-bold text-orange-700 flex items-center gap-2">
+                  <Shield size={13} /> 售后质量
+                </h4>
+              </div>
+              <div className="p-4 space-y-3">
+                {[
+                  { label: '退款率', value: `${product.refundRate.toFixed(1)}%`, alert: product.refundRate > 10 },
+                  { label: '售后率', value: `${product.afterSaleRate.toFixed(1)}%`, alert: product.afterSaleRate > 10 },
+                  { label: '售后订单', value: `${product.afterSaleCount}单`, alert: false },
+                ].map((row, i) => (
+                  <div key={i} className="flex justify-between items-center">
+                    <span className="text-xs text-gray-500">{row.label}</span>
+                    <span className={`text-sm font-bold font-mono ${row.alert ? 'text-red-500' : 'text-gray-800'}`}>{row.value}</span>
+                  </div>
+                ))}
               </div>
             </div>
           </div>

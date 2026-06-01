@@ -2108,13 +2108,24 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                 className="w-full pl-7 pr-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400 bg-gray-50 focus:bg-white transition-colors" />
             </div>
 
-            {selectedStats && (
+            {serverLoading && (
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs text-indigo-500 font-medium">正在从服务器加载数据...</span>
+              </div>
+            )}
+            {!serverLoading && selectedStats && (
               <div className="flex items-center gap-2 min-w-0">
                 <span className="text-sm font-bold text-gray-800 truncate max-w-[200px]">{selectedStats.productName}</span>
                 <span className="text-[10px] text-gray-400 font-mono bg-gray-100 px-1.5 py-0.5 rounded">{selectedStats.productCode || selectedId}</span>
               </div>
             )}
-            {!selectedStats && <span className="text-xs text-gray-400 italic">选择商品开始深度分析</span>}
+            {!serverLoading && !selectedStats && selectedId && (
+              <span className="text-xs text-amber-500 font-medium">⏳ 正在计算商品数据，请稍候...</span>
+            )}
+            {!serverLoading && !selectedStats && !selectedId && (
+              <span className="text-xs text-gray-400 italic">← 从左侧列表选择商品开始深度分析</span>
+            )}
 
             <div className="flex-1" />
 
@@ -2188,14 +2199,32 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
             {/* 右侧分析主内容 — 单页滚动 */}
             <div className="flex-1 overflow-y-auto relative">
-              {!selectedStats ? (
+              {serverLoading ? (
+                <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-5">
+                  <div className="relative">
+                    <div className="w-20 h-20 rounded-2xl bg-indigo-50 flex items-center justify-center">
+                      <BarChart3 size={36} className="text-indigo-300" />
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-8 h-8 border-3 border-indigo-400 border-t-transparent rounded-full animate-spin" />
+                  </div>
+                  <div className="text-center">
+                    <div className="text-sm font-semibold text-indigo-600 mb-1">服务器计算中</div>
+                    <div className="text-xs text-gray-400">正在拉取商品深度数据，请稍候...</div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {[0,1,2].map(i => (
+                      <div key={i} className="w-2 h-2 rounded-full bg-indigo-300 animate-bounce" style={{animationDelay: `${i*0.15}s`}} />
+                    ))}
+                  </div>
+                </div>
+              ) : !selectedStats ? (
                 <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-4">
                   <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center">
                     <Search size={28} className="opacity-30" />
                   </div>
                   <div className="text-center">
-                    <div className="text-sm font-medium text-gray-500 mb-1">选择商品开始分析</div>
-                    <div className="text-xs text-gray-400">搜索或从左侧列表选择</div>
+                    <div className="text-sm font-medium text-gray-500 mb-1">{selectedId ? '暂无该商品数据' : '选择商品开始分析'}</div>
+                    <div className="text-xs text-gray-400">{selectedId ? '请确认该商品有订单数据，或刷新页面重试' : '搜索或从左侧列表选择'}</div>
                   </div>
                   {!showSidebar && <button onClick={() => setShowSidebar(true)} className="text-xs text-indigo-500 hover:text-indigo-600 underline">打开商品列表</button>}
                 </div>
