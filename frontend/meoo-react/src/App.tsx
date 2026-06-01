@@ -177,10 +177,17 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       storesRef.current = mapped;
       setStores(mapped);
       setStoresLoaded(true);
-      // ★ 自动选中第一个真实店铺（解决刷新后无选中店铺导致数据空白）
-      const realStore = mapped.find(s => s.id !== ALL_STORES_ID);
-      if (realStore && wasEmpty) {
-        setCurrentStore(realStore);
+      // ★ 自动选中店铺（双层策略）
+      // 策略1：从 localStorage 恢复上次选中的店铺（刷新不丢）
+      const lastStoreId = (() => { try { return localStorage.getItem('dianfx_last_store'); } catch { return null; } })();
+      const lastStore = lastStoreId ? mapped.find(s => s.id === lastStoreId) : null;
+      // 策略2：选第一个非演示店铺
+      const realStores = mapped.filter(s => s.id !== ALL_STORES_ID && !s.name.includes('演示'));
+      const nonDemoStore = realStores.length > 0 ? realStores[0] : mapped.find(s => s.id !== ALL_STORES_ID);
+      const autoStore = lastStore || nonDemoStore;
+      if (autoStore && (wasEmpty || !storesRef.current.some(s => s.id === currentStore?.id))) {
+        setCurrentStore(autoStore);
+        try { localStorage.setItem('dianfx_last_store', autoStore.id); } catch {}
       }
       return mapped;
     } else if (res.success) {
@@ -208,7 +215,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const switchStore = useCallback((id: string) => {
     // 使用 ref 避免闭包过期问题
     const found = storesRef.current.find(s => s.id === id);
-    if (found) setCurrentStore(found);
+    if (found) {
+      setCurrentStore(found);
+      try { localStorage.setItem('dianfx_last_store', id); } catch {}
+    }
   }, []);
 
   const deleteStore = useCallback(async (id: string) => {
@@ -482,6 +492,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }).catch((e: any) => {
       console.error('[data] Load failed:', e?.message || e);
+      // ★ 失败兜底：30秒后重试一次
+      setTimeout(() => {
+        const realStores = stores.filter(s => s.id !== ALL_STORES_ID);
+        if (realStores.length) {
+          console.log('[data] Retrying data load...');
+          realStores.forEach(store => pullStoreData(store.id).then(sd => {
+            if (sd?.data) setStoreDataMap(prev => ({...prev, [store.id]: {...prev[store.id], ...sd.data}}));
+          }).catch(() => {}));
+        }
+      }, 30000);
     }).finally(() => setDataLoading(false));
   }, [user, stores]);
 
