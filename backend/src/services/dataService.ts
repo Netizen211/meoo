@@ -24,6 +24,33 @@ export async function saveStoreData(
     });
 }
 
+// ★ 字段名标准化（与 analyticsService 保持一致）
+function normalizeFieldName(name: string): string {
+  let s = String(name).replace(/[﻿ \t\r\n]+/g, '').trim();
+  s = s.replace(/（/g, '(').replace(/）/g, ')');
+  s = s.replace(/＋/g, '+').replace(/－/g, '-');
+  s = s.replace(/\s+\(/g, '(').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+  const ALIASES: Record<string, string> = {
+    '商家实收(元)': '商家实收金额(元)',
+    '用户实付(元)': '用户实付金额(元)',
+    '退款(元)': '退款金额(元)',
+    '技术服务费(元)': '平台技术服务费(元)',
+    '成交量(件)': '商品数量(件)',
+    '成交金额(元)': '交易额(元)',
+    '快递费(元)': '邮费(元)',
+  };
+  return ALIASES[s] || s;
+}
+function normalizeRecordKeys(record: any): any {
+  if (!record || typeof record !== 'object') return record;
+  const out: any = {};
+  for (const [key, value] of Object.entries(record)) {
+    const nk = normalizeFieldName(key);
+    if (!(nk in out)) out[nk] = value;
+  }
+  return out;
+}
+
 export async function loadStoreData(storeId: string): Promise<StoreDataItem | null> {
   const rows = await db('store_data').where('store_id', storeId);
 
@@ -42,7 +69,8 @@ export async function loadStoreData(storeId: string): Promise<StoreDataItem | nu
 
   for (const row of rows) {
     try {
-      data[row.category] = JSON.parse(row.payload_json);
+      const parsed = JSON.parse(row.payload_json);
+      data[row.category] = Array.isArray(parsed) ? parsed.map(normalizeRecordKeys) : [];
     } catch {
       data[row.category] = [];
     }

@@ -62,22 +62,61 @@ router.post('/sync', requireAuth, validate(syncSchema), async (req: Request, res
 
     const mergeStats: Record<string, { added: number; skipped: number; total: number }> = {};
 
+    // ★ 字段名标准化 — 确保存入MySQL的列名与后端KPI计算使用的名称一致
+    // 前端使用 findField() 做模糊匹配，但后端 analyticsService 使用硬编码精确匹配
+    // 此处统一规范化：全角括号→半角，去除括号内空格，常见别名映射
+    const normalizeFieldName = (name: string): string => {
+      let s = String(name).replace(/[﻿ \t\r\n]+/g, '').trim();
+      s = s.replace(/（/g, '(').replace(/）/g, ')');
+      s = s.replace(/＋/g, '+').replace(/－/g, '-');
+      s = s.replace(/\s+\(/g, '(').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+      const ALIASES: Record<string, string> = {
+        '商家实收金额(元)': '商家实收金额(元)',
+        '商家实收(元)': '商家实收金额(元)',
+        '用户实付金额(元)': '用户实付金额(元)',
+        '用户实付(元)': '用户实付金额(元)',
+        '退款金额(元)': '退款金额(元)',
+        '退款(元)': '退款金额(元)',
+        '技术服务费(元)': '平台技术服务费(元)',
+        '成交量(件)': '商品数量(件)',
+        '成交花费(元)': '成交花费(元)',
+        '成交金额(元)': '交易额(元)',
+        '净交易额(元)': '交易额(元)',
+        '快递费(元)': '邮费(元)',
+        '保费(元)': '保费(元)',
+      };
+      return ALIASES[s] || s;
+    };
+    const normalizeRecordKeys = (record: any): any => {
+      if (!record || typeof record !== 'object') return record;
+      const out: any = {};
+      for (const [key, value] of Object.entries(record)) {
+        const nk = normalizeFieldName(key);
+        if (!(nk in out)) out[nk] = value;
+      }
+      return out;
+    };
+    const normalizeRecordsArray = (arr: any[]): any[] => arr.map(normalizeRecordKeys);
+
     // 智能合并各类数据
     for (const category of DATA_CATEGORIES) {
       const categoryData = data[category];
       if (!categoryData || !Array.isArray(categoryData)) continue;
 
+      // ★ 入库前规范化每条记录的字段名
+      const normalizedCategoryData = normalizeRecordsArray(categoryData);
+
       const existingRow = await db('store_data').where({ store_id: storeId, category }).first();
 
       // 🔴 保护1：空数据不覆盖已有数据
-      if (categoryData.length === 0 && existingRow) {
+      if (normalizedCategoryData.length === 0 && existingRow) {
         const existingLen = existingRow.row_count || 0;
         mergeStats[category] = { added: 0, skipped: 0, total: existingLen };
         continue;
       }
 
-      let merged: any[] = categoryData;
-      let added = categoryData.length;
+      let merged: any[] = normalizedCategoryData;
+      let added = normalizedCategoryData.length;
       let skipped = 0;
 
       if (existingRow) {
@@ -89,7 +128,7 @@ router.post('/sync', requireAuth, validate(syncSchema), async (req: Request, res
             if (keyField) {
               const existingKeys = new Set(existingData.map((item: any) => String(item[keyField] || '').trim()).filter(Boolean));
               const newItems: any[] = [];
-              categoryData.forEach((item: any) => {
+              normalizedCategoryData.forEach((item: any) => {
                 const key = String((item[keyField] || '')).trim();
                 if (key && existingKeys.has(key)) { skipped++; }
                 else { newItems.push(item); if (key) existingKeys.add(key); }

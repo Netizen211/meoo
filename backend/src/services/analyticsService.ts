@@ -11,12 +11,60 @@ function safeStr(v: any): string {
   if (v == null) return '';
   return String(v).replace(/[﻿ \t\r\n\s]+/g, '').trim();
 }
+
+// ★ 字段名标准化 — 解决上传文件列名不一致导致的服务端KPI计算为0的问题
+// 前端使用 findField() 做模糊匹配（去括号/空格等），后端却是硬编码精确匹配
+// 此处在数据加载时统一规范化所有字段名，确保后端 KPI 计算与前端显示一致
+function normalizeFieldName(name: string): string {
+  let s = String(name)
+    .replace(/[﻿ \t\r\n]+/g, '')  // 去除BOM、不间断空格、制表符
+    .trim();
+  // 全角括号→半角
+  s = s.replace(/（/g, '(').replace(/）/g, ')');
+  s = s.replace(/＋/g, '+').replace(/－/g, '-');
+  // 括号内多余空格: "商品总价 (元)" → "商品总价(元)"
+  s = s.replace(/\s+\(/g, '(').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
+  // 映射常见变体
+  const ALIASES: Record<string, string> = {
+    '商家实收金额(元)': '商家实收金额(元)',
+    '商家实收(元)': '商家实收金额(元)',
+    '用户实付金额(元)': '用户实付金额(元)',
+    '用户实付(元)': '用户实付金额(元)',
+    '退款金额(元)': '退款金额(元)',
+    '退款(元)': '退款金额(元)',
+    '技术服务费(元)': '平台技术服务费(元)',
+    '成交量(件)': '商品数量(件)',
+    '成交花费(元)': '成交花费(元)',
+    '成交金额(元)': '交易额(元)',
+    '净交易额(元)': '交易额(元)',
+    '快递费(元)': '邮费(元)',
+    '保费(元)': '保费(元)',
+  };
+  return ALIASES[s] || s;
+}
+
+function normalizeRecordKeys(record: any): any {
+  if (!record || typeof record !== 'object') return record;
+  const out: any = {};
+  for (const [key, value] of Object.entries(record)) {
+    const nk = normalizeFieldName(key);
+    if (!(nk in out)) out[nk] = value;
+  }
+  return out;
+}
+
+function normalizeRecordsArray(arr: any[]): any[] {
+  return arr.map(normalizeRecordKeys);
+}
+
 export async function loadStoreData(storeId: string): Promise<Record<string, any[]>> {
   const rows = await db('store_data').where('store_id', storeId);
   const data: Record<string, any[]> = {};
   for (const row of rows) {
-    try { data[row.category] = JSON.parse(row.payload_json); }
-    catch { data[row.category] = []; }
+    try {
+      const parsed = JSON.parse(row.payload_json);
+      data[row.category] = Array.isArray(parsed) ? normalizeRecordsArray(parsed) : [];
+    } catch { data[row.category] = []; }
   }
   return data;
 }
@@ -43,7 +91,7 @@ export async function loadAllUserStoreData(userId: string): Promise<Record<strin
     try {
       const parsed = JSON.parse(row.payload_json);
       if (Array.isArray(parsed)) {
-        merged[row.category] = [...(merged[row.category] || []), ...parsed];
+        merged[row.category] = [...(merged[row.category] || []), ...normalizeRecordsArray(parsed)];
       }
     } catch { /* skip corrupted data */ }
   }
