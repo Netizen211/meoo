@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-admin/
+*.map
+.env
+/tmp/
+*.tar.gz
+*.backup
+*.bak
+/logs/
+.DS_Store
+Thumbs.db
+*.log

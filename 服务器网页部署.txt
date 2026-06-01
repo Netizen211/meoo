@@ -1,0 +1,178 @@
+# meoo 部署手册 (v2 — 修复版)
+
+> 架构修复：统一API响应格式、批量分析端点、SSE实时同步、毫秒级响应
+
+## 修复内容摘要
+
+| 问题 | 修复 |
+|------|------|
+| API错误响应缺失`success:false` | 全路由统一`{ success: false, error: '...' }` |
+| 前端4次API调用瀑布 | 新增`/analytics/bulk`端点，1次请求获取全部数据 |
+| 多设备/子账号数据不同步 | 前端SSE实时连接 + 后端推送通知 |
+| 端口混乱(3001/3007/3015) | 统一为3007 |
+| Nginx SSE缓冲导致延迟 | 独立SSE location，禁用缓冲 |
+| 后端配置与服务不同步 | SSE推送config:updated事件 |
+
+## 服务器信息
+
+| 项目 | 值 |
+|------|-----|
+| IP | 47.82.120.115 |
+| 地域 | 香港 (HKG) |
+| SSH 端口 | 22 |
+| SSH 用户 | root |
+| SSH 密钥路径 | ~/.ssh/meoo_hk_deploy |
+| 域名 | melody.wang (HTTPS) |
+| 数据库 | MySQL 5.7 (Unix socket) |
+| 数据库名 | meoo_prod |
+| Node版本 | v20 |
+| 进程管理 | PM2 cluster x2 |
+| 内部端口 | 3007 |
+
+## SSH 连接模板
+
+```bash
+ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/meoo_hk_deploy root@47.82.120.115 "命令"
+scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/meoo_hk_deploy 本地文件 root@47.82.120.115:远程路径
+```
+
+## 完整部署流程
+
+### 1. 本地构建前端
+```bash
+cd frontend/meoo-react/
+npx webpack --mode production
+```
+
+### 2. 本地编译后端
+```bash
+cd backend/
+npx tsc
+tar czf /tmp/server.tar.gz dist/ package.json ecosystem.config.js
+```
+
+### 3. 上传前端
+```bash
+scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/meoo_hk_deploy \
+  frontend/meoo-react/dist/bundle.*.js \
+  frontend/meoo-react/dist/index.html \
+  frontend/meoo-react/dist/*.bundle.*.js \
+  root@47.82.120.115:/www/wwwroot/meoo/dist/
+```
+
+### 4. 上传后端+重载
+```bash
+scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/meoo_hk_deploy \
+  /tmp/server.tar.gz root@47.82.120.115:/tmp/
+
+ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/meoo_hk_deploy root@47.82.120.115 "
+  cd /www/wwwroot/meoo/server && \
+  tar xzf /tmp/server.tar.gz && \
+  npm install --production && \
+  pm2 reload meoo-server && \
+  sleep 2 && \
+  curl -s http://localhost:3007/api/v1/health
+"
+```
+
+### 5. 更新Nginx配置（首次部署或配置变更时）
+```bash
+scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/meoo_hk_deploy \
+  frontend/meoo-react/nginx.conf root@47.82.120.115:/tmp/meoo.conf
+
+ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/meoo_hk_deploy root@47.82.120.115 "
+  cp /tmp/meoo.conf /etc/nginx/conf.d/meoo.conf && \
+  nginx -t && systemctl reload nginx
+"
+```
+
+## 一键部署脚本
+
+```bash
+#!/bin/bash
+set -e
+SSH="ssh -o StrictHostKeyChecking=accept-new -i ~/.ssh/meoo_hk_deploy root@47.82.120.115"
+SCP="scp -o StrictHostKeyChecking=accept-new -i ~/.ssh/meoo_hk_deploy"
+
+echo "=== Step 1: 构建前端 ==="
+cd frontend/meoo-react/
+npx webpack --mode production
+cd ../..
+
+echo "=== Step 2: 编译后端 ==="
+cd backend/
+npx tsc
+tar czf /tmp/server.tar.gz dist/ package.json ecosystem.config.js
+cd ..
+
+echo "=== Step 3: 上传前端 ==="
+cd frontend/meoo-react/
+$SCP dist/bundle.*.js dist/index.html dist/*.bundle.*.js root@47.82.120.115:/www/wwwroot/meoo/dist/
+cd ../..
+
+echo "=== Step 4: 上传后端 ==="
+$SCP /tmp/server.tar.gz root@47.82.120.115:/tmp/
+
+echo "=== Step 5: 重载服务 ==="
+$SSH "
+  cd /www/wwwroot/meoo/server && \
+  tar xzf /tmp/server.tar.gz && \
+  npm install --production && \
+  pm2 reload meoo-server && \
+  sleep 2 && \
+  echo 'Health check:' && \
+  curl -s http://localhost:3007/api/v1/health
+"
+
+echo ""
+echo "=== 部署完成! ==="
+echo "访问: https://melody.wang/"
+echo "测试账号: demo888 / 1456"
+```
+
+## 验证检查
+
+```bash
+# 1. 健康检查
+curl -s https://melody.wang/api/v1/health | python3 -m json.tool
+
+# 2. 测试登录 (demo888 / 1456)
+curl -sk -X POST https://melody.wang/api/v1/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"demo888","password":"1456"}'
+
+# 3. 测试批量分析端点
+TOKEN="<从登录获取的accessToken>"
+curl -sk "https://melody.wang/api/v1/analytics/bulk?storeId=__all__" \
+  -H "Authorization: Bearer $TOKEN"
+
+# 4. 数据库备份
+ssh root@47.82.120.115 "/www/wwwroot/meoo/scripts/backup-db.sh"
+```
+
+## 故障排查
+
+| 症状 | 排查命令 |
+|------|---------|
+| 网站打不开 | curl -sk https://melody.wang/ |
+| API 500 | ssh root@... "pm2 logs meoo-server --err --lines 30 --nostream" |
+| PM2挂了 | ssh root@... "pm2 restart meoo-server" |
+| Nginx挂了 | ssh root@... "systemctl status nginx" |
+| 数据库连不上 | ssh root@... "mysql -S /var/lib/mysql/mysql.sock -e 'SELECT 1'" |
+| SSE实时推送失效 | 检查Nginx是否含 `proxy_buffering off;` |
+| 端口被占用 | ssh root@... "lsof -i :3007" |
+| 前端缓存 | Ctrl+Shift+R 硬刷新，等2分钟CDN生效 |
+| 批量端点慢 | 检查store_data表数据量，考虑增加MySQL索引 |
+
+## 重要提醒
+
+1. SSH密钥必须600权限: `chmod 600 ~/.ssh/meoo_hk_deploy`
+2. 前端每次构建contenthash不同，index.html自动引用新文件
+3. 后端npx tsc编译，target ES2020
+4. PM2 cluster x2监听端口3007，Nginx代理443→3007
+5. SSE端点需要Nginx `proxy_buffering off` 才能实时推送
+6. Cloudflare CDN新文件1-2分钟生效
+7. demo888 / 1456 测试账号，拥有完整演示数据
+8. 备份: /www/backups/meoo-db/ 每日2:00自动执行
+9. ★ 批量端点 `/api/v1/analytics/bulk` 是性能关键(缓存TTL=30s)
+10. ★ SSE每60秒自动重连，配置修改实时推送到所有在线设备

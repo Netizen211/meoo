@@ -1,0 +1,63 @@
+{
+  "name": "pdd-order-analyzer",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "webpack serve",
+    "build": "webpack --mode production",
+    "postbuild": "node -e \"const{cpSync}=require('fs');[{s:'演示数据_订单.csv',d:'demo_orders.csv'},{s:'演示数据_商品推广.xlsx',d:'demo_promo.xlsx'},{s:'演示数据_售后.xlsx',d:'demo_aftersale.xlsx'},{s:'演示数据_运费险.xlsx',d:'demo_insurance.xlsx'},{s:'演示数据_货款明细.csv',d:'demo_finance.csv'}].forEach(f=>{try{cpSync('public/assets/'+f.s,'dist/'+f.d)}catch(e){}})\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@dnd-kit/core": "^6.1.0",
+    "@dnd-kit/sortable": "^8.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@emotion/is-prop-valid": "^1.2.2",
+    "date-fns": "^2.30.0",
+    "framer-motion": "^11.16.1",
+    "jszip": "^3.10.1",
+    "lucide-react": "^0.294.0",
+    "papaparse": "^5.4.1",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.8.0",
+    "recharts": "^2.10.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.23.5",
+    "@babel/preset-env": "^7.23.5",
+    "@babel/preset-react": "^7.23.5",
+    "@babel/preset-typescript": "^7.23.5",
+    "@colbymchenry/codegraph": "^0.9.7",
+    "@types/papaparse": "^5.4.1",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "autoprefixer": "^10.4.16",
+    "babel-loader": "^9.1.3",
+    "css-loader": "^6.8.1",
+    "html-webpack-plugin": "^5.5.3",
+    "postcss": "^8.4.31",
+    "postcss-loader": "^7.3.3",
+    "style-loader": "^3.3.3",
+    "tailwindcss": "^3.3.5",
+    "terser-webpack-plugin": "^5.6.0",
+    "typescript": "^5.3.3",
+    "webpack": "^5.89.0",
+    "webpack-cli": "^5.1.4",
+    "webpack-dev-server": "^4.15.1"
+  },
+  "description": "",
+  "main": "bundle.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Netizen211/meoo.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Netizen211/meoo/issues"
+  },
+  "homepage": "https://github.com/Netizen211/meoo#readme"
+}
