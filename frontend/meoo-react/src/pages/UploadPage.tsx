@@ -1171,6 +1171,14 @@ export default function UploadPage() {
 
       addUploadRecord({ fileName: file.name, fileType: detectedType, storeId: targetStoreId, storeName: targetStoreName, rowCount: data.length, fieldCount: fields.length });
 
+      // ★ 零时差：上传完成后自动跳转到对应分析页面
+      setTimeout(() => {
+        if (detectedType === '订单数据') window.location.hash = '#/dashboard';
+        else if (['商品推广数据', '明星店铺数据', '直播推广数据'].includes(detectedType || '')) window.location.hash = '#/promotion';
+        else if (detectedType === '运费险数据') window.location.hash = '#/shipping-insurance';
+        else if (detectedType === '售后数据') window.location.hash = '#/after-sale';
+      }, 300); // 300ms小延迟让上传状态先渲染
+
     })();
 
   }, [getStoreData, setStoreData, addUploadRecord, setDataFilter]);
@@ -1422,6 +1430,13 @@ export default function UploadPage() {
         setDataFilter(targetStoreId);
         setFieldReport({ available: allFields, missing, type: primaryType });
         addUploadRecord({ fileName: file.name, fileType: primaryType, storeId: targetStoreId, storeName: targetStoreName, rowCount: totalRows, fieldCount: allFields.length });
+        // ★ 零时差：上传完成后自动跳转
+        setTimeout(() => {
+          if (primaryType === '订单数据') window.location.hash = '#/dashboard';
+          else if (['商品推广数据', '明星店铺数据', '直播推广数据'].includes(primaryType)) window.location.hash = '#/promotion';
+          else if (primaryType === '运费险数据') window.location.hash = '#/shipping-insurance';
+          else if (primaryType === '售后数据') window.location.hash = '#/after-sale';
+        }, 300);
 
       } catch (err) {
 

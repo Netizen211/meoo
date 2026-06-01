@@ -843,14 +843,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         afterSale: Array.from(newData.availableFields?.afterSale || []),
       };
       const sid = storeId;
+      // ★ 乐观更新：立即刷新本地分析数据（零时差）
+      refreshAnalytics(sid);
+      // ★ 异步同步到服务器（后台进行，不阻塞UI）
       syncStoreData(sid, storeName, slimData as any, {}, [])
         .then(() => {
           setSyncStatus('done');
-          // ★ Layer 1: 同步后直接调 refreshAnalytics 刷新（不走 getBulk 避免 URL 编码问题）
-          refreshAnalytics(sid);
+          refreshAnalytics(sid); // 服务器确认后再刷新一次确保一致
         })
         .catch(e => { console.error('[data] sync error:', e); setSyncStatus('error'); });
-      setTimeout(() => { setSyncStatus(prev => prev === 'done' || prev === 'error' ? 'idle' : prev); }, 3000);
       return { ...prev, [storeId]: newData };
     });
   }, [stores, refreshAnalytics]);
