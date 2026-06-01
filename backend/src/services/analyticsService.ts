@@ -165,6 +165,8 @@ export function computeAllProductStats(
   const orderRefundMap = new Map<string, number>();
   // ★ 单次遍历同时构建 date-GMV 映射（原为独立遍历）
   const dgm: Record<string, { pid: string; gmv: number }[]> = {};
+  // ★ 退款检测兜底：若数据无"退款金额(元)"列，则从"售后状态"字段判断
+  const hasOrderRefundField = orders.some(o => o['退款金额(元)'] !== undefined);
 
   // ★ Pass 1: 单次遍历订单 — 统计 + 日销售 + SKU + 详情 + date-GMV
   orders.forEach((o: any) => {
@@ -183,8 +185,11 @@ export function computeAllProductStats(
     const qty = safeNum(o['商品数量(件)']);
     s.gmv += gmv; s.orders += 1; s.sales += qty;
     s.revenue += revenue; s.refund += refund; s.discount += disc;
-    if (refund > 0) { s.refundCount += 1; const on = safeStr(o['订单号']); if (on) orderRefundMap.set(on + '_' + pid, refund); }
-    s.hasOrderData = true;
+    // ★ 退款检测：优先退款金额字段，兜底售后状态
+    const isRefund = hasOrderRefundField
+      ? refund > 0
+      : (String(o['售后状态'] || '').trim().includes('退款') && String(o['售后状态'] || '').trim() !== '无售后或售后取消');
+    if (isRefund) { s.refundCount += 1; if (hasOrderRefundField) { const on = safeStr(o['订单号']); if (on) orderRefundMap.set(on + '_' + pid, refund); } }
     const dk = safeStr(o['支付时间'] || '').split(' ')[0];
     if (dk && /^\d{4}-\d{2}-\d{2}$/.test(dk)) {
       // 日销售
@@ -331,7 +336,15 @@ export function computeDashboardKPI(data: Record<string, any[]>): any {
   const totalRevenue = sum(orders, '商家实收金额(元)');
   const totalPaid = sum(orders, '用户实付金额(元)');
   const totalRefund = sum(orders, '退款金额(元)');
-  const refundOrders = orders.filter(o => safeNum(o['退款金额(元)']) > 0);
+  // ★ 退款检测兜底：若数据无"退款金额(元)"列，则从"售后状态"字段判断
+  const hasRefundField = orders.some(o => o['退款金额(元)'] !== undefined);
+  const isRefundOrder = (o: any): boolean => {
+    if (hasRefundField) return safeNum(o['退款金额(元)']) > 0;
+    // 兜底：从售后状态判断（匹配前端逻辑）
+    const st = String(o['售后状态'] || '').trim();
+    return st.includes('退款') && st !== '无售后或售后取消';
+  };
+  const refundOrders = orders.filter(isRefundOrder);
   const totalDiscount = sum(orders, '店铺优惠折扣(元)') + sum(orders, '平台优惠折扣(元)') + sum(orders, '多多支付立减金额(元)') + sum(orders, '拼多多优惠券(元)');
   const platformFee = sum(orders, '平台技术服务费(元)');
   const promoCost = sm(promo, ['成交花费(元)', '总花费(元)', '花费(元)']);
@@ -541,14 +554,20 @@ export function computeProductsList(data: Record<string, any[]>, storeId: string
     const costs: Record<string, number> = costsStr ? JSON.parse(costsStr) : {};
 
     const byPid: Record<string, any> = {};
+    const hasProdRefundField = orders.some(o => o['退款金额(元)'] !== undefined);
     orders.forEach(o => {
       const pid = safeStr(o['商品ID'] || o['商品id'] || '');
       if (!byPid[pid]) byPid[pid] = { orders: [], gmv: 0, revenue: 0, refund: 0, refundCnt: 0, name: safeStr(o['商品名称'] || pid) };
       byPid[pid].orders.push(o);
       byPid[pid].gmv += safeNum(o['商品总价(元)']);
       byPid[pid].revenue += safeNum(o['商家实收金额(元)']);
-      byPid[pid].refund += safeNum(o['退款金额(元)']);
-      if (safeNum(o['退款金额(元)']) > 0) byPid[pid].refundCnt++;
+      if (hasProdRefundField) {
+        byPid[pid].refund += safeNum(o['退款金额(元)']);
+        if (safeNum(o['退款金额(元)']) > 0) byPid[pid].refundCnt++;
+      } else {
+        const st = String(o['售后状态'] || '').trim();
+        if (st.includes('退款') && st !== '无售后或售后取消') byPid[pid].refundCnt++;
+      }
     });
 
     const promoByPid: Record<string, any> = {};
@@ -728,6 +747,7 @@ export async function resolveStoreContext(storeId: string, userId: string): Prom
 // ===== 新增: 每日趋势 =====
 export function computeDailyTrends(orders: any[], afterSaleRecords: any[]): any {
   const dailyMap: Record<string, { gmv: number; orders: number; revenue: number; refund: number; refundCount: number }> = {};
+  const hasRefundAmt = orders.some(o => o['退款金额(元)'] !== undefined);
   orders.forEach((o: any) => {
     const d = safeStr(o['支付时间'] || '').split(' ')[0];
     if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
@@ -735,7 +755,10 @@ export function computeDailyTrends(orders: any[], afterSaleRecords: any[]): any 
     dailyMap[d].gmv += safeNum(o['商品总价(元)']);
     dailyMap[d].revenue += safeNum(o['商家实收金额(元)']);
     dailyMap[d].orders += 1;
-    if (safeNum(o['退款金额(元)']) > 0) { dailyMap[d].refund += safeNum(o['退款金额(元)']); dailyMap[d].refundCount += 1; }
+    const isRefund = hasRefundAmt
+      ? safeNum(o['退款金额(元)']) > 0
+      : (String(o['售后状态'] || '').trim().includes('退款') && String(o['售后状态'] || '').trim() !== '无售后或售后取消');
+    if (isRefund) { dailyMap[d].refundCount += 1; if (hasRefundAmt) dailyMap[d].refund += safeNum(o['退款金额(元)']); }
   });
   return Object.entries(dailyMap).map(([date, v]) => ({ date, ...v })).sort((a: any, b: any) => a.date.localeCompare(b.date));
 }
