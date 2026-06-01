@@ -578,30 +578,30 @@ export default function DashboardPage() {
   }, [filteredPromoProducts]);
 
   const allKpiCards = [
-    { label: 'GMV（商品总价）', value: kpi?.gmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: 'var(--pdd-primary)', change: compareEnabled ? changePct(kpi?.gmv || 0, compareKpi?.gmv || 0) : null },
-    { label: '有效订单量', value: kpi?.cnt, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, color: 'var(--pdd-info)', change: compareEnabled ? changePct(kpi?.cnt || 0, compareKpi?.cnt || 0) : null },
-    { label: '自然单', value: organicAndProfit.organicOrders, fmt: (v: number) => v.toFixed(0), icon: TrendingUp, color: 'var(--pdd-success)', change: null },
-    { label: '自然销售额', value: organicAndProfit.organicGmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, color: '#73d13d', change: null },
-    { label: '客单价', value: kpi?.avg, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: TrendingUp, color: 'var(--pdd-success)', change: compareEnabled ? changePct(kpi?.avg || 0, compareKpi?.avg || 0) : null },
-    { label: '售后率', value: kpi?.asRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: AlertTriangle, color: 'var(--pdd-warning)', change: null },
-    { label: '退款率', value: kpi?.rfRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: RotateCcw, color: 'var(--pdd-danger)', change: null },
-    { label: '买家数', value: (dashData?.kpi?.buyers != null) ? dashData!.kpi!.buyers : (new Set(filteredOrders.map(o => { const no = String(findField(o, '订单号') || '').trim(); return no;}).filter(Boolean)).size || (filteredOrders.length > 0 ? 1 : 0)), fmt: (v: number) => v.toFixed(0), icon: Users, color: '#722ed1', change: null },
-    { label: '商品数', value: (dashData?.kpi?.productCount != null) ? dashData!.kpi!.productCount : new Set(filteredOrders.map(o => String(findField(o, '商品id', '商品ID') || '').trim()).filter(id => id && id !== '-' && id !== '')).size, fmt: (v: number) => v.toFixed(0), icon: Package, color: '#eb2f96', change: null },
-    { label: '罚款金额', value: (dashData?.kpi?.penalties != null) ? dashData!.kpi!.penalties : penaltySummary.penaltyAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: AlertTriangle, color: 'var(--pdd-danger)', change: null },
-    { label: '退款金额', value: kpi?.rfAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: RotateCcw, color: '#ff7875', change: null },
-    { label: '优惠总额', value: kpi?.discount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, color: '#ffc53d', change: null },
-    { label: '利润金额', value: organicAndProfit.profit, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: organicAndProfit.profit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)', change: null },
-    { label: '平均发货时长', value: kpi?.avgShipHours, fmt: (v: number) => `${v.toFixed(1)}h`, icon: Clock, color: '#597ef7', change: null },
-    { label: '用户实付', value: kpi?.paid, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: '#73d13d', change: null },
-    { label: '推广花费', value: promoKpi?.totalCost, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: BarChart3, color: 'var(--pdd-primary)', change: null },
-    { label: '推广GMV', value: promoKpi?.promoGMV, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, color: '#722ed1', change: null },
-    { label: '推广ROI', value: promoKpi?.roi, fmt: (v: number) => v.toFixed(2), icon: Target, color: 'var(--pdd-success)', change: null },
-    { label: '点击率', value: promoKpi?.ctr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Target, color: 'var(--pdd-warning)', change: null },
-    { label: '转化率', value: promoKpi?.cvr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Percent, color: '#13c2c2', change: null },
-    { label: '平均点击成本', value: promoKpi?.cpc, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, color: '#eb2f96', change: null },
-    { label: '平均获客成本', value: promoKpi?.cpa, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Users, color: '#722ed1', change: null },
-    { label: '推广占比', value: (kpi?.gmv || 0) > 0 && (promoKpi?.totalCost || 0) > 0 ? ((promoKpi!.totalCost / kpi!.gmv) * 100) : 0, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Target, color: '#fa541c', change: null },
-    { label: '全店投产', value: (promoKpi?.totalCost || 0) > 0 && (kpi?.gmv || 0) > 0 ? (kpi!.gmv / promoKpi!.totalCost) : 0, fmt: (v: number) => v.toFixed(2), icon: TrendingUp, color: 'var(--pdd-success)', change: null },
+    { label: 'GMV（商品总价）', value: kpi?.gmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: 'var(--pdd-primary)', change: compareEnabled ? changePct(kpi?.gmv || 0, compareKpi?.gmv || 0) : null, source: '订单·商品总价(元) SUM' },
+    { label: '有效订单量', value: kpi?.cnt, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, color: 'var(--pdd-info)', change: compareEnabled ? changePct(kpi?.cnt || 0, compareKpi?.cnt || 0) : null, source: '订单·COUNT 排除已取消' },
+    { label: '自然单', value: organicAndProfit.organicOrders, fmt: (v: number) => v.toFixed(0), icon: TrendingUp, color: 'var(--pdd-success)', change: null, source: '总订单 − 推广订单' },
+    { label: '自然销售额', value: organicAndProfit.organicGmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, color: '#73d13d', change: null, source: '总GMV − 推广GMV' },
+    { label: '客单价', value: kpi?.avg, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: TrendingUp, color: 'var(--pdd-success)', change: compareEnabled ? changePct(kpi?.avg || 0, compareKpi?.avg || 0) : null, source: '用户实付 ÷ 订单数' },
+    { label: '售后率', value: kpi?.asRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: AlertTriangle, color: 'var(--pdd-warning)', change: null, source: '售后记录 ÷ 订单数' },
+    { label: '退款率', value: kpi?.rfRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: RotateCcw, color: 'var(--pdd-danger)', change: null, source: '订单·售后状态含退款 / 订单数' },
+    { label: '买家数', value: (dashData?.kpi?.buyers != null) ? dashData!.kpi!.buyers : (new Set(filteredOrders.map(o => { const no = String(findField(o, '订单号') || '').trim(); return no;}).filter(Boolean)).size || (filteredOrders.length > 0 ? 1 : 0)), fmt: (v: number) => v.toFixed(0), icon: Users, color: '#722ed1', change: null, source: '订单·订单号 DISTINCT COUNT' },
+    { label: '商品数', value: (dashData?.kpi?.productCount != null) ? dashData!.kpi!.productCount : new Set(filteredOrders.map(o => String(findField(o, '商品id', '商品ID') || '').trim()).filter(id => id && id !== '-' && id !== '')).size, fmt: (v: number) => v.toFixed(0), icon: Package, color: '#eb2f96', change: null, source: '订单·商品ID DISTINCT COUNT' },
+    { label: '罚款金额', value: (dashData?.kpi?.penalties != null) ? dashData!.kpi!.penalties : penaltySummary.penaltyAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: AlertTriangle, color: 'var(--pdd-danger)', change: null, source: '货款明细·004开头账务 SUM' },
+    { label: '退款金额', value: kpi?.rfAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: RotateCcw, color: '#ff7875', change: null, source: '订单·退款金额(元) SUM' },
+    { label: '优惠总额', value: kpi?.discount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, color: '#ffc53d', change: null, source: '订单·店铺+平台+立减+优惠券 SUM' },
+    { label: '利润金额', value: organicAndProfit.profit, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: organicAndProfit.profit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)', change: null, source: '实收−退款−推广−运费险−罚款' },
+    { label: '平均发货时长', value: kpi?.avgShipHours, fmt: (v: number) => `${v.toFixed(1)}h`, icon: Clock, color: '#597ef7', change: null, source: '订单·发货时间−支付时间 AVG' },
+    { label: '用户实付', value: kpi?.paid, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: '#73d13d', change: null, source: '订单·用户实付金额(元) SUM' },
+    { label: '推广花费', value: promoKpi?.totalCost, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: BarChart3, color: 'var(--pdd-primary)', change: null, source: '推广·成交花费(元) SUM' },
+    { label: '推广GMV', value: promoKpi?.promoGMV, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, color: '#722ed1', change: null, source: '推广·交易额(元) SUM' },
+    { label: '推广ROI', value: promoKpi?.roi, fmt: (v: number) => v.toFixed(2), icon: Target, color: 'var(--pdd-success)', change: null, source: '推广GMV ÷ 推广花费' },
+    { label: '点击率', value: promoKpi?.ctr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Target, color: 'var(--pdd-warning)', change: null, source: '推广·点击量÷曝光量' },
+    { label: '转化率', value: promoKpi?.cvr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Percent, color: '#13c2c2', change: null, source: '推广·成交笔数÷点击量' },
+    { label: '平均点击成本', value: promoKpi?.cpc, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, color: '#eb2f96', change: null, source: '推广花费 ÷ 点击量' },
+    { label: '平均获客成本', value: promoKpi?.cpa, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Users, color: '#722ed1', change: null, source: '推广花费 ÷ 成交笔数' },
+    { label: '推广占比', value: (kpi?.gmv || 0) > 0 && (promoKpi?.totalCost || 0) > 0 ? ((promoKpi!.totalCost / kpi!.gmv) * 100) : 0, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Target, color: '#fa541c', change: null, source: '推广花费 ÷ 总GMV' },
+    { label: '全店投产', value: (promoKpi?.totalCost || 0) > 0 && (kpi?.gmv || 0) > 0 ? (kpi!.gmv / promoKpi!.totalCost) : 0, fmt: (v: number) => v.toFixed(2), icon: TrendingUp, color: 'var(--pdd-success)', change: null, source: '总GMV ÷ 推广花费' },
   ];
   const kpiCards = useMemo(() => {
     const filtered = allKpiCards.filter(c => visibleKpis.has(c.label));
@@ -1129,13 +1129,13 @@ export default function DashboardPage() {
         function fvCall(row: any, labels: string[]) { return labels.map(l => findField(row, l)).find(v => v != null && String(v).trim() !== '') || '-'; }
 
         return (
-          <div className="fixed inset-0 z-50 flex items-start justify-center pt-6 pb-6" onClick={() => setOrderDetail(null)}>
+          <div className="fixed inset-0 z-50 flex items-start justify-center pt-4 pb-4" onClick={() => setOrderDetail(null)}>
             <div className="absolute inset-0 bg-black/50" />
-            <div className="relative bg-pdd-card rounded-xl border border-pdd-border shadow-2xl w-full max-w-4xl max-h-full overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between px-5 py-3 border-b border-pdd-border flex-shrink-0">
+            <div className="relative bg-pdd-card rounded-xl border border-pdd-border shadow-2xl w-full max-w-lg max-h-full overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between px-4 py-2.5 border-b border-pdd-border flex-shrink-0 bg-gradient-to-r from-gray-50 to-white">
                 <div>
-                  <h2 className="text-base font-bold text-pdd-text">订单详情</h2>
-                  <p className="text-xs text-pdd-text-secondary mt-0.5">{orderNo}</p>
+                  <h2 className="text-sm font-bold text-pdd-text">订单详情</h2>
+                  <p className="text-[10px] text-pdd-text-secondary font-mono">{orderNo}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${netProfit >= 0 ? 'bg-pdd-success/20 text-pdd-success' : 'bg-pdd-danger/20 text-pdd-danger'}`}>
@@ -1146,15 +1146,15 @@ export default function DashboardPage() {
                   </button>
                 </div>
               </div>
-              <div className="overflow-y-auto px-5 py-4 space-y-4 flex-1">
+              <div className="overflow-y-auto px-4 py-3 space-y-3 flex-1">
                 {sections.map((sec, si) => (
                   <div key={si}>
-                    <h3 className="text-xs font-semibold text-pdd-primary-light mb-2 border-b border-pdd-border pb-1">{sec.title}</h3>
-                    <div className="grid grid-cols-2 gap-x-4 gap-y-0.5">
+                    <h3 className="text-[11px] font-semibold text-pdd-primary-light mb-1.5 border-b border-pdd-border pb-0.5">{sec.title}</h3>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0">
                       {sec.rows.map(([label, value], ri) => (
-                        <div key={ri} className="flex justify-between text-xs py-1 border-b border-[var(--pdd-gray-100)]">
+                        <div key={ri} className="flex justify-between text-[11px] py-0.5 border-b border-[var(--pdd-gray-100)]">
                           <span className="text-pdd-text-secondary flex-shrink-0">{label}</span>
-                          <span className="text-pdd-text text-right ml-3 truncate max-w-[220px]">{value}</span>
+                          <span className="text-pdd-text text-right ml-2 truncate max-w-[160px]">{value}</span>
                         </div>
                       ))}
                     </div>
@@ -1162,26 +1162,19 @@ export default function DashboardPage() {
                 ))}
                 {/* 自定义费用编辑区 */}
                 <div>
-                  <h3 className="text-xs font-semibold text-pdd-primary-light mb-2 border-b border-pdd-border pb-1 flex items-center justify-between">
+                  <h3 className="text-[11px] font-semibold text-pdd-primary-light mb-1.5 border-b border-pdd-border pb-0.5 flex items-center justify-between">
                     自定义费用
-                    <button onClick={addCustomCost} className="text-xs px-2 py-0.5 rounded bg-pdd-primary/10 text-pdd-primary-light hover:bg-pdd-primary/20">+ 添加</button>
+                    <button onClick={addCustomCost} className="text-[10px] px-1.5 py-0.5 rounded bg-pdd-primary/10 text-pdd-primary-light hover:bg-pdd-primary/20">+添加</button>
                   </h3>
                   {(customCosts.length === 0 ? [{ name: '', amount: 0 }] : customCosts).map((c, i) => (
-                    <div key={i} className="flex items-center gap-2 mb-1">
-                      <input
-                        type="text" placeholder="费用名称"
-                        value={c.name} onChange={e => updateCustomCost(i, 'name', e.target.value)}
-                        className="flex-1 text-xs px-2 py-1 rounded border border-pdd-border bg-pdd-bg text-pdd-text outline-none focus:border-pdd-primary-light"
-                      />
-                      <input
-                        type="number" placeholder="金额" step="0.01"
-                        value={c.amount || ''} onChange={e => updateCustomCost(i, 'amount', e.target.value)}
-                        className="w-24 text-xs px-2 py-1 rounded border border-pdd-border bg-pdd-bg text-pdd-text text-right outline-none focus:border-pdd-primary-light"
-                      />
-                      <span className="text-xs text-pdd-text-secondary w-16 text-right">-¥{(c.amount || 0).toFixed(2)}</span>
+                    <div key={i} className="flex items-center gap-1.5 mb-1">
+                      <input type="text" placeholder="名称" value={c.name} onChange={e => updateCustomCost(i, 'name', e.target.value)}
+                        className="flex-1 text-[11px] px-1.5 py-1 rounded border border-pdd-border bg-pdd-bg text-pdd-text outline-none focus:border-pdd-primary-light" />
+                      <input type="number" placeholder="金额" step="0.01" value={c.amount || ''} onChange={e => updateCustomCost(i, 'amount', e.target.value)}
+                        className="w-20 text-[11px] px-1.5 py-1 rounded border border-pdd-border bg-pdd-bg text-pdd-text text-right outline-none focus:border-pdd-primary-light" />
+                      <span className="text-[10px] text-pdd-text-secondary w-14 text-right">-¥{(c.amount || 0).toFixed(0)}</span>
                     </div>
                   ))}
-                  <p className="text-[10px] text-pdd-text-secondary mt-1">自定义费用会自动保存到本地，参与利润计算</p>
                 </div>
               </div>
             </div>

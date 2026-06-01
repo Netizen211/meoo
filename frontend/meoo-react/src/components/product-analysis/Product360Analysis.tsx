@@ -1645,10 +1645,10 @@ export default function Product360Analysis({
             <div className="p-5">
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 {[
-                  { label: 'GMV', value: `¥${product.gmv.toFixed(0)}`, sub: `${product.orders}笔订单`, color: '#6366f1', bg: 'from-indigo-50 to-indigo-100', icon: '📦', trend: gmvTrend },
-                  { label: '实收金额', value: `¥${product.revenue.toFixed(0)}`, sub: `客单价 ¥${product.avgOrderValue.toFixed(0)}`, color: '#10b981', bg: 'from-emerald-50 to-emerald-100', icon: '💰', trend: undefined },
-                  { label: '净利润', value: `¥${product.netProfit.toFixed(0)}`, sub: `利润率 ${product.profitRate.toFixed(1)}%`, color: product.netProfit >= 0 ? '#8b5cf6' : '#ef4444', bg: product.netProfit >= 0 ? 'from-purple-50 to-purple-100' : 'from-red-50 to-red-100', icon: product.netProfit >= 0 ? '📈' : '📉', trend: undefined },
-                  { label: 'ROI', value: `${product.roi.toFixed(2)}x`, sub: `花费 ¥${product.promoCost.toFixed(0)}`, color: product.roi >= 1 ? '#f59e0b' : '#ef4444', bg: product.roi >= 1 ? 'from-amber-50 to-amber-100' : 'from-red-50 to-red-100', icon: '🎯', trend: undefined },
+                  { label: 'GMV', value: `¥${product.gmv.toFixed(0)}`, sub: `${product.orders}笔订单`, color: '#6366f1', bg: 'from-indigo-50 to-indigo-100', icon: '📦', trend: gmvTrend, source: '订单·商品总价(元) SUM' },
+                  { label: '实收金额', value: `¥${product.revenue.toFixed(0)}`, sub: `客单价 ¥${product.avgOrderValue.toFixed(0)}`, color: '#10b981', bg: 'from-emerald-50 to-emerald-100', icon: '💰', trend: undefined, source: '订单·商家实收金额(元) SUM' },
+                  { label: '净利润', value: `¥${product.netProfit.toFixed(0)}`, sub: `利润率 ${product.profitRate.toFixed(1)}%`, color: product.netProfit >= 0 ? '#8b5cf6' : '#ef4444', bg: product.netProfit >= 0 ? 'from-purple-50 to-purple-100' : 'from-red-50 to-red-100', icon: product.netProfit >= 0 ? '📈' : '📉', trend: undefined, source: '实收−成本−推广−退款−费用' },
+                  { label: 'ROI', value: `${product.roi.toFixed(2)}x`, sub: `花费 ¥${product.promoCost.toFixed(0)}`, color: product.roi >= 1 ? '#f59e0b' : '#ef4444', bg: product.roi >= 1 ? 'from-amber-50 to-amber-100' : 'from-red-50 to-red-100', icon: '🎯', trend: undefined, source: '推广·交易额÷成交花费' },
                 ].map(card => (
                   <motion.div
                     key={card.label}
@@ -1667,6 +1667,9 @@ export default function Product360Analysis({
                         {card.value}
                       </div>
                       <div className="text-[11px] text-gray-400 mt-1">{card.sub}</div>
+                      {(card as any).source && (
+                        <div className="text-[9px] text-gray-300 mt-0.5 italic">{(card as any).source}</div>
+                      )}
                       {card.trend !== undefined && (
                         <div className={`flex items-center gap-1 mt-2 text-xs font-medium ${card.trend >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
                           {card.trend >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}

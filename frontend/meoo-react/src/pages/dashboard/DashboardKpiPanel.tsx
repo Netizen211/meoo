@@ -13,6 +13,7 @@ interface KpiCardItem {
   icon: any;
   color: string;
   change: number | null;
+  source?: string;
 }
 
 interface Props {
@@ -113,6 +114,9 @@ export default function DashboardKpiPanel({
                     <span className={`text-xs ${c.change > 0 ? 'text-pdd-success' : 'text-pdd-danger'}`}>{c.change > 0 ? <ArrowUp size={10} /> : <ArrowDown size={10} />}{Math.abs(c.change).toFixed(1)}%</span>
                   )}
                 </div>
+                {c.source && (
+                  <span className="text-[9px] text-pdd-text-secondary/60 leading-tight block truncate" title={c.source}>{c.source}</span>
+                )}
               </div>
               {onDetailClick && (
                 <button
