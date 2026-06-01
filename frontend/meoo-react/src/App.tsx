@@ -492,16 +492,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
     }).catch((e: any) => {
       console.error('[data] Load failed:', e?.message || e);
-      // ★ 失败兜底：30秒后重试一次
-      setTimeout(() => {
-        const realStores = stores.filter(s => s.id !== ALL_STORES_ID);
-        if (realStores.length) {
-          console.log('[data] Retrying data load...');
-          realStores.forEach(store => pullStoreData(store.id).then(sd => {
-            if (sd?.data) setStoreDataMap(prev => ({...prev, [store.id]: {...prev[store.id], ...sd.data}}));
-          }).catch(() => {}));
-        }
-      }, 30000);
+      // ★ 毫秒级重试：1秒后立即重试，最多3次
+      let retries = 0;
+      const retryLoad = () => {
+        if (retries >= 3) return;
+        retries++;
+        const delay = Math.min(1000 * Math.pow(2, retries - 1), 8000); // 1s→2s→4s→8s
+        setTimeout(() => {
+          const realStores = stores.filter(s => s.id !== ALL_STORES_ID);
+          if (realStores.length) {
+            Promise.all(realStores.map(s => pullStoreData(s.id))).then(results => {
+              results.forEach((sd, i) => {
+                if (sd?.data) setStoreDataMap(prev => ({...prev, [realStores[i].id]: {...prev[realStores[i].id], ...sd.data}}));
+              });
+            }).catch(() => retryLoad());
+          }
+        }, delay);
+      };
+      retryLoad();
     }).finally(() => setDataLoading(false));
   }, [user, stores]);
 
@@ -730,11 +738,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                   try {
                     const payload = JSON.parse(dataLine.slice(6));
                     if (eventType === 'sync:completed' && payload.storeId) {
-                      // SSE推送到达 → 立即刷新
+                      // SSE推送到达 → 毫秒级刷新原始数据+分析
+                      refreshStoreData(payload.storeId);
                       refreshAnalytics(payload.storeId);
                     } else if (eventType === 'config:updated' && payload.storeId) {
+                      refreshStoreData(payload.storeId);
                       refreshAnalytics(payload.storeId);
                     } else if (eventType === 'data:deleted' && payload.storeId) {
+                      refreshStoreData(payload.storeId);
                       refreshAnalytics(payload.storeId);
                     }
                   } catch {}
@@ -748,11 +759,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       })();
     }
 
+    let reconnectAttempts = 0;
     function scheduleReconnect() {
       if (aborted) return;
+      reconnectAttempts++;
+      // ★ 毫秒级重连：1s→2s→4s→8s，最大30s
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 30000);
       reconnectTimer = setTimeout(() => {
         connectSSE();
-      }, 10000); // 10秒后重连
+      }, delay);
     }
 
     connectSSE();
@@ -764,34 +779,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ★ Layer 3: 轮询兜底（SSE断开时每30秒自动刷新）
+  // ★ Layer 3: 快速轮询兜底（SSE断开时每5秒兜底，SSE连接时不轮询）
   useEffect(() => {
     if (!user || !dataFilter) return;
-
-    const POLL_INTERVAL = 30000;
     const pollTimer = setInterval(() => {
-      // 只在SSE断开且距上次刷新超过25秒时才轮询
-      if (!sseConnectedRef.current && Date.now() - lastRefreshTimeRef.current > 25000) {
+      if (!sseConnectedRef.current) {
         refreshAnalytics(dataFilter);
       }
-    }, POLL_INTERVAL);
-
+    }, 5000); // 5秒兜底，SSE连接时不触发
     return () => clearInterval(pollTimer);
   }, [user, dataFilter, refreshAnalytics]);
 
-  // ★ Layer 4: 页面可见性刷新（切回标签页时自动刷新）
+  // ★ Layer 4: 页面可见性刷新（切回标签页时立即刷新，3秒防抖）
   useEffect(() => {
     if (!user) return;
-
     const handleVisibility = () => {
       if (document.visibilityState === 'visible' && dataFilter) {
-        // 距上次刷新超过15秒才刷新
-        if (Date.now() - lastRefreshTimeRef.current > 15000) {
+        if (Date.now() - lastRefreshTimeRef.current > 3000) {
           refreshAnalytics(dataFilter);
         }
       }
     };
-
     document.addEventListener('visibilitychange', handleVisibility);
     return () => document.removeEventListener('visibilitychange', handleVisibility);
   }, [user, dataFilter, refreshAnalytics]);
