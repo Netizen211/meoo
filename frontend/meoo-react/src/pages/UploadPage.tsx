@@ -50,6 +50,10 @@ interface UploadedFile {
 
   newCount?: number;
 
+  intraDupCount?: number;
+
+  crossDupCount?: number;
+
   mismatchWarning?: DataMismatchWarning;
 
   errorMessage?: string;
@@ -729,6 +733,103 @@ function getAfterSaleRowKey(row: any): string {
   return String(findField(row, '售后编号') || '').trim();
 }
 
+/** 获取推广数据的唯一标识（日期+商品ID+推广名称） */
+function getPromoProductKey(row: any): string {
+  const d = String(findField(row, '日期') || '').trim();
+  const pid = String(findField(row, '商品ID') || findField(row, '商品id') || '').trim();
+  const name = String(findField(row, '推广名称') || '').trim();
+  return `${d}-${pid}-${name}`;
+}
+
+// ★ 全局已见密钥追踪器（跨文件去重，持久化到 sessionStorage）
+const GLOBAL_SEEN_KEYS: Record<string, Set<string>> = (() => {
+  try {
+    const saved = sessionStorage.getItem('dianfx_global_seen_keys');
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      const result: Record<string, Set<string>> = {};
+      for (const [k, v] of Object.entries(parsed)) {
+        result[k] = new Set(v as string[]);
+      }
+      return result;
+    }
+  } catch {}
+  return { orders: new Set(), financial: new Set(), insurance: new Set(), afterSale: new Set(), promoProducts: new Set() };
+})();
+
+function saveGlobalSeenKeys() {
+  try {
+    const plain: Record<string, string[]> = {};
+    for (const [k, v] of Object.entries(GLOBAL_SEEN_KEYS)) {
+      plain[k] = Array.from(v).slice(-50000); // 最多保留5万条
+    }
+    sessionStorage.setItem('dianfx_global_seen_keys', JSON.stringify(plain));
+  } catch {}
+}
+
+/**
+ * ★ 三层去重引擎
+ * Layer 1: 文件内部去重 — 同一文件内的重复行
+ * Layer 2: 全局跨文件去重 — 本次会话中所有已上传数据的密钥
+ * Layer 3: 存量合并去重 — 与当前店铺已有数据合并
+ */
+function tripleDedup<T>(
+  incoming: T[],
+  getKey: (item: T) => string,
+  globalKeySet: Set<string>,
+  existingData: T[],
+): { merged: T[]; intraDup: number; crossDup: number; mergeDup: number; newCount: number; totalNew: T[] } {
+  let intraDup = 0;
+  let crossDup = 0;
+  let mergeDup = 0;
+
+  // === Layer 1: 文件内部去重 ===
+  const intraSeen = new Set<string>();
+  const afterIntra: T[] = [];
+  incoming.forEach(item => {
+    const key = getKey(item);
+    if (!key) { afterIntra.push(item); return; } // 无密钥的数据保留
+    if (intraSeen.has(key)) {
+      intraDup++;
+    } else {
+      intraSeen.add(key);
+      afterIntra.push(item);
+    }
+  });
+
+  // === Layer 2: 全局跨文件去重 ===
+  const afterCross: T[] = [];
+  afterIntra.forEach(item => {
+    const key = getKey(item);
+    if (!key) { afterCross.push(item); return; }
+    if (globalKeySet.has(key)) {
+      crossDup++;
+    } else {
+      globalKeySet.add(key);
+      afterCross.push(item);
+    }
+  });
+  saveGlobalSeenKeys();
+
+  // === Layer 3: 存量合并去重 ===
+  const existingKeys = new Set(existingData.map(getKey).filter(Boolean));
+  const finalNew: T[] = [];
+  afterCross.forEach(item => {
+    const key = getKey(item);
+    if (key && existingKeys.has(key)) {
+      mergeDup++;
+    } else {
+      finalNew.push(item);
+      if (key) existingKeys.add(key);
+    }
+  });
+
+  const merged = [...existingData, ...finalNew];
+  const newCount = finalNew.length;
+
+  return { merged, intraDup, crossDup, mergeDup, newCount, totalNew: finalNew };
+}
+
 /** 通用去重合并：根据 getKey 去重，返回合并后的数组及统计 */
 function dedupMerge<T>(existing: T[], incoming: T[], getKey: (item: T) => string): { merged: T[]; newCount: number; dupCount: number } {
   const existingKeys = new Set(existing.map(getKey).filter(Boolean));
@@ -955,7 +1056,17 @@ export default function UploadPage() {
             return cleaned;
           };
           const cleanedData = data.map(cleanCsvRow);
-          const { merged: mergedOrders } = dedupMerge(existing.orders, cleanedData, getOrderRowKey);
+          // ★ 三层去重引擎
+          const dedupResult = tripleDedup(cleanedData, getOrderRowKey, GLOBAL_SEEN_KEYS.orders, existing.orders);
+          const mergedOrders = dedupResult.merged;
+          // 更新 UI 统计
+          setFiles(prev => prev.map(f => f.name === file.name ? {
+            ...f,
+            duplicateCount: dedupResult.intraDup + dedupResult.crossDup + dedupResult.mergeDup,
+            intraDupCount: dedupResult.intraDup,
+            crossDupCount: dedupResult.crossDup,
+            newCount: dedupResult.newCount,
+          } : f));
           existing.orders = mergedOrders;
 
           existing.availableFields.csv = new Set(fields);
@@ -1283,10 +1394,25 @@ export default function UploadPage() {
               merged.availableFields.afterSale = new Set(info.fields);
               processedTypes.add(info.type);
             } else if (info.type === '订单数据') {
-              const { merged: mergedOrdersX, newCount: orderNew, dupCount: orderDup } = dedupMerge(merged.orders, info.data, getOrderRowKey);
-              merged.orders = mergedOrdersX;
+              const odResult = tripleDedup(info.data, getOrderRowKey, GLOBAL_SEEN_KEYS.orders, merged.orders);
+              merged.orders = odResult.merged;
               merged.availableFields.csv = new Set(info.fields);
               processedTypes.add(info.type);
+              // 更新 UI 统计
+              setFiles(prev => prev.map(f => {
+                if (f.name !== file.name) return f;
+                const prevIntra = f.intraDupCount || 0;
+                const prevCross = f.crossDupCount || 0;
+                const prevDup = f.duplicateCount || 0;
+                const prevNew = f.newCount || 0;
+                return {
+                  ...f,
+                  duplicateCount: prevDup + odResult.intraDup + odResult.crossDup + odResult.mergeDup,
+                  intraDupCount: prevIntra + odResult.intraDup,
+                  crossDupCount: prevCross + odResult.crossDup,
+                  newCount: prevNew + odResult.newCount,
+                };
+              }));
             }
           }
 
@@ -1733,7 +1859,18 @@ export default function UploadPage() {
 
                   {f.duplicateCount !== undefined && f.duplicateCount > 0 && (
 
-                    <p className="text-pdd-warning">已过滤 {f.duplicateCount} 条重复订单，新增 {f.newCount} 条</p>
+                    <div className="text-xs mt-1 space-y-0.5">
+                      <p className="text-pdd-warning font-medium">🔄 已过滤 {f.duplicateCount} 条重复，实际新增 {f.newCount} 条</p>
+                      {(f.intraDupCount ?? 0) > 0 && (
+                        <p className="text-amber-400/80 ml-2">↳ 文件内部重复: {f.intraDupCount} 条</p>
+                      )}
+                      {(f.crossDupCount ?? 0) > 0 && (
+                        <p className="text-orange-400/80 ml-2">↳ 跨文件重复(本次会话): {f.crossDupCount} 条</p>
+                      )}
+                      {((f.duplicateCount ?? 0) - (f.intraDupCount ?? 0) - (f.crossDupCount ?? 0)) > 0 && (
+                        <p className="text-red-400/80 ml-2">↳ 与已有数据重复: {(f.duplicateCount ?? 0) - (f.intraDupCount ?? 0) - (f.crossDupCount ?? 0)} 条</p>
+                      )}
+                    </div>
 
                   )}
 
