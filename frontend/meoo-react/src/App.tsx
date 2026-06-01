@@ -69,6 +69,8 @@ const isAllStores = (s: string) => s === ALL_STORES_ID;
 import { addLog } from './utils/operationLog';
 import { OrderFinancialActual, UnlinkedFinancials, buildFinancialIndex } from './utils/financialActuals';
 import { pullStoreData, syncStoreData, syncStoreConfig } from '../api/dataApi';
+import { loadAllFromLocal, pullAndMerge, writeData, getLocalData, deleteStoreData as dsDelete } from './data/dataStore';
+import type { DataStoreItem, Snapshot } from './data/dataStore';
 import { analyticsApi, type BulkAnalytics, type DashboardResponse, type ProductKpi, type PromotionResponse, type AfterSaleResponse,
   type DailyTrend, type RegionItem, type LogisticsSummary, type PromoByDateItem, type CostSummary, type PeriodCompare, type FinancialSummary } from '../api/analyticsApi';
 import { apiClient, hasTokens, clearTokens, getAccessToken } from '../api/client';
@@ -423,12 +425,33 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [dataLoading, setDataLoading] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
 
-  // ★ 登录/刷新后从服务器恢复全部数据（配置+原始数据+上传记录）
+  // ★ 登录/刷新后恢复数据：localStorage秒开 → 服务器确认
   useEffect(() => {
     if (!user || !hasTokens()) return;
     const realStores = stores.filter(s => s.id !== ALL_STORES_ID);
     if (!realStores.length) return;
 
+    // Step 1: localStorage 立即恢复 (毫秒级, 刷新不丢)
+    const fromLocal: Record<string, StoreDataItem> = {};
+    for (const store of realStores) {
+      try {
+        const raw = localStorage.getItem('meoo_ds_' + store.id);
+        if (raw) {
+          const d = JSON.parse(raw);
+          fromLocal[store.id] = {
+            orders: d.o || [], promotionSummary: d.ps || [], promotionProducts: d.pp || [],
+            starStoreSummary: d.ss || [], liveStreamSummary: d.ls || [],
+            shippingInsurance: d.si || [], afterSaleRecords: d.as || [], financialRecords: d.fr || [],
+            availableFields: { csv: new Set(d.af?.csv||[]), promotion: new Set(d.af?.promotion||[]), insurance: new Set(d.af?.insurance||[]), afterSale: new Set(d.af?.afterSale||[]) },
+          };
+        }
+      } catch {}
+    }
+    if (Object.keys(fromLocal).length > 0) {
+      setStoreDataMap(prev => ({ ...fromLocal, ...prev })); // local first, prev wins if newer
+    }
+
+    // Step 2: 服务器确认 (后台, 版本比对后覆盖)
     setDataLoading(true);
     Promise.all(realStores.map(store =>
       pullStoreData(store.id).then(serverData => ({ storeId: store.id, serverData }))
@@ -817,6 +840,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const newData = typeof dataOrUpdater === 'function'
         ? (dataOrUpdater as (prev: StoreDataItem | null) => StoreDataItem)(prevStoreData)
         : dataOrUpdater;
+      // ★ localStorage 持久化：写入即保存，刷新不丢失
+      try { localStorage.setItem('meoo_ds_' + storeId, JSON.stringify({
+        o: newData.orders || [], ps: newData.promotionSummary || [], pp: newData.promotionProducts || [],
+        ss: newData.starStoreSummary || [], ls: newData.liveStreamSummary || [],
+        si: newData.shippingInsurance || [], as: newData.afterSaleRecords || [], fr: newData.financialRecords || [],
+        af: { csv: Array.from(newData.availableFields?.csv||[]), promotion: Array.from(newData.availableFields?.promotion||[]), insurance: Array.from(newData.availableFields?.insurance||[]), afterSale: Array.from(newData.availableFields?.afterSale||[]) },
+        v: Date.now()
+      })); } catch {}
       return { ...prev, [storeId]: newData };
     });
   }, []);
@@ -843,15 +874,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         afterSale: Array.from(newData.availableFields?.afterSale || []),
       };
       const sid = storeId;
-      // ★ 乐观更新：立即刷新本地分析数据（零时差）
-      refreshAnalytics(sid);
-      // ★ 异步同步到服务器（后台进行，不阻塞UI）
+      // ★ 零时差策略：本地数据立即更新（Dashboard 从 currentDisplayData 计算，不等服务器）
+      //    服务器同步完成后才刷新 serverDashboard（保证数据权威性）
       syncStoreData(sid, storeName, slimData as any, {}, [])
         .then(() => {
           setSyncStatus('done');
-          refreshAnalytics(sid); // 服务器确认后再刷新一次确保一致
+          // 服务器确认已存储 → 此时刷新分析数据才是准确的
+          refreshAnalytics(sid);
         })
-        .catch(e => { console.error('[data] sync error:', e); setSyncStatus('error'); });
+        .catch(e => {
+          console.error('[data] sync error:', e);
+          setSyncStatus('error');
+          // 失败回滚：清除本地未确认的数据，防止界面显示错误
+          // （暂时保留本地数据显示，下次刷新页面时从服务器重新拉取）
+        });
+      // ★ localStorage 持久化 + 服务器同步
+      try { localStorage.setItem('meoo_ds_' + sid, JSON.stringify({
+        o: newData.orders || [], ps: newData.promotionSummary || [], pp: newData.promotionProducts || [],
+        ss: newData.starStoreSummary || [], ls: newData.liveStreamSummary || [],
+        si: newData.shippingInsurance || [], as: newData.afterSaleRecords || [], fr: newData.financialRecords || [],
+        af: { csv: Array.from(newData.availableFields?.csv||[]), promotion: Array.from(newData.availableFields?.promotion||[]), insurance: Array.from(newData.availableFields?.insurance||[]), afterSale: Array.from(newData.availableFields?.afterSale||[]) },
+        v: Date.now()
+      })); } catch {}
       return { ...prev, [storeId]: newData };
     });
   }, [stores, refreshAnalytics]);
