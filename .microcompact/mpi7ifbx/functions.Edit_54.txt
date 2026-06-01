@@ -1,0 +1,22 @@
+The file /home/project/src/pages/product/ProductFullLinkTab.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  26→  const [minGmv, setMinGmv] = useState(0);
+  27→  const [searchQuery, setSearchQuery] = useState('');
+  28→  const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
+  29→
+  30→  const productList = useMemo(() => {
+  31→    if (!productStats) return [];
+  32→    return Object.entries(productStats).map(([pid, s]) => ({ id: pid, ...s }));
+  33→  }, [productStats]);
+  34→
+  35→  const filteredProducts = useMemo(() => {
+  36→    let result = [...productList];
+  37→    if (searchQuery.trim()) {
+  38→      const q = searchQuery.trim().toLowerCase();
+
+<system-reminder>
+⚠️ NOTICE: You've used Edit on "/home/project/src/pages/product/ProductFullLinkTab.tsx" 7 times consecutively.
+
+Verify your changes are taking effect before modifying again. If the approach isn't working, move on to the next task rather than retrying.
+</system-reminder>

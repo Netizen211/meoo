@@ -1,0 +1,101 @@
+/**
+ * 主题系统 CSS 变量
+ * 拼多多风格主题 - 主色调 #e02e24
+ */
+
+:root {
+  /* Light Theme (Default) */
+  --pdd-primary: #e02e24;
+  --pdd-primary-light: #ef4444;
+  --pdd-primary-dark: #c41e14;
+  --pdd-bg: #f5f5f5;
+  --pdd-bg-rgb: 245 245 245;
+  --pdd-card: #ffffff;
+  --pdd-sidebar: #ffffff;
+  --pdd-text: #1f2937;
+  --pdd-text-secondary: #6b7280;
+  --pdd-border: #e5e5e5;
+  --pdd-success: #22c55e;
+  --pdd-warning: #f59e0b;
+  --pdd-danger: #ef4444;
+  --pdd-info: #3b82f6;
+  --pdd-purple: #8b5cf6;
+  --pdd-purple-light: #a78bfa;
+  --pdd-cyan: #06b6d4;
+  --pdd-pink: #ec4899;
+  --pdd-orange: #f97316;
+  --pdd-danger-light: #f87171;
+
+  /* Gray scale - Light */
+  --pdd-gray-50: #f9fafb;
+  --pdd-gray-100: #f3f4f6;
+  --pdd-gray-200: #e5e7eb;
+  --pdd-gray-300: #d1d5db;
+  --pdd-gray-400: #9ca3af;
+  --pdd-gray-500: #6b7280;
+  --pdd-gray-600: #4b5563;
+  --pdd-gray-700: #374151;
+  --pdd-gray-800: #1f2937;
+  --pdd-gray-900: #111827;
+}
+
+:root.dark,
+[data-theme='dark'] {
+  /* Dark Theme */
+  --pdd-primary: #ef4444;
+  --pdd-primary-light: #f87171;
+  --pdd-primary-dark: #dc2626;
+  --pdd-bg: #0a0a0a;
+  --pdd-bg-rgb: 10 10 10;
+  --pdd-card: #171717;
+  --pdd-sidebar: #0a0a0a;
+  --pdd-text: #f5f5f5;
+  --pdd-text-secondary: #a3a3a3;
+  --pdd-border: #262626;
+  --pdd-success: #22c55e;
+  --pdd-warning: #f59e0b;
+  --pdd-danger: #ef4444;
+  --pdd-info: #3b82f6;
+  --pdd-purple: #a78bfa;
+  --pdd-purple-light: #c4b5fd;
+  --pdd-cyan: #22d3ee;
+  --pdd-pink: #f472b6;
+  --pdd-orange: #fb923c;
+  --pdd-danger-light: #fca5a5;
+
+  /* Gray scale - Dark (inverted for readability) */
+  --pdd-gray-50: #171717;
+  --pdd-gray-100: #1f1f1f;
+  --pdd-gray-200: #2a2a2a;
+  --pdd-gray-300: #3a3a3a;
+  --pdd-gray-400: #737373;
+  --pdd-gray-500: #a3a3a3;
+  --pdd-gray-600: #d4d4d4;
+  --pdd-gray-700: #e5e5e5;
+  --pdd-gray-800: #f5f5f5;
+  --pdd-gray-900: #ffffff;
+}
+
+/* Theme transition — only applied when html has .theme-ready class */
+html:not(.theme-ready) *,
+html:not(.theme-ready) *::before,
+html:not(.theme-ready) *::after {
+  transition: none !important;
+}
+
+html.theme-ready *,
+html.theme-ready *::before,
+html.theme-ready *::after {
+  transition: background-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              border-color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              color 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              box-shadow 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              fill 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              stroke 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Disable transition for specific elements */
+.no-theme-transition,
+.no-theme-transition * {
+  transition: none !important;
+}

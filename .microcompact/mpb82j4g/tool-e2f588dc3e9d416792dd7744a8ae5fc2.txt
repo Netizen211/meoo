@@ -1,0 +1,15 @@
+The file /home/project/src/components/MainLayout.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 332→          <div className="relative">
+ 333→            <button onClick={() => setStoreDropdown(!storeDropdown)}
+ 334→              className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--pdd-border)] text-sm hover:border-[#e02e24] transition-colors bg-[var(--pdd-bg)]">
+ 335→              <Store size={14} className="text-[#e02e24]" />
+ 336→              <span className="max-w-[100px] truncate hidden sm:inline">
+ 337→                {stores.find(s => s.id === dataFilter)?.name || '选择店铺'}
+ 338→              </span>
+ 339→              <ChevronDown size={14} className="text-[var(--pdd-text-secondary)]" />
+ 340→            </button>
+ 341→            <AnimatePresence>
+ 342→              {storeDropdown && (
+ 343→                <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}

@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardKpiPanel.tsx has been updated. Made 3 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  93→          <Move size={14} className="text-[#64748b]" />
+  94→        </div>
+  95→      </div>
+  96→      {showKpiSelector && (
+  97→        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} className="bg-pdd-card rounded-xl border border-pdd-border p-3 mb-2">
+  98→          <div className="mb-3 pb-2 border-b border-[#2a2d3e]">
+  99→            <div className="text-xs font-medium text-[#64748b] mb-2">指标显示</div>
+ 100→            <div className="grid grid-cols-4 gap-1">
+ 101→              {allKpiCards.map(k => (
+ 102→                <label key={k.label} className="flex items-center gap-1 text-xs cursor-pointer hover:bg-[#1e2235] px-2 py-1 rounded-lg">

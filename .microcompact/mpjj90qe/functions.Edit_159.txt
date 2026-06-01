@@ -1,0 +1,13 @@
+The file /home/project/src/pages/AfterSalePage.tsx has been updated. Made 2 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+   4→import { ShieldCheck, RotateCcw, AlertTriangle, Clock, Lock, Crown, ArrowUp, ArrowDown, Download, Search, TrendingUp, DollarSign, Package, Star, Filter, ChevronLeft, ChevronRight, Truck, Users, Tag, FileText, PieChart as PieChartIcon } from 'lucide-react';
+   5→import { useData, useAuth } from '../App';
+   6→import TimeFilter, { TimeRange, TimeGranularity, safeFloat, filterByTimeRange, getAllDateGroups, filterPromoByTimeRange } from '../components/TimeFilter';
+   7→
+   8→const COLORS = ['pdd-danger', '#ff6b5b', 'pdd-warning', 'pdd-success', 'pdd-primary', '#8c8c8c', 'pdd-purple', '#13c2c2'];
+   9→
+  10→type TabKey = 'overview' | 'efficiency' | 'logistics' | 'sku' | 'risk' | 'detail';
+  11→
+  12→export default function AfterSalePage() {
+  13→  const { currentDisplayData } = useData();

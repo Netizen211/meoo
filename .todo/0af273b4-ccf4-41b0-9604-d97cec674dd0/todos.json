@@ -1,0 +1,20 @@
+[
+  {
+    "id": "map1",
+    "status": "completed",
+    "content": "在UploadPage中建立字段名映射表 - 已完成基础框架",
+    "priority": "high"
+  },
+  {
+    "id": "map2",
+    "status": "in_progress",
+    "content": "重写ProductLinkStats使用鲁棒的字段解析器",
+    "priority": "high"
+  },
+  {
+    "id": "map3",
+    "status": "pending",
+    "content": "验证编译并测试ROI显示",
+    "priority": "high"
+  }
+]

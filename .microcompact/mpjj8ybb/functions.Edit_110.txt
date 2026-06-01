@@ -1,0 +1,13 @@
+The file /home/project/src/pages/product/ProductDetailDrawer.tsx has been updated. Made 3 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+   9→  isOpen: boolean;
+  10→  onClose: () => void;
+  11→}
+  12→
+  13→const COLORS = ['pdd-danger', 'pdd-primary', 'pdd-success', 'pdd-warning', 'pdd-purple', '#13c2c2', '#eb2f96', '#fa541c'];
+  14→
+  15→function fmt(n: number) { return n.toFixed(2); }
+  16→function fmtInt(n: number) { return n.toFixed(0); }
+  17→
+  18→export default function ProductDetailDrawer({ product, isOpen, onClose }: Props) {

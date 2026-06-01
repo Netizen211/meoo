@@ -1,0 +1,43 @@
+The file /home/project/src/App.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 334→  useEffect(() => {
+ 335→    localStorage.setItem('dianfx_data_filter', dataFilter);
+ 336→  }, [dataFilter]);
+ 337→
+ 338→  useEffect(() => {
+ 339→    const dataToSave: Record<string, any> = {};
+ 340→    for (const [storeId, storeData] of Object.entries(storeDataMap)) {
+ 341→      dataToSave[storeId] = {
+ 342→        orders: storeData.orders,
+ 343→        promotionSummary: storeData.promotionSummary,
+ 344→        promotionProducts: storeData.promotionProducts,
+ 345→        starStoreSummary: storeData.starStoreSummary,
+ 346→        liveStreamSummary: storeData.liveStreamSummary,
+ 347→        shippingInsurance: storeData.shippingInsurance,
+ 348→        availableFields: {
+ 349→          csv: Array.from(storeData.availableFields.csv),
+ 350→          promotion: Array.from(storeData.availableFields.promotion),
+ 351→          insurance: Array.from(storeData.availableFields.insurance)
+ 352→        }
+ 353→      };
+ 354→    }
+ 355→    try {
+ 356→      localStorage.setItem('dianfx_store_data_map', JSON.stringify(dataToSave));
+ 357→    } catch (e) {
+ 358→      // localStorage 容量不足时，尝试逐店铺存储
+ 359→      try {
+ 360→        for (const [storeId, storeData] of Object.entries(dataToSave)) {
+ 361→          localStorage.setItem(`dianfx_store_${storeId}`, JSON.stringify(storeData));
+ 362→        }
+ 363→        localStorage.setItem('dianfx_store_data_map_keys', JSON.stringify(Object.keys(dataToSave)));
+ 364→      } catch (e2) {
+ 365→        console.warn('存储空间不足，数据仅保存在内存中，刷新页面后将丢失。');
+ 366→      }
+ 367→    }
+ 368→  }, [storeDataMap]);
+ 369→
+ 370→  useEffect(() => { localStorage.setItem('dianfx_product_costs', JSON.stringify(productCosts)); }, [productCosts]);
+ 371→  useEffect(() => { localStorage.setItem('dianfx_cost_configs', JSON.stringify(costConfigs)); }, [costConfigs]);
+ 372→  useEffect(() => { localStorage.setItem('dianfx_packaging_fee', String(packagingFeePerOrder)); }, [packagingFeePerOrder]);
+ 373→  useEffect(() => { localStorage.setItem('dianfx_pricing_presets', JSON.stringify(pricingPresets)); }, [pricingPresets]);

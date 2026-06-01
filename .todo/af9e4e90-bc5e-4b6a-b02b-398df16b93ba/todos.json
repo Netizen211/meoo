@@ -1,0 +1,38 @@
+[
+  {
+    "content": "修复 DashboardPage.tsx 中的颜色问题",
+    "id": "1",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "content": "修复 ProductPage.tsx 中的颜色问题",
+    "id": "2",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "content": "修复 Product360Analysis.tsx 中的浅色背景混用问题",
+    "id": "3",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "content": "修复 ProfitTooltip.tsx 中的 Ant Design 色值",
+    "id": "4",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "content": "修复 CostManagementPage.tsx 中的内联样式颜色",
+    "id": "5",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "content": "修复 MainLayout.tsx 中的硬编码颜色（导致按钮无效）",
+    "id": "6",
+    "status": "completed",
+    "priority": "high"
+  }
+]

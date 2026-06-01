@@ -1,0 +1,1 @@
+{"exitCode":0,"output":"[OpenTelemetry] Trace 已启动，serviceName=oneday-sandbox-sdk-pro version=v0.1.0 env=production\n商品推广_分天数据_20260216至20260516.xlsx:\n 日期范围: 2026-02-16 ~ 2026-05-16\n 有效天数: 90\n 花费合计: 593.11\n商品推广_分天数据_20260217至20260517.xlsx:\n 日期范围: 2026-02-17 ~ 2026-05-17\n 有效天数: 90\n 花费合计: 1214.79\n\n重叠天数: 89 天\n重叠日期范围: 2026-02-17 ~ 2026-05-16"}

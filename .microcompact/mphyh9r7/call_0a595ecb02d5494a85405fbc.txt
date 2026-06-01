@@ -1,0 +1,43 @@
+The file /home/project/src/pages/ProductPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 312→    { label: '零动销', value: kpiMetrics?.zeroSales, fmt: (v: number) => v.toFixed(0), icon: Ban, color: '#8c8c8c', bg: '#fafafa' },
+ 313→    { label: '库存预警', value: kpiMetrics?.lowInventory, fmt: (v: number) => v.toFixed(0), icon: Box, color: '#fa541c', bg: '#fff7e6' },
+ 314→  ];
+ 315→
+ 316→  const renderKpiPanel = () => {
+ 317→    // 只展示核心6个指标，其余折叠或移除，减少视觉噪音
+ 318→    const coreCards = kpiCards.slice(0, 6);
+ 319→    return (
+ 320→      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+ 321→        {coreCards.map((c, i) => (
+ 322→          <motion.div key={c.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+ 323→            whileHover={{ y: -2, boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}
+ 324→            className="pdd-card px-4 py-3.5 flex flex-col gap-2 border border-gray-100 hover:border-gray-200 transition-all cursor-default bg-white">
+ 325→            <div className="flex items-center justify-between">
+ 326→              <span className="text-xs text-gray-500 font-medium">{c.label}</span>
+ 327→              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: c.bg }}>
+ 328→                <c.icon size={14} color={c.color} />
+ 329→              </div>
+ 330→            </div>
+ 331→            <div className="flex items-end gap-1.5">
+ 332→              <span className="text-xl font-bold tracking-tight" style={{ color: c.color }}>{noData ? '--' : c.value != null ? c.fmt(c.value) : '--'}</span>
+ 333→              {c.label === '总利润' && c.confidence && !noData && c.value != null && (
+ 334→                <span className={`text-[10px] font-bold mb-1 ${
+ 335→                  c.confidence === 'high' ? 'text-green-500' :
+ 336→                  c.confidence === 'medium' ? 'text-yellow-500' : 'text-red-500'
+ 337→                }`}>
+ 338→                  {c.confidence === 'high' ? '✓' : c.confidence === 'medium' ? '⚠' : '!'}
+ 339→                </span>
+ 340→              )}
+ 341→            </div>
+ 342→          </motion.div>
+ 343→        ))}
+ 344→      </div>
+ 345→    );
+ 346→  };
+ 347→
+ 348→  const renderOverviewPanel = () => (
+ 349→    <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+ 350→      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pdd-card lg:col-span-2 border border-gray-200">
+ 351→        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">

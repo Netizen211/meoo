@@ -1,0 +1,26 @@
+[
+  {
+    "id": "1",
+    "content": "修复子组件目录中的硬编码颜色 (9个文件)",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "修复页面子目录中的硬编码颜色 (13个文件)",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "修复其他页面中的硬编码颜色 (15个文件)",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "汇总修改统计并输出文件引用表",
+    "status": "completed",
+    "priority": "medium"
+  }
+]

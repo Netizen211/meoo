@@ -1,0 +1,24 @@
+The file /home/project/src/pages/UploadPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 190→          const gbk = await tryParse('GBK');
+ 191→          fields = gbk.fields;
+ 192→          data = gbk.data;
+ 193→        }
+ 194→      } catch (utf8Err) {
+ 195→        try {
+ 196→          const gbk = await tryParse('GBK');
+ 197→          fields = gbk.fields;
+ 198→          data = gbk.data;
+ 199→        } catch (gbkErr) {
+ 200→          const errMsg = `CSV解析失败: UTF-8和GBK编码均无法解析。请检查文件是否为有效的CSV格式。`;
+ 201→          console.error('CSV parse error:', { utf8Err, gbkErr, fileName: file.name });
+ 202→          setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error', errorMessage: errMsg } : f));
+ 203→          return;
+ 204→        }
+ 205→      }
+ 206→
+ 207→      const detectedType = resolveType(detectFileTypeByContent(fields), file.name);
+ 208→      const required = REQUIRED_FIELDS[detectedType] || [];
+ 209→      const missing = required.filter(r => !fields.includes(r));
+ 210→      const existing = getStoreData(targetStoreId) || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set() } };

@@ -1,0 +1,1 @@
+{"exitCode":0,"output":"[OpenTelemetry] Trace 已启动，serviceName=oneday-sandbox-sdk-pro version=v0.1.0 env=production\n汇总sheet(去掉总计行)花费: 1214.79\n商品sheet花费: 2429.58\n两者之和: 3644.37\n总计行花费: 1214.79"}

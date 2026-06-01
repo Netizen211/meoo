@@ -1,0 +1,50 @@
+[
+  {
+    "id": "1",
+    "status": "in_progress",
+    "content": "修复AmountFilterPanel productCost运算符优先级错误",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "status": "pending",
+    "content": "修复DashboardPage discount计算reduce缺少累加器",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "status": "pending",
+    "content": "修复CostPage compareKpi discount计算缺少累加器",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "status": "pending",
+    "content": "DashboardPage统一使用safeFloat替换sf函数",
+    "priority": "high"
+  },
+  {
+    "id": "5",
+    "status": "pending",
+    "content": "拆分DashboardPage为6个子组件+重写主页面",
+    "priority": "high"
+  },
+  {
+    "id": "6",
+    "status": "pending",
+    "content": "拆分PromotionPage为4个子Tab+重写主页面",
+    "priority": "medium"
+  },
+  {
+    "id": "7",
+    "status": "pending",
+    "content": "修复所有页面暗色模式硬编码颜色",
+    "priority": "medium"
+  },
+  {
+    "id": "8",
+    "status": "pending",
+    "content": "运行pnpm run dev验证编译通过",
+    "priority": "high"
+  }
+]

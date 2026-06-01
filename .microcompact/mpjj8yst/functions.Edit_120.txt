@@ -1,0 +1,19 @@
+The file /home/project/src/pages/product/ProfitDiagnosisPanel.tsx has been updated. Made 3 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 116→
+ 117→  const getScoreColor = (score: number) => {
+ 118→    if (score < 40) return 'pdd-danger';
+ 119→    if (score < 70) return 'pdd-warning';
+ 120→    return 'pdd-success';
+ 121→  };
+ 122→
+ 123→  const getScoreLabel = (score: number) => {
+ 124→    if (score < 40) return '高风险';
+ 125→    if (score < 70) return '需关注';
+
+<system-reminder>
+⚠️ NOTICE: You've used Edit on "/home/project/src/pages/product/ProfitDiagnosisPanel.tsx" 7 times consecutively.
+
+Verify your changes are taking effect before modifying again. If the approach isn't working, move on to the next task rather than retrying.
+</system-reminder>

@@ -1,0 +1,32 @@
+[
+  {
+    "id": "s1",
+    "status": "completed",
+    "content": "Step 1: 扩展 ProductLinkStats.tsx 数据模型",
+    "priority": "high"
+  },
+  {
+    "id": "s2",
+    "status": "completed",
+    "content": "Step 2: 创建 ProductDetailDrawer.tsx 详情抽屉组件",
+    "priority": "high"
+  },
+  {
+    "id": "s3",
+    "status": "completed",
+    "content": "Step 3: 重构 ProductPage.tsx 列表页",
+    "priority": "high"
+  },
+  {
+    "id": "s4",
+    "status": "completed",
+    "content": "Step 4: 优化Tab内容和命名",
+    "priority": "medium"
+  },
+  {
+    "id": "s5",
+    "status": "completed",
+    "content": "Step 5: 验证编译和运行",
+    "priority": "high"
+  }
+]

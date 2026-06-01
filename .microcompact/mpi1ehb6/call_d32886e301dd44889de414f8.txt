@@ -1,0 +1,20 @@
+The file /home/project/src/pages/UploadPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 407→        setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, fieldCount: allFields.length, rowCount: totalRows, detectedType: primaryType, missingFields: missing, mismatchWarning } : f));
+ 408→        setStoreData(targetStoreId, { ...existing, availableFields: { ...existing.availableFields } });
+ 409→        setFieldReport({ available: allFields, missing, type: primaryType });
+ 410→        addUploadRecord({ fileName: file.name, fileType: primaryType, storeId: targetStoreId, storeName: targetStoreName, rowCount: totalRows, fieldCount: allFields.length });
+ 411→      } catch (err) {
+ 412→        const errMsg = `XLSX解析失败: ${err instanceof Error ? err.message : '未知错误'}。请检查文件是否为有效的Excel格式。`;
+ 413→        console.error('XLSX parse error:', { err, fileName: file.name });
+ 414→        setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error', errorMessage: errMsg } : f));
+ 415→      }
+ 416→    };
+ 417→    reader.readAsArrayBuffer(file);
+ 418→  }, [getStoreData, setStoreData, addUploadRecord]);
+ 419→
+ 420→  const processFile = useCallback((file: File) => {
+ 421→    if (!currentStore) { alert('请先选择一个店铺'); return; }
+ 422→    const targetStoreId = currentStore.id;
+ 423→    const targetStoreName = currentStore.name;

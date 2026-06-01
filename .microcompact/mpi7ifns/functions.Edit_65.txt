@@ -1,0 +1,20 @@
+The file /home/project/src/pages/CostManagementPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 235→      setCostConfig(key, { rawCost: cost, packagingFee: packagingFeePerOrder, updatedAt: new Date().toISOString() });
+ 236→      // Add to history
+ 237→      const product = productGroups.find(g => g.productId === key || g.skus.some(s => `${s.productId}_${s.skuId}` === key));
+ 238→      if (product) {
+ 239→        addCostHistory({
+ 240→          productId: key,
+ 241→          productName: product.productName,
+ 242→          field: 'rawCost',
+ 243→          oldValue: oldCost,
+ 244→          newValue: cost,
+ 245→          reason: '批量设置成本'
+ 246→        });
+ 247→      }
+ 248→    });
+ 249→    setSelectedItems(new Set());
+ 250→    setBatchCost('');
+ 251→  };

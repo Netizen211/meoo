@@ -1,0 +1,13 @@
+The file /home/project/src/components/product-analysis/CostProfitCard.tsx has been updated. Made 2 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 140→        onClick={() => setIsExpanded(!isExpanded)}
+ 141→      >
+ 142→        <div className="flex items-center gap-3">
+ 143→          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-50 to-green-100 flex items-center justify-center">
+ 144→            <DollarSign size={20} className="text-pdd-success" />
+ 145→          </div>
+ 146→          <div>
+ 147→            <h3 className="font-semibold text-gray-900 text-sm">成本利润</h3>
+ 148→            <p className="text-xs text-gray-500 mt-0.5">
+ 149→              净利润: <span style={{ color: profitColor }}>¥{data.netProfit.toFixed(2)}</span>

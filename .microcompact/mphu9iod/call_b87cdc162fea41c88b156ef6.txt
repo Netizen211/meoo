@@ -1,0 +1,13 @@
+The file /home/project/src/pages/DashboardPage.tsx has been updated. Made 30 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  90→  const provinces = useMemo(() => Array.from(new Set(orders.map(o => String(o['省'] || '').trim()).filter(Boolean))), [orders]);
+  91→
+  92→  const kpi = useMemo(() => {
+  93→    if (!filteredOrders.length) return null;
+  94→    const gmv = filteredOrders.reduce((s, o) => s + safeFloat(o['商家实收金额(元)']), 0);
+  95→    const cnt = filteredOrders.length;
+  96→    const paid = filteredOrders.reduce((s, o) => s + sf(o['用户实付金额(元)']), 0);
+  97→    const avg = cnt > 0 ? paid / cnt : 0;
+  98→    const asCnt = filteredOrders.filter(o => { const s = String(o['售后状态'] || '').trim(); return s && s !== '无售后或售后取消' && s !== '无'; }).length;
+  99→    const asRate = cnt > 0 ? (asCnt / cnt) * 100 : 0;

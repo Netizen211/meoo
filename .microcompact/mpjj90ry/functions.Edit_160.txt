@@ -1,0 +1,13 @@
+The file /home/project/src/pages/CostPage.tsx has been updated. Made 6 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  18→  { key: 'discountRate', label: '优惠率', hint: '%', group: 'discount', compute: (o) => { const pt = safeFloat(o['商品总价(元)']); if (!pt) return 0; return ((safeFloat(o['店铺优惠折扣(元)']) + safeFloat(o['平台优惠折扣(元)']) + safeFloat(o['多多支付立减金额(元)'])) / pt) * 100; } },
+  19→  { key: 'recvRate', label: '实收率', hint: '%', group: 'cost', compute: (o) => { const pt = safeFloat(o['商品总价(元)']); if (!pt) return 0; return (safeFloat(o['商家实收金额(元)']) / pt) * 100; } },
+  20→];
+  21→
+  22→const COLORS = ['pdd-danger', '#1890ff', '#52c41a', '#faad14', '#722ed1', '#ff4d4f'];
+  23→
+  24→export default function CostPage() {
+  25→  const { currentDisplayData } = useData();
+  26→  const { isPaid } = useAuth();
+  27→  const [timeRange, setTimeRange] = useState<TimeRange>('7');

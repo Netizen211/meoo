@@ -1,0 +1,20 @@
+The file /home/project/src/pages/StoresPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  51→      
+  52→      const dataTypes: string[] = [];
+  53→      if (orders.length > 0) dataTypes.push('订单');
+  54→      if (promotionSummary.length > 0) dataTypes.push('推广');
+  55→      if (storeData?.starStoreSummary && storeData.starStoreSummary.length > 0) dataTypes.push('明星店铺');
+  56→      if (storeData?.liveStreamSummary && storeData.liveStreamSummary.length > 0) dataTypes.push('直播');
+  57→      if (shippingInsurance.length > 0) dataTypes.push('运费险');
+  58→
+  59→      stats[s.id] = {
+  60→        orders: orders.length,
+  61→        gmv,
+
+<system-reminder>
+⚠️ NOTICE: You've used Edit on "/home/project/src/pages/StoresPage.tsx" 7 times consecutively.
+
+Verify your changes are taking effect before modifying again. If the approach isn't working, move on to the next task rather than retrying.
+</system-reminder>

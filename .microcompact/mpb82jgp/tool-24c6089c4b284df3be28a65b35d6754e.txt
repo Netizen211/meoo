@@ -1,0 +1,13 @@
+The file /home/project/src/components/MainLayout.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+   6→  DollarSign, ShieldCheck, Shield, TrendingUp, AlertTriangle,
+   7→  Crown, Calculator, Settings, LogOut, Store, ChevronDown, ChevronRight,
+   8→  Search, Bell, Download, RefreshCw, Maximize2, Menu, X, Home,
+   9→  ChevronLeft, Filter, Zap, Star, History, GripVertical, Plus,
+  10→  Moon, Sun, Pin, XCircle, Link
+  11→} from 'lucide-react';
+  12→import { useAuth, useStore, useData } from '../App';
+  13→
+  14→const NAV_ITEMS = [
+  15→  { path: '/dashboard', label: '数据中心', icon: LayoutDashboard, category: 'overview' },

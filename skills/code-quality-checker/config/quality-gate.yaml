@@ -1,0 +1,94 @@
+# 质量门禁配置示例
+# 可根据项目需求自定义检测规则和阻断级别
+
+qualityGate:
+  # 安全检测配置
+  security:
+    critical: block      # 严重安全漏洞：阻断合并
+    high: block          # 高危安全漏洞：阻断合并
+    medium: warn         # 中危安全漏洞：警告
+    low: warn            # 低危安全漏洞：警告
+  
+  # 性能检测配置
+  performance:
+    high: block          # 严重性能问题：阻断合并
+    medium: warn         # 中等性能问题：警告
+    low: ignore          # 轻微性能问题：忽略
+  
+  # 测试覆盖率配置
+  coverage:
+    minimum: 80          # 最低覆盖率要求：80%
+    blockOnFail: true    # 未达标时阻断合并
+    exclude:
+      - "**/*.test.ts"
+      - "**/*.spec.ts"
+      - "**/test/**"
+      - "**/__tests__/**"
+  
+  # 代码复杂度配置
+  complexity:
+    maxCyclomatic: 10    # 最大圈复杂度
+    maxLines: 300        # 单文件最大行数
+    maxFunctionLength: 50 # 单函数最大行数
+    maxNestingDepth: 4   # 最大嵌套深度
+  
+  # 代码规范配置
+  lint:
+    error: block         # ESLint 错误：阻断合并
+    warn: warn           # ESLint 警告：警告
+    ignore:              # 忽略的规则
+      - "no-console"
+  
+  # 依赖安全配置
+  dependencies:
+    vulnerable: block    # 存在漏洞的依赖：阻断合并
+    outdated: warn       # 过时的依赖：警告
+    licenseCheck: true   # 许可证检查
+    allowedLicenses:     # 允许的许可证
+      - MIT
+      - Apache-2.0
+      - BSD-3-Clause
+      - ISC
+
+# 文件类型特定规则
+fileRules:
+  # TypeScript 文件规则
+  "**/*.ts":
+    security: true
+    performance: true
+    coverage: true
+    complexity: true
+  
+  # 测试文件规则（放宽要求）
+  "**/*.test.ts":
+    coverage: false
+    complexity:
+      maxCyclomatic: 20
+  
+  # 配置文件规则
+  "**/*.config.*":
+    coverage: false
+    complexity: false
+  
+  # 文档文件规则
+  "**/*.md":
+    security: false
+    performance: false
+    coverage: false
+    complexity: false
+
+# 排除路径
+exclude:
+  - "node_modules/**"
+  - "dist/**"
+  - "build/**"
+  - ".git/**"
+  - "**/*.min.js"
+  - "**/vendor/**"
+
+# 报告配置
+report:
+  format: markdown       # 报告格式：markdown / json / html
+  output: console        # 输出位置：console / file
+  includeSuggestions: true  # 包含修复建议
+  includeCodeSnippet: true  # 包含代码片段

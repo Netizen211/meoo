@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardTablePanel.tsx has been updated. Made 3 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  45→      <div className="overflow-x-auto">
+  46→        <table className="w-full text-xs">
+  47→          <thead><tr className="text-pdd-text-secondary border-b border-pdd-border">
+  48→            {pinnedColumns.map(col => (
+  49→              <th key={col.key} className="py-1.5 text-left font-medium bg-pdd-bg sticky left-0 z-10" style={{ width: col.width }}>
+  50→                <div className="flex items-center gap-1">
+  51→                  <button onClick={() => togglePin(col.key)} className="text-indigo-400"><Pin size={10} fill="#818cf8" /></button>
+  52→                  {col.label}
+  53→                </div>
+  54→              </th>

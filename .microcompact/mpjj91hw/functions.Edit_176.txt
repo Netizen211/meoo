@@ -1,0 +1,13 @@
+The file /home/project/src/pages/MembershipPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 101→
+ 102→            <div className="space-y-2 mb-6">
+ 103→              {plan.features.map(f => (
+ 104→                <div key={f.text} className="flex items-center gap-2 text-sm">
+ 105→                  {f.included ? <Check size={14} className="text-pdd-success" /> : <X size={14} className="text-[#ccc]" />}
+ 106→                  <span className={f.included ? '' : 'text-[#ccc]'}>{f.text}</span>
+ 107→                </div>
+ 108→              ))}
+ 109→            </div>
+ 110→

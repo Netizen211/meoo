@@ -1,0 +1,13 @@
+The file /home/project/src/pages/AdminPages.tsx has been updated. Made 7 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  15→  { date: '05-11', uploads: 1 }, { date: '05-12', uploads: 2 }, { date: '05-13', uploads: 0 },
+  16→  { date: '05-14', uploads: 3 }, { date: '05-15', uploads: 1 }, { date: '05-16', uploads: 2 }, { date: '05-17', uploads: 4 },
+  17→];
+  18→
+  19→const cardCls = 'bg-pdd-card rounded-lg p-4 border border-pdd-border';
+  20→const labelCls = 'text-[#888] text-xs';
+  21→const valueCls = 'text-white text-2xl font-bold';
+  22→const btnCls = 'px-3 py-1 rounded text-xs transition-colors';
+  23→
+  24→function StatCard({ icon: Icon, label, value, color }: any) {

@@ -1,0 +1,11 @@
+The file /home/project/src/App.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 517→          </HashRouter>
+ 518→        </DataProvider>
+ 519→      </StoreProvider>
+ 520→    </AuthProvider>
+ 521→  );
+ 522→}
+ 523→
+ 524→export default App;

@@ -1,0 +1,16 @@
+The file /home/project/src/pages/RiskPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 178→
+ 179→  const badgeColor = (level: string) => level === '高' ? 'bg-red-50 text-red-700' : level === '中' ? 'bg-yellow-50 text-yellow-700' : 'bg-green-50 text-green-700';
+ 180→  const statusColor = (status: string) => status === '危险' ? '#e02e24' : status === '预警' ? '#faad14' : '#52c41a';
+ 181→
+ 182→  return (
+ 183→    <div className="p-4 space-y-3">
+ 184→      <TimeFilter state={tfState} />
+ 185→      <div className="grid grid-cols-5 gap-2">
+ 186→        {kpis.map((k, i) => (
+ 187→          <motion.div key={k.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+ 188→            className="pdd-card px-3 py-2.5 flex items-center gap-2">
+ 189→            <k.icon size={16} color={k.color} />
+ 190→            <div>

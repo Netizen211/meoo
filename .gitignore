@@ -11,3 +11,5 @@ dist-admin/
 .DS_Store
 Thumbs.db
 *.log
+.idea/
+.vscode/

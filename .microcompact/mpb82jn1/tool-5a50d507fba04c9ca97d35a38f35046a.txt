@@ -1,0 +1,1 @@
+{"results":[],"pattern":"getAllStoresData|dataFilter === 'all'|setDataFilter\\('all'\\)","path":"src","totalMatches":0}

@@ -1,0 +1,39 @@
+The file /home/project/src/pages/ProductLinksPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  11→
+  12→type ViewMode = 'card' | 'table' | 'chart';
+  13→type RoiFilter = 'all' | 'profit' | 'loss' | 'flat';
+  14→
+  15→export default function ProductLinksPage() {
+  16→  const { currentDisplayData } = useData();
+  17→  const [timeRange, setTimeRange] = useState<TimeRange>('7');
+  18→  const [granularity, setGranularity] = useState<TimeGranularity>('day');
+  19→  const [compareEnabled, setCompareEnabled] = useState(false);
+  20→  const tfState = { timeRange, granularity, compareEnabled, setTimeRange, setGranularity, setCompareEnabled };
+  21→
+  22→  // 构建时间过滤后的 displayData
+  23→  const filteredDisplayData = useMemo(() => {
+  24→    if (!currentDisplayData) return null;
+  25→    const orders = currentDisplayData.orders || [];
+  26→    const allDates = getAllDateGroups(orders);
+  27→    const filteredOrders = filterByTimeRange(orders, allDates, timeRange);
+  28→    return {
+  29→      ...currentDisplayData,
+  30→      orders: filteredOrders,
+  31→      afterSaleRecords: filterPromoByTimeRange(currentDisplayData.afterSaleRecords || [], allDates, timeRange, '申请时间'),
+  32→      promotionProducts: filterPromoByTimeRange(currentDisplayData.promotionProducts || [], allDates, timeRange),
+  33→      promotionSummary: filterPromoByTimeRange(currentDisplayData.promotionSummary || [], allDates, timeRange),
+  34→      shippingInsurance: filterPromoByTimeRange(currentDisplayData.shippingInsurance || [], allDates, timeRange, '日期'),
+  35→    };
+  36→  }, [currentDisplayData, timeRange]);
+  37→
+  38→  const productStats = useProductStats(filteredDisplayData);
+  39→  const totalStats = useTotalProductStats(productStats);
+  40→
+  41→  const [sortKey, setSortKey] = useState<string>('roi');
+  42→  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  43→  const [viewMode, setViewMode] = useState<ViewMode>('table');
+  44→  const [roiFilter, setRoiFilter] = useState<RoiFilter>('all');
+  45→  const [minOrders, setMinOrders] = useState(0);
+  46→  const [minGmv, setMinGmv] = useState(0);

@@ -1,0 +1,17 @@
+The file /home/project/src/components/ProductLinkStats.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 272→        buyerProducts[buyerKey].add(pid);
+ 273→      }
+ 274→    });
+ 275→
+ 276→    // 关联独立售后数据（通过商品ID匹配）
+ 277→    const afterSaleRecords = cleanDataRows(currentDisplayData?.afterSaleRecords || []);
+ 278→    if (afterSaleRecords.length > 0) {
+ 279→      afterSaleRecords.forEach((r: any) => {
+ 280→        const pid = String(r['商品ID'] || r['商品id'] || '').trim();
+ 281→        if (!pid) return;
+ 282→        // 如果该商品在stats中不存在，创建条目
+ 283→        if (!stats[pid]) {
+ 284→          stats[pid] = {
+ 285→            productId: pid, productName: String(r['sku信息'] || '').split(',')[0] || pid, productCode: '',

@@ -1,0 +1,13 @@
+The file /home/project/src/pages/AdminPages.tsx has been updated. Made 3 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  73→              <td className="py-2 text-white">{u.username}</td>
+  74→              <td className="py-2"><span className={u.role === 'test' ? 'text-pdd-warning' : 'text-pdd-text-secondary'}>{u.role === 'test' ? '测试' : '普通'}</span></td>
+  75→              <td className="py-2 text-pdd-text-secondary">{u.membership}</td>
+  76→              <td className="py-2 text-pdd-text-secondary">{u.stores}</td>
+  77→              <td className="py-2"><span className={u.status === 'active' ? 'text-pdd-success' : 'text-pdd-danger'}>{u.status === 'active' ? '正常' : '禁用'}</span></td>
+  78→              <td className="py-2">
+  79→                <button onClick={() => toggleStatus(u.id)} className={btnCls + (u.status === 'active' ? ' bg-[#3d2020] text-red-400 hover:bg-[#4d2828]' : ' bg-[#1a3d20] text-pdd-success hover:bg-[#224d28]')}>
+  80→                  {u.status === 'active' ? <Ban size={14} /> : <Eye size={14} />}
+  81→                </button>
+  82→              </td>

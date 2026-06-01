@@ -1,0 +1,18 @@
+The file /home/project/src/pages/DashboardPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+   1→import React, { useMemo, useState } from 'react';
+   2→import { motion, AnimatePresence } from 'framer-motion';
+   3→import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ComposedChart } from 'recharts';
+   4→import { TrendingUp, ShoppingCart, DollarSign, AlertTriangle, RotateCcw, Package, Users, Clock, Truck, Tag, BarChart3, Settings, ArrowUp, ArrowDown, Mail, Percent, Calendar, Search, Download, X, ChevronLeft, ChevronRight, Eye, EyeOff, FileSpreadsheet, RefreshCw, Pin, Move, Target, Megaphone } from 'lucide-react';
+   5→import { useData } from '../App';
+   6→import AmountFilterPanel, { DEFAULT_AMOUNT_FIELDS, FilterField, FilterValues, createEmptyFilters, applyAmountFilters, getActiveFilterCount } from '../components/AmountFilterPanel';
+   7→import { safeFloat } from '../components/TimeFilter';
+   8→
+   9→const cv = { hidden: { opacity: 0, y: 20 }, visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.06 } }) };
+  10→const STATUS_COLORS = ['#52c41a', '#1890ff', '#ff4d4f', '#faad14', '#722ed1', '#999'];
+  11→
+  12→export default function DashboardPage() {
+  13→  const { currentDisplayData } = useData();
+  14→  const [timeRange, setTimeRange] = useState<'7' | '30' | '90'>('7');
+  15→  const [compareEnabled, setCompareEnabled] = useState(false);

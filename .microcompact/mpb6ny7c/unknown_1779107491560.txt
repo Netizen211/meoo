@@ -1,0 +1,20 @@
+❌ Tool "<tool_call>GrepTool</arg_value>pattern</arg_key><arg_value>getAllStoresData</arg_value>" does not exist!
+
+Available tools in current mode:
+- Read
+- Edit
+- Write
+- Bash
+- TodoWrite
+- Task
+- EnterPlanMode
+- ExitPlanMode
+- Glob
+- Grep
+- WebSearch
+- AskUserQuestion
+- CompleteTask
+- Skill
+- CloudEnable
+
+You MUST use one of the tools listed above. Do NOT attempt to use non-existent tools.

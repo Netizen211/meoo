@@ -1,0 +1,14 @@
+The file /home/project/src/pages/StoresPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  44→      const orders = storeData?.orders || [];
+  45→      const promotionSummary = storeData?.promotionSummary || [];
+  46→      const shippingInsurance = storeData?.shippingInsurance || [];
+  47→      
+  48→      const gmv = orders.reduce((sum: number, o: any) => sum + safeFloat(o['商家实收金额(元)']), 0);
+  49→      const promoCost = promotionSummary.reduce((sum: number, r: any) => sum + safeFloat(r['总花费(元)'] || r['花费(元)']), 0);
+  50→      const refundOrders = orders.filter((o: any) => o['订单状态'] === '退款' || o['订单状态'] === '退货退款').length;
+  51→      
+  52→      const dataTypes: string[] = [];
+  53→      if (orders.length > 0) dataTypes.push('订单');
+  54→      if (promotionSummary.length > 0) dataTypes.push('推广');

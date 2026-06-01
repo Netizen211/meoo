@@ -1,0 +1,53 @@
+The file /home/project/src/pages/RiskPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  26→  const filteredAfterSaleRecords = useMemo(() => filterPromoByTimeRange(currentDisplayData?.afterSaleRecords || [], allDates, timeRange, '申请时间'), [currentDisplayData, allDates, timeRange]);
+  27→
+  28→  const noData = !filteredOrders.length;
+  29→
+  30→  const productRisk = useMemo(() => {
+  31→    if (!filteredOrders.length) return [];
+  32→    const map: Record<string, { name: string; orders: number; afterSale: number; refund: number; overdue: number }> = {};
+  33→    filteredOrders.forEach((o: any) => {
+  34→      const key = ss(o['商品id'] || o['商品']);
+  35→      if (!key) return;
+  36→      if (!map[key]) map[key] = { name: ss(o['商品']).slice(0, 20), orders: 0, afterSale: 0, refund: 0, overdue: 0 };
+  37→      map[key].orders++;
+  38→      const payT = ss(o['支付时间']);
+  39→      const shipT = ss(o['发货时间']);
+  40→      if (payT && shipT) {
+  41→        const h = (new Date(shipT).getTime() - new Date(payT).getTime()) / 3600000;
+  42→        if (h > 48) map[key].overdue++;
+  43→      }
+  44→    });
+  45→    if (filteredAfterSaleRecords.length > 0) {
+  46→      filteredAfterSaleRecords.forEach((r: any) => {
+  47→        const pid = ss(r['商品ID']);
+  48→        if (!pid) return;
+  49→        if (!map[pid]) map[pid] = { name: ss(r['sku信息']).slice(0, 20) || pid, orders: 0, afterSale: 0, refund: 0, overdue: 0 };
+  50→        map[pid].afterSale++;
+  51→        if (String(r['售后状态'] || '').includes('退款')) map[pid].refund++;
+  52→      });
+  53→    } else {
+  54→      filteredOrders.forEach((o: any) => {
+  55→        const key = ss(o['商品id'] || o['商品']);
+  56→        if (!key || !map[key]) return;
+  57→        const as = ss(o['售后状态']);
+  58→        if (as && as !== '无售后或售后取消' && as !== '无') map[key].afterSale++;
+  59→        if (as.includes('退款')) map[key].refund++;
+  60→      });
+  61→    }
+  62→    return Object.entries(map).map(([id, d]) => ({
+  63→      id, name: d.name,
+  64→      afterSaleRate: d.orders > 0 ? (d.afterSale / d.orders) * 100 : 0,
+  65→      refundRate: d.orders > 0 ? (d.refund / d.orders) * 100 : 0,
+  66→      overdueRate: d.orders > 0 ? (d.overdue / d.orders) * 100 : 0,
+  67→      orders: d.orders,
+  68→      riskLevel: d.afterSaleRate > 30 ? '高' : d.afterSaleRate > 15 ? '中' : '低',
+  69→    })).sort((a, b) => b.afterSaleRate - a.afterSaleRate);
+  70→  }, [filteredOrders, filteredAfterSaleRecords]);
+  71→
+  72→  const highAfterSale = productRisk.filter(p => p.afterSaleRate > 30).length;
+  73→  const overdueOrders = useMemo(() => {
+  74→    return orders.filter((o: any) => {
+  75→      const payT = ss(o['支付时间']);

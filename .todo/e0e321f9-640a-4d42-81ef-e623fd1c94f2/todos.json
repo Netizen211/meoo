@@ -1,0 +1,20 @@
+[
+  {
+    "content": "在 tailwind.config.js 中添加主题扩展（颜色、字体大小）",
+    "id": "5",
+    "priority": "high",
+    "status": "in_progress"
+  },
+  {
+    "content": "写脚本批量替换 tsx 中的方括号类名为标准类名",
+    "id": "6",
+    "priority": "high",
+    "status": "pending"
+  },
+  {
+    "content": "验证构建和页面正常",
+    "id": "3",
+    "priority": "medium",
+    "status": "pending"
+  }
+]

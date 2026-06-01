@@ -1,0 +1,26 @@
+[
+  {
+    "id": "fix_promo_filter_1",
+    "status": "completed",
+    "content": "在 TimeFilter.tsx 中添加 filterPromoByTimeRange 通用函数",
+    "priority": "high"
+  },
+  {
+    "id": "fix_promo_filter_2",
+    "status": "in_progress",
+    "content": "DashboardPage.tsx 推广KPI和趋势接入时间过滤",
+    "priority": "high"
+  },
+  {
+    "id": "fix_promo_filter_3",
+    "status": "pending",
+    "content": "PromotionPage.tsx 所有推广数据接入时间过滤",
+    "priority": "high"
+  },
+  {
+    "id": "fix_promo_filter_4",
+    "status": "pending",
+    "content": "编译验证",
+    "priority": "high"
+  }
+]

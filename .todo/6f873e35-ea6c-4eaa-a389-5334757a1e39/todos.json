@@ -1,0 +1,20 @@
+[
+  {
+    "id": "1",
+    "content": "创建数据导入脚本，自动加载 assets 中的示例数据",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "修改应用初始化逻辑，自动导入示例数据",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "验证数据是否正确加载到 Dashboard",
+    "status": "completed",
+    "priority": "medium"
+  }
+]

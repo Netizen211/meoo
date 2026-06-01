@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardTablePanel.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  56→            {unpinnedColumns.map(col => (
+  57→              <th key={col.key} onClick={() => { setSortField(col.key); setSortDesc(sortField === col.key ? !sortDesc : true); }}
+  58→                className="py-1.5 text-left font-medium cursor-pointer hover:text-indigo-400 relative group" style={{ width: col.width }}>
+  59→                <div className="flex items-center gap-1">
+  60→                  <button onClick={(e) => { e.stopPropagation(); togglePin(col.key); }} className="text-pdd-text-muted hover:text-indigo-400"><Pin size={10} /></button>
+  61→                  {col.label} {sortField === col.key && (sortDesc ? '↓' : '↑')}
+  62→                </div>
+  63→              </th>
+  64→            ))}
+  65→          </tr></thead>

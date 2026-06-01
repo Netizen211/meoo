@@ -1,0 +1,62 @@
+[
+  {
+    "id": "1",
+    "content": "读取所有需要修复的页面组件文件",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "修复 DashboardPage.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "修复 ProductPage.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "修复 UserPage.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "5",
+    "content": "修复 UploadPage.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "6",
+    "content": "修复 LoginPage.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "7",
+    "content": "修复 RegisterPage.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "8",
+    "content": "修复 StoresPage.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "9",
+    "content": "修复 SettingsPage.tsx 硬编码颜色",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "10",
+    "content": "汇总修改结果并输出文件引用表",
+    "status": "completed",
+    "priority": "medium"
+  }
+]

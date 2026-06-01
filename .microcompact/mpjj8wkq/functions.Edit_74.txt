@@ -1,0 +1,11 @@
+Error: Could not find text to replace in "/home/project/src/pages/dashboard/DashboardKpiPanel.tsx". Tried exact text matching strategy.
+
+请检查是否有以下常见问题：
+- 中英文字符不匹配（如中文引号vs英文引号）
+- 空格缩进数量不一致
+- 引号未正确转义
+- 换行符差异
+
+搜索的内容 (old_string):
+"border-b border-[#2a2d3e]"
+

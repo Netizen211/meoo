@@ -1,0 +1,19 @@
+The file /home/project/src/components/product-analysis/RelationAnalysisCard.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  22→  productStat: ProductStat;
+  23→  orders: any[];
+  24→}
+  25→
+  26→const COLORS = ['pdd-danger', 'pdd-danger-light', 'pdd-warning', 'pdd-success', 'pdd-primary', 'pdd-purple', 'pdd-cyan', 'pdd-pink'];
+  27→
+  28→export default function RelationAnalysisCard({ productStat, orders }: RelationAnalysisCardProps) {
+  29→  const [isExpanded, setIsExpanded] = useState(true);
+  30→  const [activeTab, setActiveTab] = useState<'related' | 'repurchase' | 'customer'>('related');
+  31→
+
+<system-reminder>
+⚠️ NOTICE: You've used Edit on "/home/project/src/components/product-analysis/RelationAnalysisCard.tsx" 7 times consecutively.
+
+Verify your changes are taking effect before modifying again. If the approach isn't working, move on to the next task rather than retrying.
+</system-reminder>

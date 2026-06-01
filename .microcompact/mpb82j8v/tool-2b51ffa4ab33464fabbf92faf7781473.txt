@@ -1,0 +1,13 @@
+The file /home/project/src/pages/StoresPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  23→    setDataFilter(id);
+  24→    navigate('/upload');
+  25→  };
+  26→
+  27→
+  28→
+  29→  const storeStats = useMemo(() => {
+  30→    const stats: Record<string, {
+  31→      orders: number;
+  32→      gmv: number;

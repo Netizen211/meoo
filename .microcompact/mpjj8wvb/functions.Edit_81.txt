@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardTablePanel.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  65→          </tr></thead>
+  66→          <tbody>{paginatedData.map((r, i) => (
+  67→            <tr key={i} className={`${i % 2 === 1 ? 'bg-pdd-bg/50' : ''} hover:bg-[#1e2235]/50`}>
+  68→              {visibleColumns.map(col => (
+  69→                <td key={col.key} className={`py-1.5 text-pdd-text-primary ${pinnedCols.has(col.key) ? 'bg-pdd-bg sticky left-0 z-10' : ''}`} style={{ width: col.width }}>
+  70→                  {col.key === 'orderNo' ? <span className="font-mono text-[10px] text-pdd-text-secondary">{r[col.key].slice(-8)}</span> :
+  71→                   col.key === 'product' ? <span className="truncate max-w-[120px] block">{r[col.key]}</span> :
+  72→                   col.key === 'status' ? <span className="px-1.5 py-0.5 rounded text-[10px] bg-[#1e2235] text-pdd-text-secondary">{r[col.key]}</span> :
+  73→                   ['paid', 'merchant'].includes(col.key) ? <span className={`text-right block ${col.key === 'merchant' ? 'text-indigo-400 font-medium' : ''}`}>¥{r[col.key].toFixed(0)}</span> :
+  74→                   r[col.key]}

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "1",
+    "content": "添加 import 语句引入 formulaEngine",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "修改 useProductStats 函数签名，增加新参数",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "在3处 stats[pid] 初始化中添加新字段默认值",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "替换利润计算逻辑部分",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "5",
+    "content": "更新 export 类型导出",
+    "status": "completed",
+    "priority": "medium"
+  },
+  {
+    "id": "6",
+    "content": "更新 useTotalProductStats 函数添加新字段聚合",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "7",
+    "content": "运行编译验证",
+    "status": "completed",
+    "priority": "high"
+  }
+]

@@ -1,0 +1,71 @@
+The file /home/project/.plan/1ec21e77-f46d-44f5-bf35-583b3cdc52b8/plan.md has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  86→- 上传测试文件
+  87→- 检查控制台日志
+  88→- 验证推广利润页面是否显示数据
+  89→
+  90→## 预期结果
+  91→- 用户上传商品推广数据后，数据能正确解析并持久化
+  92→- 推广利润页面能正确显示 KPI 指标、趋势图表等分析内容
+  93→- 数据在页面刷新后依然可用
+  94→
+  95→## 实施计划
+  96→
+  97→### 第一步：修改 UploadPage.tsx
+  98→**位置**：第 127-133 行
+  99→
+ 100→**修改内容**：
+ 101→```typescript
+ 102→if (detectedType === '商品推广数据') {
+ 103→  // 优先匹配包含"汇总"的Sheet，如果没有则使用第一个Sheet
+ 104→  const summarySheet = wb.SheetNames.find(s => s.includes('汇总')) || wb.SheetNames[0];
+ 105→  // 优先匹配包含"商品"的Sheet，如果没有则使用第二个Sheet或第一个Sheet
+ 106→  const productSheet = wb.SheetNames.find(s => s.includes('商品')) || wb.SheetNames[1] || wb.SheetNames[0];
+ 107→  
+ 108→  const summaryData = sheets[summarySheet] || [];
+ 109→  const productData = sheets[productSheet] || [];
+ 110→  
+ 111→  // 添加数据验证
+ 112→  console.log('商品推广数据解析:', {
+ 113→    summarySheet,
+ 114→    productSheet,
+ 115→    summaryCount: summaryData.length,
+ 116→    productCount: productData.length
+ 117→  });
+ 118→  
+ 119→  existing.promotionSummary = summaryData;
+ 120→  existing.promotionProducts = productData;
+ 121→  existing.availableFields.promotion = new Set(Object.keys(summaryData[0] || {}));
+ 122→}
+ 123→```
+ 124→
+ 125→### 第二步：修改 PromotionPage.tsx
+ 126→**位置**：第 135-142 行
+ 127→
+ 128→**修改内容**：
+ 129→```typescript
+ 130→if (!hasAnyPromo) {
+ 131→  return (
+ 132→    <div className="p-4">
+ 133→      <h2 className="text-lg font-semibold mb-3 flex items-center gap-2">
+ 134→        <Megaphone size={18} color="#e02e24" />推广利润
+ 135→      </h2>
+ 136→      <div className="pdd-card text-center py-12 text-[var(--pdd-text-secondary)]">
+ 137→        <p>请上传推广数据文件（商品推广/明星店铺/直播推广）</p>
+ 138→        {parsedData && (
+ 139→          <p className="text-xs mt-2 text-[var(--pdd-text-secondary)]">
+ 140→            当前数据状态：订单 {parsedData.orders?.length || 0} 条
+ 141→          </p>
+ 142→        )}
+ 143→      </div>
+ 144→    </div>
+ 145→  );
+ 146→}
+ 147→```
+ 148→
+ 149→### 第三步：测试验证
+ 150→1. 启动开发服务器
+ 151→2. 上传测试文件 `商品推广_分天数据_20260217至20260517.xlsx`
+ 152→3. 检查控制台日志，确认数据解析成功
+ 153→4. 访问推广利润页面，验证数据是否正确显示

@@ -1,0 +1,20 @@
+[
+  {
+    "content": "创建简化版商品360分析组件",
+    "id": "1",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "content": "重构ProductPage主页面",
+    "id": "2",
+    "status": "in_progress",
+    "priority": "high"
+  },
+  {
+    "content": "验证typecheck并测试",
+    "id": "3",
+    "status": "pending",
+    "priority": "high"
+  }
+]

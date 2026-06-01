@@ -1,0 +1,38 @@
+[
+  {
+    "id": "1",
+    "content": "分析裸货成本填充标签页的筛选实现方式",
+    "status": "completed",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "content": "为缺编码SKU标签页添加筛选功能（搜索、价格区间、订单数量、排序）",
+    "status": "in_progress",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "content": "为新品定价预设标签页添加筛选功能（搜索、成本区间、排序）",
+    "status": "pending",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "content": "为税务配置标签页添加筛选功能（搜索、税率区间、排序）",
+    "status": "pending",
+    "priority": "high"
+  },
+  {
+    "id": "5",
+    "content": "为自定义扣费标签页添加筛选功能（搜索、金额区间、排序）",
+    "status": "pending",
+    "priority": "high"
+  },
+  {
+    "id": "6",
+    "content": "运行pnpm run typecheck检查类型错误",
+    "status": "pending",
+    "priority": "high"
+  }
+]

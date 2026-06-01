@@ -1,0 +1,50 @@
+[
+  {
+    "id": "s1",
+    "status": "completed",
+    "content": "Step 1: 扩展数据模型",
+    "priority": "high"
+  },
+  {
+    "id": "s2",
+    "status": "completed",
+    "content": "Step 2: 公式引擎",
+    "priority": "high"
+  },
+  {
+    "id": "s4",
+    "status": "completed",
+    "content": "Step 4: ProfitTooltip组件",
+    "priority": "high"
+  },
+  {
+    "id": "s7",
+    "status": "completed",
+    "content": "Step 7: App.tsx 状态管理",
+    "priority": "high"
+  },
+  {
+    "id": "s3",
+    "status": "completed",
+    "content": "Step 3: 重构利润计算",
+    "priority": "high"
+  },
+  {
+    "id": "s5",
+    "status": "completed",
+    "content": "Step 5: ProductPage集成ProfitTooltip",
+    "priority": "medium"
+  },
+  {
+    "id": "s6",
+    "status": "completed",
+    "content": "Step 6: 成本管理页面重构",
+    "priority": "high"
+  },
+  {
+    "id": "s8",
+    "status": "completed",
+    "content": "Step 8: 验证编译",
+    "priority": "high"
+  }
+]

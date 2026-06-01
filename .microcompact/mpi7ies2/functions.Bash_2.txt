@@ -1,0 +1,1 @@
+{"exitCode":0,"output":"[OpenTelemetry] Trace 已启动，serviceName=oneday-sandbox-sdk-pro version=v0.1.0 env=production\n ERR_PNPM_NO_SCRIPT  Missing script: lint\n\nCommand \"lint\" not found."}

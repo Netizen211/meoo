@@ -1,0 +1,35 @@
+The file /home/project/src/pages/ProductLinksPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 115→    { label: '平均ROI', value: `${totalStats.roi.toFixed(2)}x`, icon: BarChart3, color: totalStats.roi >= 1 ? '#52c41a' : '#ff4d4f' },
+ 116→    { label: '退款率', value: `${totalStats.refundRate.toFixed(1)}%`, icon: RotateCcw, color: '#ff7875' },
+ 117→  ];
+ 118→
+ 119→  const tableColumns = [
+ 120→    { key: 'name', label: '商品', sortable: false },
+ 121→    { key: 'source', label: '数据来源', sortable: false },
+ 122→    { key: 'roi', label: 'ROI', sortable: true },
+ 123→    { key: 'gmv', label: 'GMV', sortable: true },
+ 124→    { key: 'orders', label: '订单数', sortable: true },
+ 125→    { key: 'sales', label: '销量', sortable: true },
+ 126→    { key: 'avgOrderValue', label: '客单价', sortable: true },
+ 127→    { key: 'revenue', label: '商家实收', sortable: true },
+ 128→    { key: 'promoCost', label: '推广花费', sortable: true },
+ 129→    { key: 'promoTransaction', label: '推广成交', sortable: true },
+ 130→    { key: 'promoImpressions', label: '曝光量', sortable: true },
+ 131→    { key: 'promoClicks', label: '点击量', sortable: true },
+ 132→    { key: 'ctr', label: 'CTR', sortable: true },
+ 133→    { key: 'cvr', label: 'CVR', sortable: true },
+ 134→    { key: 'discount', label: '折扣成本', sortable: true },
+ 135→    { key: 'totalCost', label: '总成本', sortable: true },
+ 136→    { key: 'refund', label: '退款金额', sortable: true },
+ 137→    { key: 'refundRate', label: '退款率', sortable: true },
+ 138→    { key: 'afterSaleRate', label: '售后率', sortable: true },
+ 139→    { key: 'netProfit', label: '净利润', sortable: true },
+ 140→    { key: 'profitRate', label: '利润率', sortable: true },
+ 141→  ];
+ 142→
+ 143→  const renderStatValue = (s: ProductStat, key: string) => {
+ 144→    const isRate = ['roi', 'refundRate', 'afterSaleRate', 'discountRatio', 'promoCostRatio', 'profitRate', 'ctr', 'cvr'].includes(key);
+ 145→    const isMoney = ['gmv', 'revenue', 'promoCost', 'discount', 'totalCost', 'refund', 'netProfit', 'avgOrderValue'].includes(key);
+ 146→    const val = s[key as keyof ProductStat] as number;

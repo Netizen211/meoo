@@ -1,0 +1,1 @@
+{"files":["src/pages/StoresPage.tsx"],"pattern":"getAllStoresData","path":"src","totalFiles":1}

@@ -1,0 +1,1 @@
+{"results":[],"pattern":"promotionProducts.*reduce|promotionProducts.*forEach","path":"src/pages","totalMatches":0}

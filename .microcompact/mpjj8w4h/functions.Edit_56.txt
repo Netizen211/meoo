@@ -1,0 +1,19 @@
+The file /home/project/src/components/product-analysis/TrendChartCard.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 299→                        formatter={(value: number) => [`¥${value.toFixed(2)}`, '']}
+ 300→                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+ 301→                      />
+ 302→                      <Bar dataKey="avgPrice" fill="pdd-warning" name="平均价格" radius={[4, 4, 0, 0]} />
+ 303→                      <Line type="monotone" dataKey="maxPrice" stroke="pdd-danger" strokeWidth={2} name="最高价" dot={false} />
+ 304→                      <Line type="monotone" dataKey="minPrice" stroke="pdd-success" strokeWidth={2} name="最低价" dot={false} />
+ 305→                    </ComposedChart>
+ 306→                  ) : (
+ 307→                    <ComposedChart data={chartData}>
+ 308→                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+
+<system-reminder>
+⚠️ NOTICE: You've used Edit on "/home/project/src/components/product-analysis/TrendChartCard.tsx" 7 times consecutively.
+
+Verify your changes are taking effect before modifying again. If the approach isn't working, move on to the next task rather than retrying.
+</system-reminder>

@@ -1,0 +1,13 @@
+The file /home/project/src/pages/DashboardPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 101→    const rfCnt = filteredOrders.filter(o => String(o['售后状态'] || '').includes('退款')).length;
+ 102→    const rfRate = cnt > 0 ? (rfCnt / cnt) * 100 : 0;
+ 103→    const rfAmount = filteredOrders.filter(o => String(o['售后状态'] || '').includes('退款')).reduce((s, o) => s + sf(o['用户实付金额(元)']), 0);
+ 104→    const postage = filteredOrders.reduce((s, o) => s + sf(o['邮费(元)']), 0);
+ 105→    const discount = filteredOrders.reduce((s, o) => s + sf(o['店铺优惠折扣(元)']) + sf(o['平台优惠折扣(元)']) + sf(o['多多支付立减金额(元)']), 0);
+ 106→    const shipped = filteredOrders.filter(o => String(o['发货时间'] || '').trim() !== '').length;
+ 107→    const conversionRate = cnt > 0 ? (shipped / cnt) * 100 : 0;
+ 108→    const avgShipHours = shipped > 0 ? filteredOrders.filter(o => String(o['发货时间'] || '').trim() !== '').reduce((s, o) => {
+ 109→      const payT = new Date(String(o['支付时间'] || ''));
+ 110→      const shipT = new Date(String(o['发货时间'] || ''));

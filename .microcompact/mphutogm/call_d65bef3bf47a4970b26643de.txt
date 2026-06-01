@@ -1,0 +1,44 @@
+The file /home/project/src/pages/UploadPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+ 215→              existing.promotionSummary = Array.from(summaryMap.values());
+ 216→              sheetFields.forEach(f => existing.availableFields.promotion.add(f));
+ 217→            }
+ 218→            processedTypes.add(sheetType);
+ 219→          } else if (sheetType === '明星店铺数据') {
+ 220→            // 后上传的文件覆盖先上传的同日期+同推广名称数据
+ 221→            const starMap = new Map<string, any>();
+ 222→            existing.starStoreSummary.forEach((r: any) => {
+ 223→              const d = String(r['日期'] || '').trim();
+ 224→              if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+ 225→                starMap.set(`${d}-${r['推广名称'] || r['创意样式'] || ''}`, r);
+ 226→              }
+ 227→            });
+ 228→            sheetData.forEach((item: any) => {
+ 229→              if (!isValidDateRow(item)) return;
+ 230→              const key = `${String(item['日期']).trim()}-${item['推广名称'] || item['创意样式'] || ''}`;
+ 231→              starMap.set(key, item);
+ 232→            });
+ 233→            existing.starStoreSummary = Array.from(starMap.values());
+ 234→            processedTypes.add(sheetType);
+ 235→          } else if (sheetType === '直播推广数据') {
+ 236→            // 后上传的文件覆盖先上传的同日期+同直播间数据
+ 237→            const liveMap = new Map<string, any>();
+ 238→            existing.liveStreamSummary.forEach((r: any) => {
+ 239→              const d = String(r['日期'] || '').trim();
+ 240→              if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
+ 241→                liveMap.set(`${d}-${r['直播间'] || ''}`, r);
+ 242→              }
+ 243→            });
+ 244→            sheetData.forEach((item: any) => {
+ 245→              if (!isValidDateRow(item)) return;
+ 246→              const key = `${String(item['日期']).trim()}-${item['直播间'] || ''}`;
+ 247→              liveMap.set(key, item);
+ 248→            });
+ 249→            existing.liveStreamSummary = Array.from(liveMap.values());
+ 250→            processedTypes.add(sheetType);
+ 251→          } else if (sheetType === '运费险数据') {
+ 252→            const existingKeys = new Set(existing.shippingInsurance.map((r: any) => String(r['订单编号'] || '')));
+ 253→            sheetData.forEach((item: any) => {
+ 254→              const key = String(item['订单编号'] || '');
+ 255→              if (key && !existingKeys.has(key)) { existing.shippingInsurance.push(item); existingKeys.add(key); }

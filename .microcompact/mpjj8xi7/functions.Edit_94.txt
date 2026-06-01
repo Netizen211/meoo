@@ -1,0 +1,13 @@
+The file /home/project/src/pages/dashboard/DashboardTrendPanel.tsx has been updated. Made 2 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  28→            <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={{ stroke: '#2a2d3e' }} tickLine={false} />
+  29→            <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} axisLine={{ stroke: '#2a2d3e' }} tickLine={false} />
+  30→            <Tooltip contentStyle={{ background: '#1a1d2e', border: '1px solid #2a2d3e', borderRadius: '8px', color: '#e2e8f0', fontSize: '12px' }} labelStyle={{ color: '#94a3b8' }} />
+  31→            <Bar dataKey="income" fill="pdd-primary" radius={[2, 2, 0, 0]} />
+  32→            <Line type="monotone" dataKey="orders" stroke="pdd-primary-light" strokeWidth={2} dot={{ r: 3, fill: '#3b82f6' }} />
+  33→          </ComposedChart>
+  34→        </ResponsiveContainer>
+  35→      )}
+  36→    </motion.div>
+  37→  );

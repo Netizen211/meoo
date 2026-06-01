@@ -1,0 +1,13 @@
+The file /home/project/src/pages/product/ProductDetailDrawer.tsx has been updated. Made 8 replacements.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  21→    return [
+  22→      { name: 'GMV', value: product.gmv, fill: 'pdd-primary' },
+  23→      { name: '折扣', value: -product.discount, fill: '#faad14' },
+  24→      { name: '推广费', value: -product.promoCost, fill: '#722ed1' },
+  25→      { name: '成本', value: -(product.gmv * 0.6), fill: 'pdd-danger' },
+  26→      { name: '净利润', value: product.netProfit, fill: product.netProfit >= 0 ? 'pdd-success' : '#ff4d4f' },
+  27→    ];
+  28→  }, [product]);
+  29→
+  30→  const afterSalePieData = useMemo(() => {

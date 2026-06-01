@@ -1,0 +1,26 @@
+[
+  {
+    "id": "1",
+    "status": "completed",
+    "content": "阅读现有代码：ProductPage、UploadPage、App.tsx 中推广数据处理逻辑",
+    "priority": "high"
+  },
+  {
+    "id": "2",
+    "status": "completed",
+    "content": "重写 ProductLinkStats 中推广数据关联逻辑：日期匹配+GMV占比分配",
+    "priority": "high"
+  },
+  {
+    "id": "3",
+    "status": "completed",
+    "content": "修改 ProductDetailDrawer 展示推广数据来源明细",
+    "priority": "high"
+  },
+  {
+    "id": "4",
+    "status": "completed",
+    "content": "验证构建和预览效果",
+    "priority": "medium"
+  }
+]

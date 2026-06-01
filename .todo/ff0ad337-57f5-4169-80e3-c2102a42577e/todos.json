@@ -1,0 +1,20 @@
+[
+  {
+    "id": "fix1",
+    "status": "completed",
+    "content": "修复filterPromoData时间过滤导致推广数据被清空",
+    "priority": "high"
+  },
+  {
+    "id": "fix2",
+    "status": "completed",
+    "content": "合并商品推广/直播推广/明星店铺数据到promotionProducts",
+    "priority": "high"
+  },
+  {
+    "id": "fix3",
+    "status": "completed",
+    "content": "验证编译和功能 - UploadPage和ProductPage均无编译错误",
+    "priority": "high"
+  }
+]

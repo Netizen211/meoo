@@ -1,0 +1,12 @@
+The file /home/project/src/pages/LogisticsPage.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+   1→import React, { useMemo, useState } from 'react';
+   2→import { motion } from 'framer-motion';
+   3→import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend, ReferenceLine, ComposedChart, Area } from 'recharts';
+   4→import { Truck, Clock, CheckCircle, AlertTriangle, Package, Lock, ArrowUp, ArrowDown, MapPin, TrendingUp, DollarSign, Filter, Download, ChevronDown, BarChart3 as BarChartIcon } from 'lucide-react';
+   5→import { useData, useAuth } from '../App';
+   6→import TimeFilter, { TimeRange, TimeGranularity, safeFloat, filterByTimeRange, getCompareOrders, getAllDateGroups, changePct } from '../components/TimeFilter';
+   7→import { ss, hoursDiff, exportCSV } from '../utils';
+   8→
+   9→const COLORS = ['#e02e24', '#1890ff', '#52c41a', '#faad14', '#722ed1', '#13c2c2', '#eb2f96', '#fa541c', '#2f54eb', '#a0d911'];

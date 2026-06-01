@@ -1,0 +1,13 @@
+The file /home/project/src/pages/product/ProductFullLinkTab.tsx has been updated. Made 1 replacement.
+
+Here's the result of running `cat -n` on a snippet of the edited file:
+  86→  const kpiCards = [
+  87→    { label: '总GMV', value: `¥${fmtInt(totalStats.gmv)}`, icon: DollarSign, color: 'pdd-primary' },
+  88→    { label: '总实收', value: `¥${fmtInt(totalStats.revenue)}`, icon: TrendingUp, color: 'pdd-success' },
+  89→    { label: '推广花费', value: `¥${fmtInt(totalStats.promoCost)}`, icon: Target, color: 'pdd-purple' },
+  90→    { label: '总折扣', value: `¥${fmtInt(totalStats.discount)}`, icon: Percent, color: 'pdd-warning' },
+  91→    { label: '总成本', value: `¥${fmtInt(totalStats.totalCost)}`, icon: TrendingDown, color: '#ff4d4f' },
+  92→    { label: '净利润', value: `¥${fmtInt(totalStats.netProfit)}`, icon: DollarSign, color: totalStats.netProfit >= 0 ? 'pdd-success' : '#ff4d4f' },
+  93→    { label: '平均ROI', value: `${totalStats.roi.toFixed(2)}x`, icon: BarChart3, color: totalStats.roi >= 1 ? 'pdd-success' : '#ff4d4f' },
+  94→    { label: '退款率', value: `${totalStats.refundRate.toFixed(1)}%`, icon: RotateCcw, color: '#ff7875' },
+  95→  ];
