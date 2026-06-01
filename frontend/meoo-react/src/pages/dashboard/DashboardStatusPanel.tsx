@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { Move } from 'lucide-react';
+import { Move, Info } from 'lucide-react';
 
 const STATUS_COLORS = ['var(--pdd-success)', 'var(--pdd-info)', 'var(--pdd-primary-light)', 'var(--pdd-warning)', '#a855f7', '#64748b'];
 
@@ -19,7 +19,10 @@ export default function DashboardStatusPanel({ statusDist, noData, draggedPanel,
     <motion.div key="status" layoutId="status" draggable onDragStart={() => onDragStart('status')} onDragOver={e => onDragOver(e, 'status')} onDragEnd={onDragEnd}
       className={`bg-pdd-card rounded-xl border border-pdd-border p-3 cursor-move transition-all ${draggedPanel === 'status' ? 'opacity-50 scale-95' : ''}`}>
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold text-pdd-text">订单状态分布</h3>
+        <div>
+          <h3 className="text-sm font-semibold text-pdd-text">订单状态分布</h3>
+          <span className="text-[9px] text-gray-400/60 italic flex items-center gap-0.5"><Info size={8} />订单·订单状态 GROUP BY</span>
+        </div>
         <Move size={14} className="text-pdd-text-secondary" />
       </div>
       {noData ? (

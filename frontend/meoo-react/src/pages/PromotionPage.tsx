@@ -471,6 +471,10 @@ export default function PromotionPage() {
     const compareRoi = totalKpi.compareCost > 0 ? (totalKpi.compareGmv / totalKpi.compareCost) : 0;
     return (
       <div className="space-y-3">
+        <div className="flex items-center gap-2 text-[9px] text-gray-400/60 italic mb-1">
+          <span className="w-1 h-1 rounded-full bg-gray-300" />
+          数据来源：推广·成交花费/交易额/曝光量/点击量 SUM（商品推广+明星店铺+直播推广）
+        </div>
         <div className="grid grid-cols-5 gap-2">
           <KpiCard label="总推广花费" value={totalKpi.totalCost} fmt={v => `¥${v.toFixed(0)}`} change={compareEnabled ? changePct(totalKpi.totalCost, totalKpi.compareCost) : null} reverse />
           <KpiCard label="推广GMV" value={totalKpi.totalGmv} fmt={v => `¥${v.toFixed(0)}`} change={compareEnabled ? changePct(totalKpi.totalGmv, totalKpi.compareGmv) : null} />

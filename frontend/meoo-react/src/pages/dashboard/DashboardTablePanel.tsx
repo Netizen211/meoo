@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Eye, EyeOff, ChevronLeft, ChevronRight, Pin, Move, Search } from 'lucide-react';
+import { Eye, EyeOff, ChevronLeft, ChevronRight, Pin, Move, Search, Info } from 'lucide-react';
 
 interface ColumnDef { key: string; label: string; width: number; }
 
@@ -45,7 +45,10 @@ export default function DashboardTablePanel({
       className={`bg-pdd-card rounded-xl border border-pdd-border p-3 cursor-move transition-all ${draggedPanel === 'table' ? 'opacity-50 scale-95' : ''}`}>
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold text-pdd-text">订单明细 ({tableData.length}条)</h3>
+          <div>
+            <h3 className="text-sm font-semibold text-pdd-text">订单明细 ({tableData.length}条)</h3>
+            <span className="text-[9px] text-gray-400/60 italic flex items-center gap-0.5"><Info size={8} />订单·全部字段 原始行数据展示</span>
+          </div>
           <div className="flex items-center gap-1 bg-[var(--pdd-gray-100)] rounded-lg px-2 py-1 border border-pdd-border">
             <Search size={12} className="text-pdd-text-secondary" />
             <input type="text" value={searchQuery} onChange={e => onSearchChange(e.target.value)} placeholder="搜索..." className="w-36 text-xs outline-none bg-transparent text-pdd-text placeholder-pdd-text-secondary" />

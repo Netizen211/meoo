@@ -1,7 +1,7 @@
 import React from 'react';
 import { motion } from 'framer-motion';
 import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { BarChart3, Move } from 'lucide-react';
+import { BarChart3, Move, Info } from 'lucide-react';
 
 interface Props {
   revenueTrend: any[];
@@ -18,7 +18,10 @@ export default function DashboardTrendPanel({ revenueTrend, noData, rangeLabel, 
     <motion.div key="trend" layoutId="trend" draggable onDragStart={() => onDragStart('trend')} onDragOver={e => onDragOver(e, 'trend')} onDragEnd={onDragEnd}
       className={`bg-pdd-card rounded-xl border border-pdd-border p-3 cursor-move transition-all ${draggedPanel === 'trend' ? 'opacity-50 scale-95' : ''}`}>
       <div className="flex items-center justify-between mb-2">
-        <h3 className="text-sm font-semibold text-pdd-text flex items-center gap-1.5"><BarChart3 size={14} color="var(--pdd-primary)" />收入与退款趋势({rangeLabel})</h3>
+        <div>
+          <h3 className="text-sm font-semibold text-pdd-text flex items-center gap-1.5"><BarChart3 size={14} color="var(--pdd-primary)" />收入与退款趋势({rangeLabel})</h3>
+          <span className="text-[9px] text-gray-400/60 italic flex items-center gap-0.5"><Info size={8} />订单·商家实收金额(元)+退款金额(元) 按支付时间日聚合</span>
+        </div>
         <Move size={14} className="text-pdd-text-secondary" />
       </div>
       {noData ? <div className="h-40 flex items-center justify-center text-xs text-pdd-text-secondary">请先上传数据</div> : (
