@@ -2,6 +2,9 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { CheckCircle, AlertTriangle, AlertCircle, ChevronDown, ChevronUp, ExternalLink, X } from 'lucide-react';
 import type { CostBreakdown, CostSource, TaxDetail, DeductionDetail } from './ProductLinkStats';
+import { Card, CardContent } from './ui/card';
+import { Badge } from './ui/badge';
+import { SEMANTIC } from '../ui/tokens/colors';
 
 interface Props {
   netProfit: number;
@@ -19,9 +22,9 @@ interface Props {
 }
 
 const confidenceConfig = {
-  high: { color: 'text-green-600', bg: 'bg-green-50', border: 'border-green-200', icon: CheckCircle, label: '高可信' },
-  medium: { color: 'text-yellow-600', bg: 'bg-yellow-50', border: 'border-yellow-200', icon: AlertTriangle, label: '中可信' },
-  low: { color: 'text-red-500', bg: 'bg-red-50', border: 'border-red-200', icon: AlertCircle, label: '低可信' },
+  high: { color: SEMANTIC.profit, bg: '#F0FDF4', border: '#BBF7D0', icon: CheckCircle, label: '高可信' },
+  medium: { color: SEMANTIC.warning, bg: '#FFFBEB', border: '#FDE68A', icon: AlertTriangle, label: '中可信' },
+  low: { color: SEMANTIC.loss, bg: '#FEF2F2', border: '#FECACA', icon: AlertCircle, label: '低可信' },
 };
 
 function fmt(n: number) { return n.toFixed(2); }
@@ -110,8 +113,8 @@ export default function ProfitTooltip({
 
   // 缺失成本时的触发样式
   const triggerClass = isMissingCost
-    ? 'text-pdd-gray-400 font-mono text-xs cursor-help border-b border-dashed border-pdd-gray-300'
-    : `font-mono text-xs cursor-help border-b border-dashed ${profitConfidence === 'high' ? 'border-green-300 text-green-600' : profitConfidence === 'medium' ? 'border-yellow-300 text-yellow-600' : 'border-red-300 text-red-500'}`;
+    ? 'text-pdd-text-secondary/40 font-mono text-xs cursor-help border-b border-dashed border-pdd-border/50'
+    : `font-mono text-xs cursor-help border-b border-dashed ${profitConfidence === 'high' ? 'border-pdd-success/30 text-pdd-success' : profitConfidence === 'medium' ? 'border-amber-300 text-amber-600' : 'border-pdd-danger/30 text-pdd-danger'}`;
 
   const triggerText = isMissingCost ? '--' : `¥${fmt(displayProfit)}`;
 
@@ -125,11 +128,11 @@ export default function ProfitTooltip({
               <AlertCircle size={16} />
               <span>利润待计算</span>
             </div>
-            <button onClick={() => setShowPopup(false)} className="text-pdd-gray-400 hover:text-pdd-gray-600">
+            <button onClick={() => setShowPopup(false)} className="text-pdd-text-secondary/40 hover:text-pdd-text-secondary">
               <X size={14} />
             </button>
           </div>
-          <p className="text-pdd-gray-600 text-xs mb-3 leading-relaxed">
+          <p className="text-pdd-text-secondary text-xs mb-3 leading-relaxed">
             当前商品缺少成本数据，无法计算真实利润。请在成本管理页面填写商品成本后，系统将自动计算包含税费、扣费在内的完整利润。
           </p>
           {onGoToCostManagement && (
@@ -145,15 +148,15 @@ export default function ProfitTooltip({
     }
 
     return (
-      <div className="w-80">
+      <div>
         {/* Header */}
-        <div className={`px-4 py-2.5 rounded-t-lg flex items-center justify-between ${conf.bg}`}>
-          <span className={`font-bold text-sm ${conf.color}`}>{displayLabel}: ¥{fmt(displayProfit)}</span>
+        <div className="px-4 py-2.5 flex items-center justify-between" style={{ backgroundColor: conf.bg }}>
+          <span className="font-bold text-sm" style={{ color: conf.color }}>{displayLabel}: ¥{fmt(displayProfit)}</span>
           <div className="flex items-center gap-2">
-            <span className={`flex items-center gap-1 text-[10px] font-medium ${conf.color}`}>
-              <ConfIcon size={12} />{conf.label}
-            </span>
-            <button onClick={() => setShowPopup(false)} className="text-pdd-gray-400 hover:text-pdd-gray-600 ml-1">
+            <Badge variant={profitConfidence === 'high' ? 'default' : profitConfidence === 'medium' ? 'secondary' : 'destructive'} className="text-[10px] h-5 gap-0.5">
+              <ConfIcon size={10} color={conf.color} />{conf.label}
+            </Badge>
+            <button onClick={() => setShowPopup(false)} className="text-pdd-text-secondary/40 hover:text-pdd-text-secondary ml-1">
               <X size={12} />
             </button>
           </div>
@@ -162,13 +165,13 @@ export default function ProfitTooltip({
         <div className="p-4 space-y-3">
           {/* 收入 */}
           <div>
-            <div className="text-[10px] text-pdd-gray-400 font-semibold uppercase tracking-wide mb-1.5">收入</div>
-            <div className="flex justify-between text-pdd-gray-700 text-xs">
+            <div className="text-[10px] text-pdd-text-secondary/50 font-semibold uppercase tracking-wide mb-1.5">收入</div>
+            <div className="flex justify-between text-pdd-text text-xs">
               <span>实收金额</span>
               <span className="font-mono font-medium">¥{fmt(revenue)}</span>
             </div>
             {costBreakdown.discount > 0 && (
-              <div className="text-[10px] text-pdd-gray-400 mt-0.5">
+              <div className="text-[10px] text-pdd-text-secondary/40 mt-0.5">
                 已含折扣: ¥{fmt(costBreakdown.discount)}（已从实收中扣除）
               </div>
             )}
@@ -176,18 +179,18 @@ export default function ProfitTooltip({
 
           {/* 直接成本 */}
           <div>
-            <div className="text-[10px] text-pdd-gray-400 font-semibold uppercase tracking-wide mb-1.5">直接成本</div>
-            <div className="space-y-1 text-xs text-pdd-gray-600">
+            <div className="text-[10px] text-pdd-text-secondary/50 font-semibold uppercase tracking-wide mb-1.5">直接成本</div>
+            <div className="space-y-1 text-xs text-pdd-text-secondary">
               <div className="flex justify-between group relative">
                 <span className="flex items-center gap-1">
                   商品成本
-                  <span className={`text-[10px] px-1 rounded ${costSource.productCost === 'real' ? 'bg-green-100 text-green-600' : costSource.productCost === 'estimated' ? 'bg-yellow-100 text-yellow-600' : 'bg-red-100 text-red-500'}`}>
+                  <Badge variant={costSource.productCost === 'real' ? 'default' : costSource.productCost === 'estimated' ? 'secondary' : 'destructive'} className="text-[9px] h-4 px-1">
                     {costSource.productCost === 'real' ? '真实' : costSource.productCost === 'estimated' ? '估算' : '缺失'}
-                  </span>
+                  </Badge>
                 </span>
                 <span className="font-mono">¥{fmt(costBreakdown.productCost)}</span>
               </div>
-              <div className="text-[10px] text-pdd-gray-400 pl-2 border-l border-pdd-gray-200">
+              <div className="text-[10px] text-pdd-text-secondary/40 pl-2 border-l border-pdd-border/50">
                 {costSource.productCost === 'real'
                   ? '基于成本管理填写的裸货成本 × 销量计算'
                   : costSource.productCost === 'estimated'
@@ -197,21 +200,21 @@ export default function ProfitTooltip({
               <div className="flex justify-between">
                 <span className="flex items-center gap-1">
                   包装费
-                  <span className="text-[10px] text-pdd-gray-400">(每单固定)</span>
+                  <span className="text-[10px] text-pdd-text-secondary/40">(每单固定)</span>
                 </span>
                 <span className="font-mono">¥{fmt(costBreakdown.packagingFee)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="flex items-center gap-1">
                   快递费
-                  <span className="text-[10px] text-pdd-gray-400">(每单固定)</span>
+                  <span className="text-[10px] text-pdd-text-secondary/40">(每单固定)</span>
                 </span>
                 <span className="font-mono">¥{fmt(costBreakdown.shippingFee)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="flex items-center gap-1">
                   推广费
-                  <span className="text-[10px] text-pdd-gray-400">(来自推广报表)</span>
+                  <span className="text-[10px] text-pdd-text-secondary/40">(来自推广报表)</span>
                 </span>
                 <span className="font-mono">¥{fmt(costBreakdown.promoCost)}</span>
               </div>
@@ -219,7 +222,7 @@ export default function ProfitTooltip({
                 <div className="flex justify-between">
                   <span className="flex items-center gap-1">
                     平台扣点
-                    <span className="text-[10px] text-pdd-gray-400">(含百亿补贴)</span>
+                    <span className="text-[10px] text-pdd-text-secondary/50">(含百亿补贴)</span>
                   </span>
                   <span className="font-mono">¥{fmt(costBreakdown.platformFee)}</span>
                 </div>
@@ -248,8 +251,8 @@ export default function ProfitTooltip({
           {/* 税费合计 */}
           {taxDetails.length > 0 && (
             <div>
-              <div className="text-[10px] text-pdd-gray-400 font-semibold uppercase tracking-wide mb-1.5">税费合计</div>
-              <div className="flex justify-between text-xs text-pdd-gray-600">
+              <div className="text-[10px] text-pdd-text-secondary/50 font-semibold uppercase tracking-wide mb-1.5">税费合计</div>
+              <div className="flex justify-between text-xs text-pdd-text-secondary">
                 <span>{taxDetails.map(t => t.name).join(' + ')}</span>
                 <span className="font-mono">¥{fmt(costBreakdown.taxes)}</span>
               </div>
@@ -259,17 +262,17 @@ export default function ProfitTooltip({
           {/* 自定义扣费明细 */}
           {deductionDetails.length > 0 && (
             <div>
-              <div className="text-[10px] text-pdd-gray-400 font-semibold uppercase tracking-wide mb-1.5">
+              <div className="text-[10px] text-pdd-text-secondary/50 font-semibold uppercase tracking-wide mb-1.5">
                 其他扣费明细
-                <span className="text-[10px] text-pdd-gray-400 font-normal">({deductionDetails.length}项)</span>
+                <span className="text-[10px] text-pdd-text-secondary/50 font-normal">({deductionDetails.length}项)</span>
               </div>
               {deductionDetails.map((d, i) => (
-                <div key={i} className="flex justify-between text-[11px] text-pdd-gray-500 py-0.5">
+                <div key={i} className="flex justify-between text-[11px] text-pdd-text-secondary/70 py-0.5">
                   <span className="truncate max-w-[150px]">&middot; {d.name}</span>
                   <span className="font-mono">¥{fmt(d.amount)}</span>
                 </div>
               ))}
-              <div className="flex justify-between text-xs text-pdd-gray-600 border-t border-pdd-gray-100 pt-1 mt-0.5">
+              <div className="flex justify-between text-xs text-pdd-text-secondary border-t border-pdd-border pt-1 mt-0.5">
                 <span className="font-medium">扣费合计</span>
                 <span className="font-mono">¥{fmt(costBreakdown.customDeductions)}</span>
               </div>
@@ -288,12 +291,12 @@ export default function ProfitTooltip({
 
           {/* 展开的明细 */}
           {expanded && (
-            <div className="border-t border-pdd-gray-100 pt-2 space-y-2">
+            <div className="border-t border-pdd-border pt-2 space-y-2">
               {taxDetails.length > 0 && (
                 <div>
-                  <div className="text-[10px] text-pdd-gray-400 font-medium mb-1">税费明细</div>
+                  <div className="text-[10px] text-pdd-text-secondary/50 font-medium mb-1">税费明细</div>
                   {taxDetails.map((t, i) => (
-                    <div key={i} className="flex justify-between text-[11px] text-pdd-gray-500 py-0.5">
+                    <div key={i} className="flex justify-between text-[11px] text-pdd-text-secondary/70 py-0.5">
                       <span>{t.name} ({t.rate}% x ¥{fmt(t.base)})</span>
                       <span className="font-mono">¥{fmt(t.amount)}</span>
                     </div>
@@ -302,14 +305,14 @@ export default function ProfitTooltip({
               )}
               {deductionDetails.length > 0 && (
                 <div>
-                  <div className="text-[10px] text-pdd-gray-400 font-medium mb-1">自定义扣费明细</div>
+                  <div className="text-[10px] text-pdd-text-secondary/50 font-medium mb-1">自定义扣费明细</div>
                   {deductionDetails.map((d, i) => (
-                    <div key={i} className="py-1.5 border-b border-pdd-gray-50 last:border-0">
-                      <div className="flex justify-between text-[11px] text-pdd-gray-600">
+                    <div key={i} className="py-1.5 border-b border-pdd-border/30 last:border-0">
+                      <div className="flex justify-between text-[11px] text-pdd-text-secondary">
                         <span className="font-medium">{d.name}</span>
                         <span className="font-mono">¥{fmt(d.amount)}</span>
                       </div>
-                      <div className="text-[10px] text-pdd-gray-400 mt-0.5 pl-2 border-l border-pdd-gray-200 space-y-0.5">
+                      <div className="text-[10px] text-pdd-text-secondary/50 mt-0.5 pl-2 border-l border-pdd-border/70 space-y-0.5">
                         <div>公式: {d.formula}</div>
                         {d.amount === 0 && (
                           <div className="text-orange-400">计算结果为0，可能条件未满足或数据为0</div>
@@ -323,9 +326,9 @@ export default function ProfitTooltip({
           )}
 
           {/* 利润计算过程 */}
-          <div className="border-t border-pdd-gray-100 pt-3 mt-2">
-            <div className="text-[10px] text-pdd-gray-400 font-semibold uppercase tracking-wide mb-2">利润计算过程</div>
-            <div className="space-y-1 text-[11px] text-pdd-gray-500">
+          <div className="border-t border-pdd-border pt-3 mt-2">
+            <div className="text-[10px] text-pdd-text-secondary/50 font-semibold uppercase tracking-wide mb-2">利润计算过程</div>
+            <div className="space-y-1 text-[11px] text-pdd-text-secondary/70">
               <div className="flex justify-between">
                 <span>实收金额</span>
                 <span className="font-mono text-green-600">+¥{fmt(revenue)}</span>
@@ -348,8 +351,8 @@ export default function ProfitTooltip({
               </div>
               {costBreakdown.platformFee > 0 && (
                 <div className="flex justify-between">
-                  <span className="text-pdd-gray-400">平台扣点(已含实收)</span>
-                  <span className="font-mono text-pdd-gray-400">¥{fmt(costBreakdown.platformFee)}</span>
+                  <span className="text-pdd-text-secondary/50">平台扣点(已含实收)</span>
+                  <span className="font-mono text-pdd-text-secondary/50">¥{fmt(costBreakdown.platformFee)}</span>
                 </div>
               )}
               {(costBreakdown.insuranceFee ?? 0) > 0 && (
@@ -382,7 +385,7 @@ export default function ProfitTooltip({
                   <span className="font-mono text-red-500">-¥{fmt(costBreakdown.customDeductions)}</span>
                 </div>
               )}
-              <div className="border-t border-pdd-gray-200 pt-1 mt-1 flex justify-between font-medium">
+              <div className="border-t border-pdd-border/70 pt-1 mt-1 flex justify-between font-medium">
                 <span>最终利润</span>
                 <span className={`font-mono ${netProfitAfterTax >= 0 ? 'text-green-600' : 'text-red-500'}`}>
                   ¥{fmt(netProfitAfterTax)}
@@ -392,7 +395,7 @@ export default function ProfitTooltip({
           </div>
 
           {/* 数据来源 */}
-          <div className="border-t border-pdd-gray-100 pt-2 text-[10px] text-pdd-gray-400">
+          <div className="border-t border-pdd-border pt-2 text-[10px] text-pdd-text-secondary/50">
             数据来源: 订单CSV + 推广XLSX{costSource.productCost === 'real' ? ' + 成本管理' : ''}
           </div>
         </div>
@@ -412,15 +415,15 @@ export default function ProfitTooltip({
       </span>
 
       {showPopup && createPortal(
-        <div
+        <Card
           ref={popupRef}
-          className="fixed z-[9999] bg-pdd-card rounded-lg shadow-2xl border border-pdd-gray-200 text-xs animate-in fade-in duration-150"
-          style={{ top: popupPos.top, left: popupPos.left, maxHeight: 'calc(100vh - 16px)', overflowY: 'auto' }}
+          className="fixed z-[9999] w-80 shadow-2xl animate-in fade-in duration-150 border-pdd-border overflow-y-auto"
+          style={{ top: popupPos.top, left: popupPos.left, maxHeight: 'calc(100vh - 16px)' }}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
         >
           {renderPopupContent()}
-        </div>,
+        </Card>,
         document.body
       )}
     </>

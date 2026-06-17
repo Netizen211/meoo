@@ -77,7 +77,7 @@ export default function AnalysisControlBar() {
       <div className="flex items-center gap-1 text-xs text-pdd-text-secondary flex-wrap">
         {breadcrumbs.map((crumb, i) => (
           <React.Fragment key={i}>
-            {i > 0 && <ChevronRight size={12} className="text-pdd-gray-400" />}
+            {i > 0 && <ChevronRight size={12} className="text-pdd-text-secondary/50" />}
             {i < breadcrumbs.length - 1 ? (
               <button onClick={drillUp} className="hover:text-pdd-primary transition-colors flex items-center gap-1">
                 <ArrowLeft size={10} />

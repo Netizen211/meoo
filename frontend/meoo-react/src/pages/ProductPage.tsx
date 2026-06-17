@@ -1,45 +1,98 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { DndContext, closestCenter, DragEndEvent, DragOverlay, DragStartEvent, useSensor, useSensors, PointerSensor } from '@dnd-kit/core';
-import { arrayMove, SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Legend, LineChart, Line, ScatterChart, Scatter, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
-import { Package, TrendingUp, DollarSign, ShoppingCart, AlertTriangle, Ban, ArrowUp, ArrowDown, Calendar, Filter, ChevronDown, ChevronLeft, ChevronRight, X, Check, Tag, BarChart3, Link2, RotateCcw, Layers, Clock, Target, Zap, Box, GripVertical, Eye, Activity, Hash, Download, Percent, Search } from 'lucide-react';
-import { useData, useAuth } from '../App';
+import React, { useMemo, useState, useEffect, useCallback, useRef } from 'react';
+import { Tooltip, ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid } from 'recharts';
+import {
+  Package, TrendingUp, DollarSign, AlertTriangle, Ban,
+  ShoppingCart, ArrowUp, ArrowDown, Search, Download,
+  ChevronLeft, ChevronRight, ChevronDown, X, Check,
+  BarChart3, Eye, Hash, Zap, Box, Clock, Target, Activity,
+  RefreshCw, Layers, Percent, RotateCcw, Filter, Upload,
+  Image as ImageIcon, Settings, Edit3, FileImage, Lightbulb,
+  TrendingDown, GripVertical, Plus, Minus, Megaphone, Move, Info
+} from 'lucide-react';
+import { useData, useAuth, useStore } from '../App';
 import { findField } from '../utils';
-import TimeFilter, { useTimeFilter, TimeRange, TimeGranularity, safeFloat, filterByTimeRange, filterPromoByTimeRange, getCompareOrders, getAllDateGroups, changePct, getQuickRangeDates } from '../components/TimeFilter';
-import ProductFullLinkTab from './product/ProductFullLinkTab';
+import TimeFilter, { useTimeFilter, safeFloat, filterByTimeRange, filterPromoByTimeRange, getCompareOrders, getAllDateGroups, changePct, getQuickRangeDates } from '../components/TimeFilter';
+import { UnifiedFilterBar } from '../components/FilterToolbar';
 import ProductDetailDrawer from './product/ProductDetailDrawer';
-import ProfitDiagnosisPanel from './product/ProfitDiagnosisPanel';
-import Product360Analysis from '../components/product-analysis/Product360Analysis';
-import { useProductDetail, ProductStat } from '../components/ProductLinkStats';
-import { useStore } from '../App';
-import { apiClient } from '../../api/client';
-import ProfitTooltip from '../components/ProfitTooltip';
 import ProductDeepAnalysis from './product/ProductDeepAnalysis';
+import Product360Analysis from '../components/product-analysis/Product360Analysis';
+import { computeTargetsByProfit, flattenTargetSet, extractPerOrderMetrics } from '../utils/targetEngine';
+import type { TargetEngineResult, ProductTargetConfig } from '../types/productTarget';
+import TargetDetailModal from '../components/TargetDetailModal';
+import { useProductDetail, ProductStat } from '../components/ProductLinkStats';
+import { apiClient } from '../../api/client';
 import { AnalysisProvider } from '../context/analysisContext';
+import { ChartTooltip, formatGranularityLabel } from '../utils/trendData';
+import { computeAllTags, TAG_GROUPS, TAG_DEF_MAP, getTagLabel } from '../utils/productTagSystem';
+import ProductDataAnalysis from './product/ProductDataAnalysis';
+import ProductRetrospective from './product/ProductRetrospective';
+import ProductEditor from './product/ProductEditor';
+import PromotionDataPanel from './product/PromotionDataPanel';
+import { CHART_COLORS } from '../ui';
+import {
+  loadSpecOverrides, saveSpecOverrides, type SpecOverrides,
+} from '../utils/specGrouping';
+import SpecPreviewCard from '../components/SpecPreviewCard';
 
-const COLORS = ['var(--pdd-primary)', 'var(--pdd-primary-light)', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6'];
 
-interface SortableItemProps {
-  id: string;
-  children: React.ReactNode;
-}
+const COLORS = CHART_COLORS;
 
-function SortableItem({ id, children }: SortableItemProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
+/**
+ * 可编辑的规格分组标签
+ * 双击重命名，使用与 SpecGroupCostEditor 相同的共享存储
+ */
+function EditableSpecLabel({ productId, defaultLabel, version, onRename }: {
+  productId: string;
+  defaultLabel: string;
+  version: number;
+  onRename?: (productId: string) => void;
+}) {
+  const [editing, setEditing] = React.useState(false);
+  const [value, setValue] = React.useState('');
+
+  const displayLabel = React.useMemo(() => {
+    const overrides = loadSpecOverrides(productId);
+    return overrides.labels[defaultLabel] || defaultLabel;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productId, defaultLabel, version]);
+
+  const handleSave = () => {
+    const trimmed = value.trim();
+    if (trimmed && trimmed !== defaultLabel) {
+      const overrides = loadSpecOverrides(productId);
+      overrides.labels[defaultLabel] = trimmed;
+      saveSpecOverrides(productId, overrides);
+      onRename?.(productId);
+    }
+    setEditing(false);
   };
+
+  if (editing) {
+    return (
+      <input
+        className="w-20 px-1 py-0.5 border border-blue-400 rounded text-xs font-medium text-pdd-text outline-none"
+        value={value}
+        onChange={e => setValue(e.target.value)}
+        onBlur={handleSave}
+        onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') setEditing(false); }}
+        autoFocus
+        onClick={e => e.stopPropagation()}
+      />
+    );
+  }
+
   return (
-    <div ref={setNodeRef} style={style} {...attributes} {...listeners} className="relative group">
-      <div className="absolute left-0 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10 cursor-grab active:cursor-grabbing">
-        <GripVertical size={16} className="text-slate-400" />
-      </div>
-      {children}
-    </div>
+    <span
+      className="text-xs font-medium text-pdd-text cursor-pointer hover:text-pdd-primary hover:bg-blue-50 px-1 rounded transition-colors"
+      onDoubleClick={(e) => {
+        e.stopPropagation();
+        setValue(displayLabel);
+        setEditing(true);
+      }}
+      title="双击重命名规格分组"
+    >
+      {displayLabel}
+    </span>
   );
 }
 
@@ -48,7 +101,6 @@ export default function ProductPage() {
   const { isPaid } = useAuth();
   const tf = useTimeFilter('7', 'day');
   const { timeRange, granularity, compareEnabled, setTimeRange, setGranularity, setCompareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange, setCustomRange, setQuickRange, savedRanges, saveCurrentRange, deleteSavedRange, applySavedRange } = tf;
-  const [activeView, setActiveView] = useState<'overview' | 'lifecycle' | 'sku' | 'price' | 'fulllink' | 'profit'>('overview');
   const [priceFilter, setPriceFilter] = useState<string>('all');
   const [salesFilter, setSalesFilter] = useState<string>('all');
   const [afterSaleFilter, setAfterSaleFilter] = useState<string>('all');
@@ -67,35 +119,155 @@ export default function ProductPage() {
   });
   const [tagInput, setTagInput] = useState('');
   const [taggingProduct, setTaggingProduct] = useState<string | null>(null);
+  const [activeTagFilter, setActiveTagFilter] = useState<string | null>(null);
   const [selectedProduct, setSelectedProduct] = useState<string | null>(null);
   const [drawerProductId, setDrawerProductId] = useState<string | null>(null);
-  const [panelOrder, setPanelOrder] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('dianfx_product_panel_order');
-      if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr) && arr.length > 0) return arr; }
-    } catch {}
-    return ['kpi', 'overview', 'lifecycle', 'sku', 'price', 'fulllink', 'profit'];
-  });
   useEffect(() => {
     localStorage.setItem('dianfx_product_tags', JSON.stringify(productTags));
   }, [productTags]);
-  useEffect(() => {
-    localStorage.setItem('dianfx_product_panel_order', JSON.stringify(panelOrder));
-  }, [panelOrder]);
-  const [activeId, setActiveId] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [deepAnalysisOpen, setDeepAnalysisOpen] = useState(false);
   const [deepAnalysisProductId, setDeepAnalysisProductId] = useState<string | undefined>(undefined);
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
+  const [dataAnalysisProductId, setDataAnalysisProductId] = useState<string | null>(null);
+  const [retrospectiveProductId, setRetrospectiveProductId] = useState<string | null>(null);
+  const [editorProductId, setEditorProductId] = useState<string | null>(null);
+  const [promoDataProductId, setPromoDataProductId] = useState<string | null>(null);
+  // 规格编辑: 悬浮预览 + 移动SKU
+  const [hoverInfo, setHoverInfo] = useState<{ label: string; items: { skuName: string; price: number; orders: number; sales: number }[]; x: number; y: number } | null>(null);
+  const [movingSkuId, setMovingSkuId] = useState<string | null>(null);
+  const [newSpecGroupName, setNewSpecGroupName] = useState('');
+  const [showNewSpecGroupInput, setShowNewSpecGroupInput] = useState(false);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout>>();
+  // ── 规格覆盖系统刷新键（每次 saveSpecOverrides 后递增，触发 UI 重渲染） ──
+  const [specVersion, setSpecVersion] = useState(0);
+  const saveOverrides = useCallback((productId: string, overrides: SpecOverrides) => {
+    saveSpecOverrides(productId, overrides);
+    setSpecVersion(v => v + 1);
+  }, []);
+  // ── 趋势图 ──
+  const [selectedTrendKpi, setSelectedTrendKpi] = useState<string | null>(null);
 
   const pageSize = 10;
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    })
-  );
+  // ── 产品本地存储状态 ──
+  const [productImages, setProductImages] = useState<Record<string, string>>(() => {
+    try { const s = localStorage.getItem('dianfx_product_images'); return s ? JSON.parse(s) : {}; } catch { return {}; }
+  });
+  useEffect(() => { localStorage.setItem('dianfx_product_images', JSON.stringify(productImages)); }, [productImages]);
+
+  const [productAliases, setProductAliases] = useState<Record<string, string>>(() => {
+    try { const s = localStorage.getItem('dianfx_product_aliases'); return s ? JSON.parse(s) : {}; } catch { return {}; }
+  });
+  useEffect(() => { localStorage.setItem('dianfx_product_aliases', JSON.stringify(productAliases)); }, [productAliases]);
+
+  const [productTargets, setProductTargets] = useState<Record<string, ProductTargetConfig>>(() => {
+    try {
+      const s = localStorage.getItem('dianfx_product_targets');
+      if (s) {
+        const parsed = JSON.parse(s);
+        if (parsed && typeof parsed === 'object') {
+          // 向后兼容：旧格式（targetProfit等）转为新格式（profitPerOrder）
+          const migrated: Record<string, ProductTargetConfig> = {};
+          for (const [pid, val] of Object.entries(parsed)) {
+            const v = val as any;
+            if (v && typeof v === 'object' && 'profitPerOrder' in v) {
+              migrated[pid] = v;
+            } else if (v && typeof v === 'object') {
+              migrated[pid] = { profitPerOrder: v.targetProfit ? 10 : 10, presetKey: '10' };
+            } else {
+              migrated[pid] = { profitPerOrder: 10, presetKey: '10' };
+            }
+          }
+          return migrated;
+        }
+      }
+    } catch {}
+    return {};
+  });
+  useEffect(() => { localStorage.setItem('dianfx_product_targets', JSON.stringify(productTargets)); }, [productTargets]);
+
+  // ── 图片放大/预览 ──
+  const [enlargedImage, setEnlargedImage] = useState<string | null>(null);
+  const [hoveredImage, setHoveredImage] = useState<{ id: string; src: string; x: number; y: number } | null>(null);
+
+  // ── 标签显隐：每个标签可独立隐藏 ──
+  const [hiddenTags, setHiddenTags] = useState<Set<string>>(() => {
+    try { const v = localStorage.getItem('dianfx_hidden_tags'); return v ? new Set(JSON.parse(v)) : new Set(); } catch { return new Set(); }
+  });
+  useEffect(() => { localStorage.setItem('dianfx_hidden_tags', JSON.stringify([...hiddenTags])); }, [hiddenTags]);
+  const toggleTagVisibility = useCallback((tagKey: string) => {
+    setHiddenTags(prev => {
+      const next = new Set(prev);
+      if (next.has(tagKey)) next.delete(tagKey); else next.add(tagKey);
+      return next;
+    });
+  }, []);
+
+  const [dimMode, setDimMode] = useState<'单品' | '总额'>('总额');
+  const getRowDimMode = useCallback((productId: string): '单品' | '总额' => dimMode, [dimMode]);
+  const [listFilter, setListFilter] = useState<'all' | 'active' | 'zero'>('all');
+
+  // ── KPI 可见性 + 排序 ──
+  const [visibleKpis, setVisibleKpis] = useState<Set<string>>(() => {
+    try { const s = localStorage.getItem('dianfx_product_visible_kpis'); return s ? new Set(JSON.parse(s)) : new Set(['商品数', '动销率', '利润总额', '利润率', '高退款品']); } catch { return new Set(['商品数', '动销率', '利润总额', '利润率', '高退款品']); }
+  });
+  const [kpiCardOrder, setKpiCardOrder] = useState<string[]>(() => {
+    try { const s = localStorage.getItem('dianfx_product_kpi_order'); return s ? JSON.parse(s) : ['商品数', '动销率', '利润总额', '利润率', '高退款品']; } catch { return ['商品数', '动销率', '利润总额', '利润率', '高退款品']; }
+  });
+  const [showKpiSelector, setShowKpiSelector] = useState(false);
+
+  // ── SKU 展开 ──
+  const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
+  const [expandedSkuSubGroups, setExpandedSkuSubGroups] = useState<Set<string>>(new Set()); // "productId::groupIdx"
+  const [skuPanelSubExpand, setSkuPanelSubExpand] = useState<Set<string>>(new Set());
+
+  // ── 目标设定 ──
+  const [editingTarget, setEditingTarget] = useState<string | null>(null);
+  const [targetDetailProduct, setTargetDetailProduct] = useState<{ product: any; engineResult: TargetEngineResult; rowMode: '单品' | '总额'; profitPerOrder: number } | null>(null);
+  const [uploadingProductId, setUploadingProductId] = useState<string | null>(null);
+
+  // ── KPI 指标池 ──
+  const ALL_PRODUCT_KPIS = useMemo(() => [
+    // 商品
+    { label: '商品数', key: 'productCount', group: '商品', iconName: 'Package', fmt: (v: number) => (v || 0).toFixed(0) },
+    { label: '动销率', key: 'sellThroughRate', group: '商品', iconName: 'Activity', fmt: (v: number) => (v || 0).toFixed(1) + '%' },
+    { label: '零销品', key: 'zeroSalesCount', group: '商品', iconName: 'AlertTriangle', fmt: (v: number) => (v || 0).toFixed(0) },
+    { label: '低库存品', key: 'lowInventoryCount', group: '商品', iconName: 'AlertTriangle', fmt: (v: number) => (v || 0).toFixed(0) },
+    { label: '平均周转', key: 'avgTurnover', group: '商品', iconName: 'Clock', fmt: (v: number) => (v || 0).toFixed(0) + '天' },
+    // 收入
+    { label: '总GMV', key: 'totalGmv', group: '收入', iconName: 'TrendingUp', fmt: (v: number) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+    { label: '总实收', key: 'totalRevenue', group: '收入', iconName: 'DollarSign', fmt: (v: number) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+    { label: '总销量', key: 'totalSales', group: '收入', iconName: 'ShoppingCart', fmt: (v: number) => (v || 0).toFixed(0) },
+    { label: '客单价', key: 'avgPrice', group: '收入', iconName: 'Target', fmt: (v: number) => (v || 0) ? '¥' + (v || 0).toFixed(0) : '-' },
+    // 利润
+    { label: '利润总额', key: 'totalProfit', group: '利润', iconName: 'TrendingUp', fmt: (v: number) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+    { label: '利润率', key: 'profitRate', group: '利润', iconName: 'Percent', fmt: (v: number) => (v || 0).toFixed(1) + '%' },
+    // 退款
+    { label: '退款率', key: 'refundRate', group: '退款', iconName: 'RotateCcw', fmt: (v: number) => (v || 0).toFixed(1) + '%' },
+    { label: '高退款品', key: 'highRefundCount', group: '退款', iconName: 'AlertTriangle', fmt: (v: number) => (v || 0).toFixed(0) },
+    // 推广
+    { label: '高推广品', key: 'highPromoCount', group: '推广', iconName: 'Zap', fmt: (v: number) => (v || 0).toFixed(0) },
+    { label: '推广花费', key: 'totalPromoCost', group: '推广', iconName: 'BarChart3', fmt: (v: number) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+    { label: '推广ROI', key: 'avgRoi', group: '推广', iconName: 'Activity', fmt: (v: number) => (v || 0) > 0 ? (v || 0).toFixed(1) : '-' },
+  ], []);
+
+  const KPI_GROUPS = useMemo(() => {
+    const groups: { name: string; items: typeof ALL_PRODUCT_KPIS }[] = [
+      { name: '商品', items: [] },
+      { name: '收入', items: [] },
+      { name: '利润', items: [] },
+      { name: '退款', items: [] },
+      { name: '推广', items: [] },
+    ];
+    ALL_PRODUCT_KPIS.forEach(kpi => {
+      const g = groups.find(g => g.name === kpi.group);
+      if (g) g.items.push(kpi);
+    });
+    return groups;
+  }, [ALL_PRODUCT_KPIS]);
+
+
 
   const orders = useMemo(() => {
     if (!currentDisplayData?.orders?.length) return [];
@@ -127,6 +299,42 @@ export default function ProductPage() {
     }
     return result;
   }, [orders, allDates, timeRange, customStart, customEnd, quickRange, abnormalOrders]);
+
+  /** 按天聚合订单，构建每日KPI趋势数据（必须定义在 filteredOrders 之后） */
+  const dailyTrendData = useMemo(() => {
+    if (!filteredOrders.length) return [];
+    const dayMap: Record<string, any> = {};
+    filteredOrders.forEach((o: any) => {
+      const date = String(findField(o, '支付时间') || '').split(' ')[0];
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+      if (!dayMap[date]) dayMap[date] = { date, gmv: 0, revenue: 0, sales: 0, profit: 0, orders: 0, refund: 0, promoCost: 0, productIds: new Set() };
+      const d = dayMap[date];
+      d.gmv += safeFloat(findField(o, '商品总价(元)', '商品总价'));
+      d.revenue += safeFloat(findField(o, '商家实收金额(元)', '商家实收'));
+      d.sales += safeFloat(findField(o, '商品数量(件)', '商品数量')) || 1;
+      d.orders += 1;
+      const pid = String(findField(o, '商品id', '商品ID') || '');
+      if (pid) d.productIds.add(pid);
+      const orderNo = String(findField(o, '订单号') || '');
+      d.refund += safeFloat(findField(o, '退款金额(元)', '退款金额'));
+    });
+    // 补充推广花费（按日期匹配）
+    (currentDisplayData?.promotionProducts || []).forEach((p: any) => {
+      const date = String(findField(p, '日期') || '').split(' ')[0];
+      if (dayMap[date]) {
+        dayMap[date].promoCost += safeFloat(findField(p, '花费(元)', '总花费(元)', '成交花费(元)'));
+      }
+    });
+    const sorted = Object.values(dayMap).sort((a: any, b: any) => a.date.localeCompare(b.date));
+    return sorted.map((d: any) => ({
+      date: d.date, gmv: d.gmv, revenue: d.revenue, sales: d.sales,
+      profit: d.profit, orders: d.orders, refund: d.refund,
+      promoCost: d.promoCost, productCount: d.productIds.size,
+      avgPrice: d.orders > 0 ? d.revenue / d.orders : 0,
+      refundRate: d.revenue > 0 ? (d.refund / d.revenue) * 100 : 0,
+      profitRate: d.revenue > 0 ? (d.profit / d.revenue) * 100 : 0,
+    }));
+  }, [filteredOrders, currentDisplayData]);
 
   // 构建时间过滤后的 displayData 供 useProductStats 使用
   const filteredDisplayData = useMemo(() => {
@@ -320,6 +528,12 @@ export default function ProductPage() {
     }));
   }, [prevProductStats]);
 
+  const prevProductMap = useMemo(() => {
+    const map: Record<string, any> = {};
+    prevProducts.forEach(p => { map[p.id] = p; });
+    return map;
+  }, [prevProducts]);
+
   const filteredProducts = useMemo(() => {
     let result = products;
     // 搜索过滤：支持商品ID、商品名称、商家编码
@@ -343,8 +557,26 @@ export default function ProductPage() {
       const [min, max] = afterSaleFilter.split('-').map(v => v === 'max' ? Infinity : parseInt(v));
       result = result.filter(p => p.afterSaleRate >= min && p.afterSaleRate < (max || Infinity));
     }
+    if (listFilter === 'active') result = result.filter(p => p.sales > 0);
+    if (listFilter === 'zero') result = result.filter(p => p.sales <= 0);
+    // 标签筛选
+    if (activeTagFilter) {
+      const filteredIds = tagFilterProductIds[activeTagFilter] || [];
+      const idSet = new Set(filteredIds);
+      result = result.filter(p => idSet.has(p.id));
+    }
     return result;
-  }, [products, priceFilter, salesFilter, afterSaleFilter, searchKeyword]);
+  }, [products, priceFilter, salesFilter, afterSaleFilter, searchKeyword, listFilter, activeTagFilter, tagFilterProductIds]);
+
+  // ── 自动标签系统（基于所有商品计算，不受筛选影响） ──
+  const { autoTags, tagCounts, tagProductIds: tagFilterProductIds } = useMemo(() => {
+    return computeAllTags(products, productStats);
+  }, [products, productStats]);
+
+  // 当前有标签筛选时，重置页码
+  useEffect(() => {
+    if (activeTagFilter) setCurrentPage(1);
+  }, [activeTagFilter]);
 
   const sortedProducts = useMemo(() => {
     const sorted = [...filteredProducts].sort((a: any, b: any) => {
@@ -403,6 +635,14 @@ export default function ProductPage() {
     return { productCount: productIds.size, totalSales, totalRevenue, totalProfit, totalGmv, avgPrice, afterSaleRate, zeroSales, lowInventory, sellThroughRate, avgTurnover, avgPromoRatio, refundRate, diffs };
   }, [filteredProducts, prevProducts]);
 
+  // ── 全店汇总（用于计算商品占比） ──
+  const storeTotals = useMemo(() => {
+    const totalSales = filteredProducts.reduce((s, p) => s + (p.sales || 0), 0);
+    const totalPromo = filteredProducts.reduce((s, p) => s + (p.promoCost || 0), 0);
+    const totalOrders = filteredProducts.reduce((s, p) => s + (p.orders || 0), 0);
+    return { totalSales, totalPromo, totalOrders };
+  }, [filteredProducts]);
+
   const radarData = useMemo(() => {
     if (!selectedProduct) return [];
     const p = products.find(x => x.id === selectedProduct);
@@ -424,29 +664,6 @@ export default function ProductPage() {
       return pid === selectedProduct;
     });
   }, [selectedProduct, filteredOrders]);
-
-  const lifecycleData = useMemo(() => {
-    if (!filteredProducts.length) return [];
-    return filteredProducts.map(p => {
-      if (!p.firstDate) return { ...p, days: 0, stage: '无数据', stageColor: 'var(--pdd-gray-400)' };
-      const first = new Date(p.firstDate);
-      const last = new Date(p.lastDate || p.firstDate);
-      const days = Math.max(1, (last.getTime() - first.getTime()) / 86400000);
-      const stage = days < 7 ? '新品期' : days < 30 ? '成长期' : days < 90 ? '成熟期' : '衰退期';
-      const stockStatus = p.inventoryStatus === 'out' ? '缺货' : p.inventoryStatus === 'low' ? '低库存' : '正常';
-      return { id: p.id, name: p.name, days, sales: p.sales, revenue: p.revenue, stage, profit: p.profit, turnoverDays: p.turnoverDays, inventory: p.inventory, avgDailySales: p.avgDailySales, sellThroughRate: p.sellThroughRate || 0, stockStatus, afterSaleRate: p.afterSaleRate };
-    }).sort((a, b) => b.days - a.days);
-  }, [filteredProducts]);
-
-  // 生命周期摘要
-  const lifecycleSummary = useMemo(() => {
-    if (!lifecycleData.length) return null;
-    const stages = { '新品期': 0, '成长期': 0, '成熟期': 0, '衰退期': 0 };
-    lifecycleData.forEach(p => { stages[p.stage as keyof typeof stages]++; });
-    const outOfStock = lifecycleData.filter(p => p.stockStatus === '缺货').length;
-    const slowTurnover = lifecycleData.filter(p => p.turnoverDays > 30 && p.sales > 0).length;
-    return { ...stages, total: lifecycleData.length, outOfStock, slowTurnover };
-  }, [lifecycleData]);
 
   // SKU 辅助：从订单行查找字段值
   const fv = (o: any, fields: string[]): string => {
@@ -493,7 +710,8 @@ export default function ProductPage() {
       skuMap[key].gmv += fn(o, ['商品总价(元)', '商品总价']) || fn(o, ['用户实付金额(元)', '用户实付']);
       skuMap[key].orders += 1;
       skuMap[key].refund += fn(o, ['退款金额(元)', '退款金额']);
-      const price = fn(o, ['用户实付金额(元)', '用户实付']);
+      // 使用商品总价(元)作为价格信号 - 用户指定的"订单维度的出售价格"
+      const price = fn(o, ['商品总价(元)', '商品总价']) || fn(o, ['用户实付金额(元)', '用户实付']);
       if (price > 0) skuMap[key].prices.push(price);
 
       productSalesMap[pid] = (productSalesMap[pid] || 0) + qty;
@@ -530,6 +748,41 @@ export default function ProductPage() {
       };
     }).sort((a, b) => b.sales - a.sales);
   }, [filteredOrders, productCosts, defaultCostRatio, packagingFeePerOrder, shippingFeePerOrder]);
+
+  // 历史最低价（按产品+SKU，从全部订单的"商品总价(元)"字段获取）
+  const historicalMinPrices = useMemo(() => {
+    const map: Record<string, Record<string, number>> = {};
+    orders.forEach((o: any) => {
+      const pid = fv(o, ['商品id', '商品ID', 'productId']);
+      if (!pid) return;
+      const skuId = fv(o, ['规格id', '规格ID', 'sku_id', 'style_id', '商品规格ID', 'spec_id']) || pid;
+      const price = fn(o, ['商品总价(元)', '商品总价']);
+      if (price <= 0) return;
+      if (!map[pid]) map[pid] = {};
+      const cur = map[pid][skuId];
+      if (cur === undefined || price < cur) map[pid][skuId] = price;
+    });
+    return map;
+  }, [orders]);
+
+  // SKU矩阵数据：按商品分组 + 智能压缩 (must be defined AFTER skuData)
+  const productSkuMap = useMemo(() => {
+    const map = new Map<string, any[]>();
+    skuData.forEach(s => {
+      if (!map.has(s.productId)) map.set(s.productId, []);
+      map.get(s.productId)!.push(s);
+    });
+    return map;
+  }, [skuData]);
+  const productSkuEntries = useMemo(() => {
+    const entries = Array.from(productSkuMap.entries());
+    entries.sort((a, b) => {
+      const salesA = a[1].reduce((s, sku) => s + (sku.sales || 0), 0);
+      const salesB = b[1].reduce((s, sku) => s + (sku.sales || 0), 0);
+      return salesB - salesA;
+    });
+    return entries.slice(0, 30);
+  }, [productSkuMap]);
 
   const priceElasticity = useMemo(() => {
     if (!filteredProducts.length) return [];
@@ -569,23 +822,508 @@ export default function ProductPage() {
     setProductTags(prev => ({ ...prev, [productId]: (prev[productId] || []).filter(t => t !== tag) }));
   };
 
-  const handleDragStart = (event: DragStartEvent) => {
-    setActiveId(event.active.id as string);
-  };
+  
+  // ── 列配置 ──
+  const PER_UNIT_COLS = [
+    { key: 'cost', label: '成本', width: '60px' },
+    { key: 'price', label: '售价', width: '58px' },
+    { key: 'profit', label: '单品利润', width: '68px' },
+    { key: 'marginRate', label: '毛利率', width: '56px' },
+    { key: 'promoPerUnit', label: '单品推广', width: '68px' },
+    { key: 'refundRate', label: '退款率', width: '56px' },
+    { key: 'sales', label: '销量', width: '50px' },
+    { key: 'orders', label: '订单', width: '50px' },
+  ];
+  const TOTAL_COLS = [
+    { key: 'totalCost', label: '总成本', width: '62px' },
+    { key: 'gmv', label: 'GMV', width: '62px' },
+    { key: 'totalProfit', label: '总利润', width: '62px' },
+    { key: 'profitRate', label: '利润率', width: '56px' },
+    { key: 'roi', label: 'ROI', width: '48px' },
+    { key: 'refundRate', label: '退款率', width: '56px' },
+    { key: 'sales', label: '销量', width: '50px' },
+    { key: 'orders', label: '订单', width: '50px' },
+    { key: 'avgPrice', label: '客单价', width: '56px' },
+  ];
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    if (over && active.id !== over.id) {
-      setPanelOrder((items) => {
-        const oldIndex = items.indexOf(active.id as string);
-        const newIndex = items.indexOf(over.id as string);
-        return arrayMove(items, oldIndex, newIndex);
-      });
+  // ── 获取单元格数据 ──
+  function getCellData(colKey: string, p: any): { val: number; tgtNum: number; refNum: number; fmt: string; clr?: string; refFmt: string } {
+    const uc = p.unitCost || 0;
+    const ap = p.avgPrice || 0;
+    const sa = p.sales || 0;
+    const pc = p.promoCost || 0;
+    const pp = ap > 0 && uc > 0 ? ap - uc : 0;
+    const mr = ap > 0 && uc > 0 ? (ap - uc) / ap * 100 : 0;
+    const fmtMoney = (v: number) => v >= 10000 ? '¥' + (v / 10000).toFixed(1) + '万' : (v >= 100 ? '¥' + v.toFixed(0) : '¥' + v.toFixed(v < 10 ? 2 : 1));
+    const fmtPct = (v: number) => v.toFixed(1) + '%';
+    const fmtInt = (v: number) => v.toFixed(0);
+    switch (colKey) {
+      case 'cost': return { val: uc, tgtNum: 0, refNum: uc, fmt: uc > 0 ? fmtMoney(uc) : '--', refFmt: uc > 0 ? fmtMoney(uc) : '--' };
+      case 'price': return { val: ap, tgtNum: 0, refNum: ap, fmt: ap > 0 ? fmtMoney(ap) : '--', refFmt: ap > 0 ? fmtMoney(ap) : '--' };
+      case 'profit': return { val: pp, tgtNum: 0, refNum: pp, fmt: pp !== 0 ? (pp > 0 ? '¥' : '-¥') + Math.abs(pp).toFixed(2) : '¥0.00', refFmt: pp !== 0 ? (pp > 0 ? '¥' : '-¥') + Math.abs(pp).toFixed(2) : '¥0.00', clr: 'var(--pdd-text)' };
+      case 'marginRate': return { val: mr, tgtNum: 0, refNum: mr, fmt: mr > 0 ? fmtPct(mr) : '--', refFmt: mr > 0 ? fmtPct(mr) : '--' };
+      case 'promoPerUnit': { const pu = sa > 0 ? pc / sa : 0; return { val: pu, tgtNum: 0, refNum: pu, fmt: pu > 0 ? fmtMoney(pu) : '--', refFmt: pu > 0 ? fmtMoney(pu) : '--' }; }
+      case 'refundRate': return { val: p.refundRate || 0, tgtNum: 0, refNum: p.refundRate || 0, fmt: fmtPct(p.refundRate || 0), refFmt: fmtPct(p.refundRate || 0) };
+      case 'sales': return { val: sa, tgtNum: 0, refNum: sa, fmt: fmtInt(sa), refFmt: fmtInt(sa) };
+      case 'orders': return { val: p.orders || 0, tgtNum: 0, refNum: p.orders || 0, fmt: fmtInt(p.orders || 0), refFmt: fmtInt(p.orders || 0) };
+      case 'totalCost': return { val: uc * sa, tgtNum: 0, refNum: uc * sa, fmt: uc > 0 ? fmtMoney(uc * sa) : '--', refFmt: uc > 0 ? fmtMoney(uc * sa) : '--' };
+      case 'gmv': return { val: p.gmv || 0, tgtNum: 0, refNum: p.gmv || 0, fmt: (p.gmv || 0) >= 10000 ? '¥' + ((p.gmv || 0) / 10000).toFixed(1) + '万' : '¥' + (p.gmv || 0).toFixed(0), refFmt: (p.gmv || 0) >= 10000 ? '¥' + ((p.gmv || 0) / 10000).toFixed(1) + '万' : '¥' + (p.gmv || 0).toFixed(0) };
+      case 'totalProfit': return { val: p.profit || 0, tgtNum: 0, refNum: p.profit || 0, fmt: (p.profit || 0) >= 0 ? '¥' + (p.profit || 0).toFixed(0) : '-¥' + Math.abs(p.profit || 0).toFixed(0), refFmt: (p.profit || 0) >= 0 ? '¥' + (p.profit || 0).toFixed(0) : '-¥' + Math.abs(p.profit || 0).toFixed(0), clr: 'var(--pdd-text)' };
+      case 'profitRate': return { val: p.profitRate || 0, tgtNum: 0, refNum: p.profitRate || 0, fmt: fmtPct(p.profitRate || 0), refFmt: fmtPct(p.profitRate || 0) };
+      case 'roi': return { val: p.roi || 0, tgtNum: 0, refNum: p.roi || 0, fmt: (p.roi || 0) > 0 ? (p.roi || 0).toFixed(1) : '-', refFmt: (p.roi || 0) > 0 ? (p.roi || 0).toFixed(1) : '-' };
+      case 'avgPrice': return { val: ap, tgtNum: 0, refNum: ap, fmt: ap > 0 ? fmtMoney(ap) : '--', refFmt: ap > 0 ? fmtMoney(ap) : '--' };
+      default: return { val: 0, tgtNum: 0, refNum: 0, fmt: '--', refFmt: '--' };
     }
-    setActiveId(null);
-  };
+  }
 
-  const noData = !filteredOrders.length;
+  // ── 通用规格名称解析 ──
+  // 解析中文电商规格名，提取数量、颜色、尺寸、款式
+  // 面对全品类商家：服装/食品/百货/数码
+  // Pattern A: 数字+单位 (1件装, 2个)
+  // Pattern B: 中文数字+单位 (一件, 两双, 单件)
+  // Pattern C: 纯数字 (1, 2) — PDD常见
+  // Pattern D: 中文数量词 (单/双/对装)
+  function parseSpecName(name: string): { quantity: number | null; unit: string | null; color: string | null; size: string | null; style: string | null; base: string } {
+    if (!name || name === '-') return { quantity: null, unit: null, color: null, size: null, style: null, base: name || '' };
+
+    // 中文数字 ↔ 阿拉伯数字
+    const cnNumMap: Record<string, number> = { '一': 1, '二': 2, '两': 2, '三': 3, '四': 4, '五': 5, '六': 6, '七': 7, '八': 8, '九': 9, '十': 10, '单': 1, '双': 2, '对': 2, '半': 0.5 };
+    // 所有可能的数量单位（按长度降序优先匹配长词）
+    const allUnits = ['件装','个装','双装','对装','包装','盒装','瓶装','罐装','袋装','支装','只装','片装','条装','套装','份装','板装','排装','听装','管装','粒装','枚装','卷装','桶装','箱装','打装',
+                      '件','个','双','对','包','盒','瓶','罐','袋','套','组','支','只','条','片',
+                      '斤','两','千克','克','公斤','颗','粒','枚','本','册','副','付','顶','根','块','把','串','打','桶','箱','卷',
+                      '份','板','排','听','管','筒','扎','捆','贴','杯','碗','盘','碟','勺','ml','L','g','kg'];
+
+    let rest = name.trim();
+    let quantity: number | null = null;
+    let unit: string | null = null;
+
+    // Step 1: 提取数量 — 多策略串行
+    // 1A: 阿拉伯数字 + 单位 (1件装, 2个, 3双, 5斤...)
+    //     按单位长度降序匹配，避免"件"抢在"件装"前
+    const sortedUnits = [...allUnits].sort((a, b) => b.length - a.length);
+    for (const u of sortedUnits) {
+      const escU = u.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, '\\$1');
+      const pat = new RegExp('^(\\d+)\\s*' + escU);
+      const m = rest.match(pat);
+      if (m) {
+        quantity = parseInt(m[1]);
+        unit = u;
+        rest = rest.replace(m[0], '').trim();
+        break;
+      }
+      // 也匹配非开头位置，但只在数量词后无杂乱文本时
+      const m2 = rest.match(new RegExp('(?:^|[\\s\\/\\-_·])(\\d+)\\s*' + escU + '(?:$|[\\s\\/\\-_·,，])'));
+      if (m2) {
+        quantity = parseInt(m2[1]);
+        unit = u;
+        rest = rest.replace(m2[0], '').trim();
+        break;
+      }
+    }
+
+    // 1B: 中文数字 + 单位 (一件, 两双, 三包, 单件)
+    if (quantity === null) {
+      for (const u of sortedUnits) {
+        const escU = u.replace(/([.*+?^=!:${}()|\[\]\/\\])/g, '\\$1');
+        const cnPat = new RegExp('^([一两二三四五六七八九十单双对半])\\s*' + escU);
+        const m = rest.match(cnPat);
+        if (m && cnNumMap[m[1]] !== undefined) {
+          quantity = cnNumMap[m[1]];
+          unit = u;
+          rest = rest.replace(m[0], '').trim();
+          break;
+        }
+      }
+    }
+
+    // 1C: 纯数字 — 整个规格名就是数字 (PDD最常见: "1", "2", "3")
+    if (quantity === null) {
+      const justNum = rest.match(/^(\d+)$/);
+      if (justNum) {
+        quantity = parseInt(justNum[1]);
+        unit = '件';
+        rest = '';
+      }
+    }
+
+    // Step 2: 提取颜色 (PDD全品类色名)
+    const colorPatterns = [
+      // 常见色系
+      '中国红','珊瑚红','番茄红','朱红','嫣红','玫红','酒红','枣红','砖红','铁锈红',
+      '橘粉','肉粉','豆沙粉','樱花粉','少女粉','芭比粉','裸粉','桃粉','藕粉',
+      '卡其','驼色','米色','米白','象牙白','奶白','杏色','裸色','肤色','奶茶色','燕麦色',
+      '天蓝','藏青','宝蓝','湖蓝','靛蓝','藏蓝','海蓝','深蓝','浅蓝','婴儿蓝','雾霾蓝','牛仔蓝','天空蓝',
+      '墨绿','草绿','军绿','荧光绿','翠绿','薄荷绿','橄榄绿','深绿','浅绿','抹茶绿','豆绿','苹果绿',
+      '银灰','烟灰','炭灰','深灰','浅灰','高级灰','雾灰',
+      '薰衣草','玫紫','浅紫','深紫','香芋紫','葡萄紫',
+      '荧光','渐变','印花','条纹','格子','波点','纯色','花色','拼色','撞色',
+      '巧克力','咖啡色','咖啡','燕麦','杏仁色','栗色','棕色',
+      '红色','橙色','黄色','绿色','青色','蓝色','紫色','黑色','白色','灰色','棕色',
+      '粉色','金色','银色','透明','牛仔',
+      // 材质色
+      '透明','磨砂','哑光','亮光','珠光','闪粉',
+      '黑白','蓝白','红白','黑红','蓝红',
+    ];
+    let color: string | null = null;
+    for (const c of colorPatterns) {
+      if (rest.includes(c)) {
+        color = c;
+        rest = rest.replace(c, '').trim();
+        break;
+      }
+    }
+
+    // Step 3: 提取尺寸
+    let size: string | null = null;
+    const sizeMatch = rest.match(/^(S|M|L|XL|XXL|XXXL|均码|加大|加小|超大|超小|标准|迷你|F|均|free)$/i);
+    if (sizeMatch) {
+      size = sizeMatch[1].toUpperCase();
+      rest = rest.replace(sizeMatch[0], '').trim();
+    } else {
+      const numSize = rest.match(/^(\d{3,4})$/);
+      if (numSize && parseInt(numSize[1]) >= 100 && parseInt(numSize[1]) <= 220) {
+        size = numSize[1];
+        rest = rest.replace(numSize[0], '').trim();
+      }
+    }
+
+    // Step 4: 提取款式/套餐/型号/阶段
+    let style: string | null = null;
+    const styleMatch = rest.match(/([A-Za-z]+款|套餐\d+|组合\d+|方案\d+|\d+号|款\d+|版\d+|[ABCDEFG]款|[甲乙丙丁]|标准款|豪华款|普通款|升级款|经典款|阶段[一二三四五六七八九十]?|[一二三四五六七八九十]+阶段|标准|舒适|加厚|薄款|升级版|基础版|简约版|精装版|豪华版)/);
+    if (styleMatch) {
+      style = styleMatch[1];
+      rest = rest.replace(styleMatch[0], '').trim();
+    }
+
+    rest = rest.replace(/[\/\-_·\s()（）\[\]【】「」『』【】]+/g, '').trim();
+
+    return { quantity, unit, color, size, style, base: rest || (quantity ? '__qty__' : name) };
+  }
+
+  // ── SKU 智能压缩 ──
+  // 按规格名语义分组 + 价格关系分组。面对全品类：
+  //   Strategy 1 (数量型): 1件装/2件装 → 按数量聚合（仅要求多数SKU有数量信息）
+  //   Strategy 2 (价格关系型): 新！利用历史订单价格检测SKU间稳定比例关系
+  //     PDD改价是按批改的：所有"1件"同时同幅变价，"2件"也是
+  //     价格变了但比例不变(1:1.8) → 用比例而不是绝对价格分组
+  //   Strategy 3 (属性型): 颜色/尺寸/款式/阶段 → 按属性聚合
+  //   Strategy 4 (纯数字): "1","2" → 按数值聚合（PDD极常见）
+  //   Strategy 5 (价格聚类): 最终保底——按价格比例聚类而非精确价格
+  // 两层下钻: 聚合组 → 点击展开 → 显示组内详细SKU列表
+  // 命名规则: 统一用"规格一""规格二""规格三"... 按价格排序，不从SKU名截取
+  function groupSKUs(skuList: any[]): {
+    groups: {
+      label: string; price: number; count: number;
+      sales: number; revenue: number; profit: number; orders: number;
+      items: { skuKey: string; skuName: string; sales: number; price: number; revenue: number; profit: number }[];
+    }[];
+  } {
+    if (!skuList.length) return { groups: [] };
+
+    const cnDigits = ['一','二','三','四','五','六','七','八','九','十'];
+
+    // 统一标签生成器：按价格排序后分配 "规格一" "规格二" ...
+    function labelGroups(groups: { label: string; price: number; count: number; sales: number; revenue: number; profit: number; orders: number; items: { skuKey: string; skuName: string; sales: number; price: number; revenue: number; profit: number }[] }[]) {
+      const sorted = [...groups].sort((a, b) => a.price - b.price);
+      return sorted.map((g, i) => ({ ...g, label: cnDigits[i] ? `规格${cnDigits[i]}` : `规格${i+1}` }));
+    }
+
+    const parsed = skuList.map(s => {
+      const p = parseSpecName(s.skuName || '');
+      return { ...s, parsed: p };
+    });
+
+    // ── 计算每个SKU的"锚定价格"（从历史订单价格中取众数）──
+    // PDD商家频繁改价但按批改，历史价格模式比当前价格更稳定
+    function getAnchorPrice(s: any): number {
+      if (s.prices && Array.isArray(s.prices) && s.prices.length > 0) {
+        // 计算众数（最常出现的价格）
+        const freq: Record<number, number> = {};
+        let maxFreq = 0;
+        let modePrice = s.prices[0];
+        s.prices.forEach((p: number) => {
+          // 四舍五入到角(¥0.1精度)以容忍微小浮动
+          const k = Math.round(p * 10) / 10;
+          freq[k] = (freq[k] || 0) + 1;
+          if (freq[k] > maxFreq) { maxFreq = freq[k]; modePrice = k; }
+        });
+        return modePrice;
+      }
+      return s.avgPrice || 0;
+    }
+
+    /* ─── 工具: 从条目生成分组 ─── */
+    function makeGroups(entries: { items: typeof parsed }[]) {
+      return entries.map(({ items }) => ({
+        label: '',
+        price: items.reduce((s, i) => s + (i.avgPrice || 0), 0) / items.length,
+        count: items.length,
+        sales: items.reduce((s, i) => s + (i.sales || 0), 0),
+        revenue: items.reduce((s, i) => s + (i.revenue || 0), 0),
+        profit: items.reduce((s, i) => s + (i.netProfit || 0), 0),
+        orders: items.reduce((s, i) => s + (i.orders || 0), 0),
+        items: items.map(i => ({ skuKey: `${i.productId}_${i.skuId}`, skuName: i.skuName, sales: i.sales || 0, price: i.avgPrice || 0, revenue: i.revenue || 0, profit: i.netProfit || 0 })),
+      }));
+    }
+
+    // ── Strategy 1: 数量型 — 多数SKU有数量信息即可 ──
+    const qtyCount = parsed.filter(s => s.parsed.quantity !== null).length;
+    const majorityHasQty = qtyCount >= Math.ceil(parsed.length * 0.5);
+    if (majorityHasQty && parsed.length > 1) {
+      const qtyGroups = new Map<string, typeof parsed>();
+      parsed.forEach(s => {
+        if (s.parsed.quantity !== null) {
+          const key = `${s.parsed.quantity}|${s.parsed.unit || '件'}`;
+          if (!qtyGroups.has(key)) qtyGroups.set(key, []);
+          qtyGroups.get(key)!.push(s);
+        } else {
+          if (!qtyGroups.has('other')) qtyGroups.set('other', []);
+          qtyGroups.get('other')!.push(s);
+        }
+      });
+      const entries = Array.from(qtyGroups.entries());
+      if (entries.length > 1) {
+        return { groups: labelGroups(makeGroups(entries.map(([, items]) => ({ items })))) };
+      }
+    }
+
+    // ── Strategy 2 (新): 价格关系型 — 利用历史订单价格检测SKU间稳定比例 ──
+    // PDD特点: 改价是按批改的，1件/2件的价格比保持恒定
+    // 方法: 对每个SKU取历史价格众数作为锚定价，按锚定价排序，检测比例阶梯
+    if (parsed.length > 1) {
+      const anchored = parsed.map(s => ({ ...s, anchorPrice: getAnchorPrice(s) }));
+      anchored.sort((a, b) => a.anchorPrice - b.anchorPrice);
+
+      const uniquePrices = [...new Set(anchored.map(a => a.anchorPrice))].filter(p => p > 0);
+      if (uniquePrices.length > 1) {
+        const basePrice = uniquePrices[0];
+        const ratioGroups = new Map<string, typeof anchored>();
+        anchored.forEach(s => {
+          const ratio = s.anchorPrice > 0 ? s.anchorPrice / basePrice : 1;
+          const roundedRatio = Math.round(ratio * 2) / 2;
+          const key = roundedRatio >= 1 ? roundedRatio.toString() : 'other';
+          if (!ratioGroups.has(key)) ratioGroups.set(key, []);
+          ratioGroups.get(key)!.push(s);
+        });
+
+        const validGroups = Array.from(ratioGroups.entries())
+          .filter(([, items]) => items.length > 0);
+        if (validGroups.length > 1) {
+          return { groups: labelGroups(makeGroups(validGroups.map(([, items]) => ({ items })))) };
+        }
+      }
+    }
+
+    // ── Strategy 3: 颜色/尺寸/款式/阶段型 ──
+    const attrKeyed = new Map<string, typeof parsed>();
+    parsed.forEach(s => {
+      const key = s.parsed.color || s.parsed.size || s.parsed.style || s.parsed.base || 'default';
+      if (!attrKeyed.has(key)) attrKeyed.set(key, []);
+      attrKeyed.get(key)!.push(s);
+    });
+    if (attrKeyed.size > 1 && attrKeyed.size < parsed.length * 0.9) {
+      return { groups: labelGroups(makeGroups(Array.from(attrKeyed.entries()).map(([, items]) => ({ items })))) };
+    }
+
+    // ── Strategy 4: 纯数字型 — 规格名全都是数字 (PDD最常见: "1","2","3") ──
+    const allNumeric = parsed.every(s => /^\d+$/.test(s.skuName.trim()));
+    if (allNumeric && parsed.length > 1) {
+      const numGroups = new Map<string, typeof parsed>();
+      parsed.forEach(s => {
+        const n = parseInt(s.skuName.trim());
+        const key = isNaN(n) ? '0' : n.toString();
+        if (!numGroups.has(key)) numGroups.set(key, []);
+        numGroups.get(key)!.push(s);
+      });
+      if (numGroups.size > 1) {
+        return { groups: labelGroups(makeGroups(Array.from(numGroups.entries()).map(([, items]) => ({ items })))) };
+      }
+    }
+
+    // ── Strategy 5 (Fallback): 价格聚类 ──
+    const fallbackAnchored = parsed.map(s => ({ ...s, anchorPrice: getAnchorPrice(s) }));
+    fallbackAnchored.sort((a, b) => a.anchorPrice - b.anchorPrice);
+    const priceRatioGroups = new Map<string, typeof parsed>();
+    const basePrice = fallbackAnchored[0]?.anchorPrice || 1;
+    fallbackAnchored.forEach(s => {
+      const ratio = s.anchorPrice > 0 ? Math.round((s.anchorPrice / basePrice) * 2) / 2 : 1;
+      const key = ratio > 0 ? ratio.toString(10) : '1';
+      if (!priceRatioGroups.has(key)) priceRatioGroups.set(key, []);
+      priceRatioGroups.get(key)!.push(s);
+    });
+    return { groups: labelGroups(makeGroups(Array.from(priceRatioGroups.entries()).map(([, items]) => ({ items })))) };
+  }
+
+  /** 将用户覆盖（移动SKU、自定义分组）应用到 groupSKUs 的自动分组结果上 */
+  function applyGroupOverrides(
+    groups: ReturnType<typeof groupSKUs>['groups'],
+    productId: string,
+    allSkuItems: any[],
+  ): ReturnType<typeof groupSKUs>['groups'] {
+    const overrides = loadSpecOverrides(productId);
+    if (!overrides || (!overrides.moves && !overrides.customGroups?.length)) return groups;
+
+    let result = groups.map(g => ({ ...g, items: [...g.items] }));
+
+    // 1. 处理 SKU 移动
+    if (overrides.moves) {
+      for (const [skuKey, targetLabel] of Object.entries(overrides.moves)) {
+        // 找到 SKU 当前所在组
+        let sourceIdx = -1, itemIdx = -1;
+        for (let gi = 0; gi < result.length; gi++) {
+          const idx = result[gi].items.findIndex(i => i.skuKey === skuKey);
+          if (idx >= 0) { sourceIdx = gi; itemIdx = idx; break; }
+        }
+        if (sourceIdx < 0 || itemIdx < 0) continue;
+
+        const [movedItem] = result[sourceIdx].items.splice(itemIdx, 1);
+
+        // 找目标组（先匹配原始标签，再匹配被重命名后的标签）
+        let targetIdx = result.findIndex(g => g.label === targetLabel);
+        if (targetIdx < 0) {
+          // 用户可能重命名了组，查找原始标签 -> 显示名称的映射
+          const reverseMap: Record<string, string> = {};
+          for (const [orig, display] of Object.entries(overrides.labels)) {
+            reverseMap[display] = orig;
+          }
+          const origLabel = reverseMap[targetLabel];
+          if (origLabel) targetIdx = result.findIndex(g => g.label === origLabel);
+        }
+        if (targetIdx < 0) {
+          // 从 allSkuItems 获取该 SKU 的数据来初始化新组
+          const skuData = allSkuItems.find(s => `${s.productId}_${s.skuId}` === skuKey);
+          result.push({
+            label: targetLabel,
+            price: 0, count: 0, sales: 0, revenue: 0, profit: 0, orders: 0,
+            items: [],
+          });
+          targetIdx = result.length - 1;
+        }
+        result[targetIdx].items.push(movedItem);
+      }
+    }
+
+    // 2. 添加自定义分组（从 allSkuItems 找数据）
+    if (overrides.customGroups) {
+      for (const cg of overrides.customGroups) {
+        if (result.some(g => g.label === cg.label)) continue;
+        const items = cg.skuKeys
+          .map(skuKey => {
+            const src = allSkuItems.find(s => `${s.productId}_${s.skuId}` === skuKey);
+            if (!src) return null;
+            return {
+              skuKey,
+              skuName: src.skuName || '-',
+              sales: src.sales || 0,
+              price: src.avgPrice || 0,
+              revenue: src.revenue || 0,
+              profit: src.netProfit || 0,
+            };
+          })
+          .filter(Boolean);
+        if (items.length === 0) continue;
+        result.push({
+          label: cg.label,
+          price: items.reduce((s, i) => s + i!.price, 0) / items.length,
+          count: items.length,
+          sales: items.reduce((s, i) => s + i!.sales, 0),
+          revenue: items.reduce((s, i) => s + i!.revenue, 0),
+          profit: items.reduce((s, i) => s + i!.profit, 0),
+          orders: items.reduce((s, i) => s + (i as any).orders || 0, 0),
+          items: items as any[],
+        });
+      }
+    }
+
+    // 3. 重新计算各组统计
+    for (const g of result) {
+      if (g.items.length === 0) continue;
+      g.count = g.items.length;
+      g.price = g.items.reduce((s, i) => s + i.price, 0) / g.items.length;
+      g.sales = g.items.reduce((s, i) => s + i.sales, 0);
+      g.revenue = g.items.reduce((s, i) => s + i.revenue, 0);
+      g.profit = g.items.reduce((s, i) => s + i.profit, 0);
+      g.orders = g.items.reduce((s, i) => s + (i as any).orders || 0, 0);
+    }
+
+    // 4. 移除空组
+    const nonEmpty = result.filter(g => g.items.length > 0);
+    return nonEmpty.length > 0 ? nonEmpty : result;
+  }
+
+  // ── 智能目标算法：为所有列生成算法目标（基于「每单赚X元」引擎）──
+  function computeSmartTargets(p: any, rowMode: '单品' | '总额'): Record<string, { value: number; fmt: string }> {
+    const targetConfig = productTargets[p.id] || { profitPerOrder: 10 };
+    const profitPerOrder = targetConfig.profitPerOrder || 10;
+    const manualOverrides = targetConfig.manualOverrides;
+    try {
+      const engineResult = computeTargetsByProfit(p, profitPerOrder, undefined, manualOverrides);
+      return flattenTargetSet(engineResult, rowMode);
+    } catch {
+      // 容错：引擎报错时返回空
+      const keys = rowMode === '单品'
+        ? ['skuPrice', 'skuCount', 'skuCost', 'promoAvg', 'roi', 'refundRate', 'profitRate', 'skuProfit']
+        : ['revenue', 'orders', 'totalCost', 'promo', 'roi', 'refundRate', 'otherCost', 'profit'];
+      const out: Record<string, { value: number; fmt: string }> = {};
+      keys.forEach(k => { out[k] = { value: 0, fmt: '--' }; });
+      return out;
+    }
+  }
+  // ── 目标推荐算法 ──
+  function calcRecommendation(p: any): { targetProfit: number; targetProfitRate: number; targetROI: number; targetGMV: number; suggestion: string } {
+    const uc = productCosts?.[p.id] || 0;
+    const pkgFee = 3, shipFee = 5, insFee = 2;
+    const platformRate = 0.006;
+    const fixedCost = uc + pkgFee + shipFee + insFee;
+    const recPrice = fixedCost > 0 ? Math.ceil(fixedCost / (1 - 0.3 - platformRate)) : 0;
+    const bePrice = fixedCost > 0 ? Math.ceil(fixedCost / (1 - platformRate)) : 0;
+    const recProfit = Math.ceil((p.revenue || 0) * 0.15);
+    const recGMV = Math.ceil((p.revenue || 0) * 1.2);
+    const suggestion = '推荐: 建议售价≥¥' + (recPrice || '--') + '，盈亏平衡¥' + (bePrice || '--') + '，ROI≥3，净利率≥15%';
+    return { targetProfit: recProfit, targetProfitRate: 15, targetROI: 3, targetGMV: recGMV, suggestion };
+  }
+
+  // ── 获取目标/推荐值 ──
+  function getTargetOrRecommend(p: any, key: string): { value: number; fmt: string; source: 'user' | 'recommend' | 'none' } {
+    const target = productTargets[p.id];
+    const rec = calcRecommendation(p);
+    // 映射 key 到目标字段
+    const keyMap: Record<string, { userKey: string; recVal: number; money?: boolean; pct?: boolean; roi?: boolean; int?: boolean }> = {
+      'profit': { userKey: 'targetProfit', recVal: rec.targetProfit, money: true },
+      'totalProfit': { userKey: 'targetProfit', recVal: rec.targetProfit, money: true },
+      'profitRate': { userKey: 'targetProfitRate', recVal: rec.targetProfitRate, pct: true },
+      'marginRate': { userKey: 'targetProfitRate', recVal: rec.targetProfitRate, pct: true },
+      'roi': { userKey: 'targetROI', recVal: rec.targetROI, roi: true },
+      'gmv': { userKey: 'targetGMV', recVal: rec.targetGMV, money: true },
+    };
+    const km = keyMap[key];
+    if (!km) return { value: 0, fmt: '', source: 'none' };
+    // 用户有设定值吗？
+    const userVal = (target as any)?.[km.userKey];
+    if (userVal && userVal > 0) {
+      const fmt = km.money ? ((userVal >= 10000 ? '¥' + (userVal / 10000).toFixed(1) + '万' : '¥' + userVal.toFixed(0))) : km.pct ? userVal.toFixed(1) + '%' : km.roi ? userVal.toFixed(1) : userVal.toFixed(0);
+      return { value: userVal, fmt, source: 'user' };
+    }
+    // 用推荐值
+    if (km.recVal > 0) {
+      const fmt = km.money ? ((km.recVal >= 10000 ? '¥' + (km.recVal / 10000).toFixed(1) + '万' : '¥' + km.recVal.toFixed(0))) : km.pct ? km.recVal.toFixed(1) + '%' : km.roi ? km.recVal.toFixed(1) : km.recVal.toFixed(0);
+      return { value: km.recVal, fmt, source: 'recommend' };
+    }
+    return { value: 0, fmt: '', source: 'none' };
+  }
+
+  // ── 图片上传 ──
+  const handleImageUpload = useCallback((productId: string, file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      if (dataUrl) setProductImages(prev => ({ ...prev, [productId]: dataUrl }));
+    };
+    reader.readAsDataURL(file);
+  }, [setProductImages]);
+
+const noData = !filteredOrders.length;
   const rangeLabel = timeRange === '7' ? '近7天' : timeRange === '30' ? '近30天' : '近90天';
 
   // 导出 CSV
@@ -610,598 +1348,1126 @@ export default function ProductPage() {
     URL.revokeObjectURL(url);
   };
 
-  // Smart alert tags
-  const getAlertTags = (p: any) => {
-    const tags: { label: string; color: string; bg: string }[] = [];
-    if (p.refundRate > 15) tags.push({ label: '高退款', color: 'var(--pdd-danger)', bg: 'var(--pdd-danger-bg)' });
-    if (p.sales <= 0) tags.push({ label: '零动销', color: 'var(--pdd-text-secondary)', bg: 'var(--pdd-bg)' });
-    if (p.inventoryStatus === 'low') tags.push({ label: '低库存', color: 'var(--pdd-warning)', bg: 'var(--pdd-warning-bg)' });
-    if (p.promoCostRatio > 30) tags.push({ label: '高推广依赖', color: 'var(--pdd-primary)', bg: 'var(--pdd-primary-bg)' });
-    if (p.turnoverDays > 30) tags.push({ label: '周转慢', color: 'var(--pdd-warning)', bg: 'var(--pdd-warning-bg)' });
-    return tags;
-  };
-
-  // 计算总利润可信度（基于商品利润可信度的加权平均）
-  const totalProfitConfidence = useMemo(() => {
-    if (!filteredProducts.length) return 'low';
-    const profits = filteredProducts.map(p => p.profit || 0);
-    const totalProfit = profits.reduce((s, p) => s + p, 0);
-    if (totalProfit === 0) return 'low';
-
-    // 根据利润贡献加权计算可信度
-    let highWeight = 0, mediumWeight = 0, lowWeight = 0;
-    filteredProducts.forEach(p => {
-      const weight = Math.abs(p.profit || 0) / totalProfit;
-      const confidence = p.profitConfidence || 'low';
-      if (confidence === 'high') highWeight += weight;
-      else if (confidence === 'medium') mediumWeight += weight;
-      else lowWeight += weight;
+        const renderKpiPanel = () => {
+    const visibleList = kpiCardOrder.filter(k => visibleKpis.has(k));
+    const displayed = visibleList.slice(0, 10);
+    const allKpis = ALL_PRODUCT_KPIS;
+    const kpiValues: Record<string, number> = {};
+    allKpis.forEach(kpi => {
+      kpiValues[kpi.label] = (kpiMetrics as any)?.[kpi.key] || 0;
     });
-
-    if (highWeight > 0.5) return 'high';
-    if (mediumWeight > 0.3 || highWeight > 0.3) return 'medium';
-    return 'low';
-  }, [filteredProducts]);
-
-  const kpiCards = [
-    { label: '在售商品', value: kpiMetrics?.productCount, diffKey: 'productCount' as const, fmt: (v: number) => v.toFixed(0), icon: Package, color: 'var(--pdd-primary)', bg: 'var(--pdd-card)' },
-    { label: '总GMV', value: kpiMetrics?.totalGmv, diffKey: 'totalGmv' as const, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: ShoppingCart, color: '#1890ff', bg: 'var(--pdd-card)' },
-    { label: '总实收', value: kpiMetrics?.totalRevenue, diffKey: 'totalRevenue' as const, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: 'var(--pdd-success)', bg: 'var(--pdd-card)' },
-    { label: '总利润', value: kpiMetrics?.totalProfit, diffKey: 'totalProfit' as const, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, color: '#722ed1', bg: 'var(--pdd-card)', confidence: totalProfitConfidence },
-    { label: '客单价', value: kpiMetrics?.avgPrice, diffKey: 'avgPrice' as const, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Target, color: '#faad14', bg: 'var(--pdd-card)' },
-    { label: '动销率', value: kpiMetrics?.sellThroughRate, diffKey: 'sellThroughRate' as const, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Activity, color: '#13c2c2', bg: 'var(--pdd-card)' },
-    { label: '均周转天数', value: kpiMetrics?.avgTurnover, fmt: (v: number) => `${v.toFixed(0)}天`, icon: Clock, color: '#fa541c', bg: 'var(--pdd-card)' },
-    { label: '推广占比', value: kpiMetrics?.avgPromoRatio, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Zap, color: '#722ed1', bg: 'var(--pdd-card)' },
-    { label: '售后率', value: kpiMetrics?.afterSaleRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: AlertTriangle, color: 'var(--pdd-primary)', bg: 'var(--pdd-card)' },
-    { label: '退款率', value: kpiMetrics?.refundRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: RotateCcw, color: 'var(--pdd-primary-light)', bg: 'var(--pdd-card)' },
-    { label: '零动销', value: kpiMetrics?.zeroSales, fmt: (v: number) => v.toFixed(0), icon: Ban, color: 'var(--pdd-gray-400)', bg: 'var(--pdd-bg)' },
-    { label: '库存预警', value: kpiMetrics?.lowInventory, fmt: (v: number) => v.toFixed(0), icon: Box, color: '#fa541c', bg: 'var(--pdd-card)' },
-  ];
-
-  const renderKpiPanel = () => {
-    const coreCards = kpiCards;
+    const primaryCount = 5;
+    const primaryKpis = displayed.slice(0, primaryCount);
+    const extraCount = displayed.length - primaryCount;
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-        {coreCards.map((c, i) => {
-          const diff = c.diffKey ? kpiMetrics?.diffs?.[c.diffKey] : undefined;
-          const diffNum = diff != null ? diff : undefined;
-          const negativeMetric = c.label === '退款率' || c.label === '售后率';
-          const isGood = diffNum != null ? (negativeMetric ? diffNum <= 0 : diffNum >= 0) : null;
-          const diffColor = c.label === '客单价'
-            ? 'text-pdd-gray-400'
-            : isGood === true ? 'text-pdd-success' : isGood === false ? 'text-pdd-danger' : 'text-pdd-gray-400';
-          const diffArrow = c.label === '客单价'
-            ? ''
-            : diffNum != null ? (diffNum > 0 ? '↑' : diffNum < 0 ? '↓' : '') : '';
-          return (
-          <motion.div key={c.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
-            whileHover={{ y: -2, boxShadow: '0 8px 24px rgba(0,0,0,0.08)' }}
-            className="pdd-card px-4 py-3.5 flex flex-col gap-2 border border-pdd-gray-100 hover:border-pdd-gray-200 transition-all cursor-default bg-pdd-card">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-pdd-gray-500 font-medium">{c.label}</span>
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ backgroundColor: c.bg }}>
-                <c.icon size={14} color={c.color} />
+      <>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+          {primaryKpis.map((label) => {
+            const kpi = allKpis.find(k => k.label === label);
+            if (!kpi) return null;
+            const val = kpiValues[label];
+            const isProfit = label.includes('利润') || label.includes('利润率');
+            const valColor = 'text-pdd-text';
+            const isSelected = selectedTrendKpi === label;
+            return (
+              <div key={label}
+                className={`rounded-lg border px-4 py-3 cursor-pointer transition-all ${
+                  isSelected
+                    ? 'bg-pdd-primary/[0.08] border-pdd-primary/30 shadow-sm'
+                    : 'bg-pdd-card border-pdd-border/60 hover:border-pdd-primary/30 hover:shadow-sm'
+                }`}
+                onClick={() => setSelectedTrendKpi(isSelected ? null : label)}>
+                <div className="text-[11px] font-medium text-pdd-text-secondary/70 leading-none mb-2">{label}</div>
+                <div className={'text-xl font-bold tabular-nums leading-none tracking-tight ' + valColor}>
+                  {kpi.fmt(val)}
+                </div>
               </div>
+            );
+          })}
+          {extraCount > 0 && (
+            <div onClick={() => setShowKpiSelector(true)}
+              className="bg-pdd-bg/50 rounded-lg border border-dashed border-pdd-border/40 flex items-center justify-center cursor-pointer hover:border-pdd-primary/30 hover:bg-pdd-bg transition-all group">
+              <span className="text-xs text-pdd-text-secondary/50 group-hover:text-pdd-primary/70">+{extraCount}个指标</span>
             </div>
-            <div className="flex items-end gap-1.5">
-              <span className="text-xl font-bold tracking-tight" style={{ color: c.color }}>{noData ? '--' : c.value != null ? c.fmt(c.value) : '--'}</span>
-              {c.confidence && !noData && c.value != null && (
-                <span className={`font-bold mb-1 ${
-                  c.confidence === 'high' ? 'text-pdd-success' :
-                  c.confidence === 'medium' ? 'text-yellow-500' : 'text-pdd-primary'
-                }`}>
-                  {c.confidence === 'high' ? '✓' : c.confidence === 'medium' ? '⚠' : '!'}
+          )}
+        </div>
+
+        {/* KPI 趋势图 */}
+        {selectedTrendKpi && dailyTrendData.length > 1 && (
+          <div className="mt-4 bg-pdd-card rounded-lg border border-pdd-border/60 overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-pdd-border/30">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-pdd-text">{selectedTrendKpi} 趋势</span>
+                <span className="text-[10px] text-pdd-text-secondary/60">
+                  {dailyTrendData[0]?.date} ~ {dailyTrendData[dailyTrendData.length-1]?.date}
                 </span>
-              )}
-            </div>
-            {diffNum != null && (
-              <div className={`flex items-center gap-0.5 text-xs font-medium ${diffColor}`}>
-                {diffArrow && <span>{diffArrow}</span>}
-                <span>{Math.abs(diffNum).toFixed(1)}%</span>
               </div>
-            )}
-            {diffNum == null && !noData && c.diffKey && (
-              <div className="text-xs text-pdd-gray-400">--</div>
-            )}
-          </motion.div>
-        )})}
-      </div>
+              <button onClick={() => setSelectedTrendKpi(null)} className="text-pdd-text-secondary/40 hover:text-pdd-text/70 p-0.5">
+                <X size={13} />
+              </button>
+            </div>
+            <div className="px-2 pt-2 pb-1 h-[200px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={dailyTrendData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v: string) => v.slice(5)}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={60}
+                  />
+                  <Tooltip content={<ChartTooltip />} />
+                  <Line
+                    type="monotone"
+                    dataKey={(() => {
+                      const k = allKpis.find(k => k.label === selectedTrendKpi);
+                      const map: Record<string, string> = {
+                        '商品数': 'productCount', '总GMV': 'gmv', '总实收': 'revenue',
+                        '总销量': 'sales', '客单价': 'avgPrice', '利润总额': 'profit',
+                        '利润率': 'profitRate', '退款率': 'refundRate',
+                        '推广花费': 'promoCost', '有效订单量': 'orders',
+                      };
+                      return map[selectedTrendKpi] || 'revenue';
+                    })()}
+                    stroke="var(--pdd-primary)"
+                    strokeWidth={2}
+                    dot={false}
+                    activeDot={{ r: 4, fill: 'var(--pdd-primary)' }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* KPI 选择器弹窗 */}
+        {showKpiSelector && (
+          <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center p-4" onClick={() => setShowKpiSelector(false)}>
+            <div className="bg-pdd-card rounded-lg border border-pdd-border shadow-lg max-w-lg w-full p-5" onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-pdd-text">自定义KPI指标</h3>
+                <button onClick={() => setShowKpiSelector(false)} className="text-pdd-text-secondary hover:text-pdd-text"><X size={16} /></button>
+              </div>
+              <div className="text-[11px] text-pdd-text-secondary mb-3">选择要显示的指标（最多10个，最少1个）</div>
+              {KPI_GROUPS.map(group => (
+                <div key={group.name} className="mb-3">
+                  <div className="text-[11px] font-semibold text-pdd-text-secondary mb-1.5">{group.name}</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {group.items.map(kpi => {
+                      const active = visibleKpis.has(kpi.label);
+                      const count = visibleKpis.size;
+                      return (
+                        <button key={kpi.label} onClick={() => {
+                          if (active) { if (count <= 1) return; setVisibleKpis(prev => { const n = new Set(prev); n.delete(kpi.label); return n; });
+                          } else { if (count >= 10) return; setVisibleKpis(prev => { const n = new Set(prev); n.add(kpi.label); return n; }); }
+                        }}
+                          className={'px-2.5 py-1 text-[11px] font-medium rounded border transition-colors ' + (active ? 'bg-pdd-primary/10 text-pdd-primary border-pdd-primary/20' : 'bg-pdd-card text-pdd-text-secondary border-pdd-border hover:border-pdd-primary/30')}>
+                          {kpi.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+              <div className="text-[10px] text-pdd-text-secondary/70 mt-2">已选 {visibleKpis.size}/10 个指标</div>
+            </div>
+          </div>
+        )}
+      </>
     );
   };
 
-  const renderOverviewPanel = () => (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pdd-card lg:col-span-2 border border-pdd-gray-100 shadow-sm bg-pdd-card overflow-hidden">
-        <div className="flex items-center justify-between px-3 py-2 border-b border-pdd-gray-100 gap-2">
-          <h3 className="text-xs font-bold text-pdd-gray-800 flex items-center gap-1.5 flex-shrink-0"><Package size={13} color="var(--pdd-primary)" />商品概览 <span className="font-normal text-pdd-gray-400 ml-0.5" style={{ fontSize: '10px' }}>{filteredProducts.length}款</span></h3>
-          <div className="flex items-center gap-1.5 flex-1 max-w-xs">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                placeholder="搜索ID/名称/编码..."
-                value={searchKeyword}
-                onChange={(e) => { setSearchKeyword(e.target.value); setCurrentPage(1); }}
-                className="w-full pl-6 pr-2 py-1 border border-pdd-gray-200 rounded-md focus:outline-none focus:border-pdd-primary transition-all bg-pdd-gray-50 focus:bg-pdd-card" style={{ fontSize: '10px' }}
-              />
-              <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-pdd-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-              {searchKeyword && (
-                <button onClick={() => { setSearchKeyword(''); setCurrentPage(1); }} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-pdd-gray-400 hover:text-pdd-gray-600"><X size={10} /></button>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center gap-1 flex-shrink-0">
-            {!noData && (
-              <button onClick={handleExportCSV} className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium bg-green-50 text-green-600 hover:bg-green-100 transition-colors" title="导出CSV">
-                <Download size={12} />导出
-              </button>
-            )}
-            <div className="flex items-center gap-1 bg-pdd-gray-50 rounded-md px-1.5 py-0.5">
-              <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1} className="p-0.5 rounded hover:bg-pdd-card disabled:opacity-30 transition-colors text-pdd-gray-500"><ChevronLeft size={12} /></button>
-              <span className="text-pdd-gray-600 font-medium min-w-[2.5rem] text-center" style={{ fontSize: '10px' }}>{currentPage}/{totalPages || 1}</span>
-              <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages} className="p-0.5 rounded hover:bg-pdd-card disabled:opacity-30 transition-colors text-pdd-gray-500"><ChevronRight size={12} /></button>
-            </div>
-          </div>
-        </div>
-        {noData ? <div className="h-32 flex flex-col items-center justify-center text-xs text-pdd-gray-400 gap-1"><Package size={20} className="opacity-20" /><span>请先上传订单数据</span></div> : (
-          <div className="overflow-x-auto">
-            <table className="w-full" style={{ fontSize: '11px' }}>
-              <thead><tr className="text-pdd-gray-500 font-semibold border-b border-pdd-gray-100 bg-pdd-gray-50/50 sticky top-0 z-10" style={{ fontSize: '10px' }}>
-                <th className="py-2 px-2 text-left w-8">对比</th>
-                <th className="py-2 px-2 text-left cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('name'); setSortDesc(sortField === 'name' ? !sortDesc : true); }}>
-                  商品信息{sortField === 'name' && <span style={{ color: 'var(--pdd-primary)' }}>{sortDesc ? ' ▼' : ' ▲'}</span>}
-                </th>
-                <th className="py-2 px-2 text-right cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('gmv'); setSortDesc(sortField === 'gmv' ? !sortDesc : true); }}>
-                  GMV{sortField === 'gmv' && <span style={{ color: 'var(--pdd-primary)' }}>{sortDesc ? ' ▼' : ' ▲'}</span>}
-                </th>
-                <th className="py-2 px-2 text-right cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('revenue'); setSortDesc(sortField === 'revenue' ? !sortDesc : true); }}>
-                  实收{sortField === 'revenue' && <span style={{ color: 'var(--pdd-primary)' }}>{sortDesc ? ' ▼' : ' ▲'}</span>}
-                </th>
-                <th className="py-2 px-2 text-right cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('profit'); setSortDesc(sortField === 'profit' ? !sortDesc : true); }}>
-                  利润{sortField === 'profit' && <span style={{ color: 'var(--pdd-primary)' }}>{sortDesc ? ' ▼' : ' ▲'}</span>}
-                </th>
-                <th className="py-2 px-2 text-right cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('promoCost'); setSortDesc(sortField === 'promoCost' ? !sortDesc : true); }}>
-                  推广花费{sortField === 'promoCost' && <span style={{ color: 'var(--pdd-primary)' }}>{sortDesc ? ' ▼' : ' ▲'}</span>}
-                </th>
-                <th className="py-2 px-2 text-right cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('promoTransaction'); setSortDesc(sortField === 'promoTransaction' ? !sortDesc : true); }}>
-                  推广成交{sortField === 'promoTransaction' && <span style={{ color: 'var(--pdd-primary)' }}>{sortDesc ? ' ▼' : ' ▲'}</span>}
-                </th>
-                <th className="py-2 px-2 text-right cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('roi'); setSortDesc(sortField === 'roi' ? !sortDesc : true); }}>
-                  推广ROI{sortField === 'roi' && <span style={{ color: 'var(--pdd-primary)' }}>{sortDesc ? ' ▼' : ' ▲'}</span>}
-                </th>
-                <th className="py-2 px-2 text-right cursor-pointer hover:text-red-600 transition-colors" onClick={() => { setSortField('refundRate'); setSortDesc(sortField === 'refundRate' ? !sortDesc : true); }}>
-                  退款率{sortField === 'refundRate' && <span style={{ color: 'var(--pdd-primary)' }}>{sortDesc ? ' ▼' : ' ▲'}</span>}
-                </th>
-                <th className="py-2 px-2 text-left">状态</th>
-                <th className="py-2 px-2 text-center">操作</th>
-              </tr></thead>
-              <tbody className="divide-y divide-pdd-gray-50">{paginatedProducts.map((p, i) => {
-                const alerts = getAlertTags(p);
-                return (
-                  <tr key={p.id} className={`group transition-colors ${alerts.length > 0 ? 'bg-orange-50/30' : i % 2 === 1 ? 'bg-pdd-gray-50/30' : ''} hover:bg-blue-50/40`}>
-                    <td className="py-1.5 px-2"><button onClick={() => toggleCompare(p.id)} className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${compareProducts.includes(p.id) ? 'bg-purple-600 border-purple-600 text-white' : 'border-pdd-gray-300 hover:border-purple-400 text-transparent'}`}><Check size={10} /></button></td>
-                    <td className="py-1.5 px-2 max-w-[160px]">
-                      <div className="truncate font-medium text-pdd-gray-800 cursor-pointer hover:text-red-600 transition-colors" onClick={() => setSelectedProduct(p.id)}>{p.name}</div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        {p.id && <span className="text-blue-600 font-mono bg-blue-50 px-1 py-0 rounded" style={{ fontSize: '9px' }}>{p.id}</span>}
-                        {p.code && <span className="text-pdd-gray-400 font-mono" style={{ fontSize: '9px' }}>{p.code}</span>}
-                      </div>
-                    </td>
-                    <td className="py-1.5 px-2 text-right font-mono text-pdd-gray-700">¥{p.gmv.toFixed(0)}</td>
-                    <td className="py-1.5 px-2 text-right font-mono text-pdd-gray-700">¥{p.revenue.toFixed(0)}</td>
-                    <td className="py-1.5 px-2 text-right">
-                      <ProfitTooltip
-                        netProfit={p.profit}
-                        grossProfit={p.grossProfit || 0}
-                        preTaxProfit={p.preTaxProfit || 0}
-                        netProfitAfterTax={p.netProfitAfterTax || p.profit}
-                        revenue={p.revenue}
-                        costBreakdown={p.costBreakdown || { productCost: 0, packagingFee: 0, shippingFee: 0, promoCost: 0, discount: 0, platformFee: 0, taxes: 0, customDeductions: 0 }}
-                        costSource={p.costSource || { productCost: 'missing', taxes: 'default', customDeductions: 'none' }}
-                        taxDetails={p.taxDetails || []}
-                        deductionDetails={p.deductionDetails || []}
-                        profitConfidence={p.profitConfidence || 'low'}
-                        hasRealCost={p.costSource?.productCost === 'real' || p.costSource?.productCost === 'estimated'}
-                        onGoToCostManagement={() => window.location.hash = '#/cost-management'}
-                      />
-                    </td>
-                    <td className="py-1.5 px-2 text-right font-mono text-pdd-gray-700">{p.promoCost > 0 ? `¥${p.promoCost.toFixed(0)}` : '-'}</td>
-                    <td className="py-1.5 px-2 text-right font-mono text-pdd-gray-700">{p.promoTransaction > 0 ? `¥${p.promoTransaction.toFixed(0)}` : '-'}</td>
-<td className="py-1.5 px-2 text-right font-mono text-pdd-gray-700">{p.promoCost > 0 && p.promoTransaction > 0 ? (p.promoTransaction / p.promoCost).toFixed(2) : '-'}</td>
-                <td className="py-1.5 px-2 text-right font-mono text-pdd-gray-700">{p.refundRate > 0 ? `${p.refundRate.toFixed(1)}%` : '-'}</td>
-                    <td className="py-1.5 px-2">
-                      <div className="flex flex-wrap gap-0.5">
-                        {alerts.length === 0 && <span className="text-pdd-gray-300" style={{ fontSize: '9px' }}>正常</span>}
-                        {alerts.map(a => (
-                          <span key={a.label} className="px-1 py-0 rounded font-medium" style={{ fontSize: '9px', color: a.color, backgroundColor: a.bg }}>{a.label}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="py-1.5 px-2">
-                      <div className="flex items-center justify-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {/* 查看详情按钮 - 选中商品并显示完整360分析 */}
-                        <button onClick={() => { setSelectedProduct(p.id); setTimeout(() => { const el = document.getElementById('product-360-analysis'); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 100); }} className="p-1.5 rounded-lg hover:bg-blue-100 text-pdd-gray-400 hover:text-blue-600 transition-colors" title="查看完整360分析"><Eye size={14} /></button>
-                        {/* 快速编辑成本 */}
-                        <button onClick={() => window.location.hash = '#/cost-management'} className="p-1.5 rounded-lg hover:bg-green-100 text-pdd-gray-400 hover:text-green-600 transition-colors" title="编辑成本"><DollarSign size={14} /></button>
-                        {/* 添加标签 */}
-                        <button onClick={() => setTaggingProduct(p.id)} className="p-1.5 rounded-lg hover:bg-purple-100 text-pdd-gray-400 hover:text-purple-600 transition-colors" title="添加标签"><Tag size={14} /></button>
-                        {/* 复制商品ID */}
-                        <button onClick={() => { navigator.clipboard.writeText(p.id); }} className="p-1.5 rounded-lg hover:bg-pdd-gray-100 text-pdd-gray-400 hover:text-pdd-gray-700 transition-colors" title="复制商品ID"><Hash size={14} /></button>
-                        {/* 一键导入深度解析 */}
-                        <button onClick={() => { setDeepAnalysisProductId(p.id); setDeepAnalysisOpen(true); }} className="p-1.5 rounded-lg hover:bg-cyan-100 text-pdd-gray-400 hover:text-cyan-600 transition-colors" title="一键导入深度解析"><Zap size={14} /></button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}</tbody>
-            </table>
-          </div>
-        )}
-      </motion.div>
+  // ── 列配置（上8框 / 下8框） ──
+  const COLS_TOTAL: { key: string; label: string; width: string; sortable: boolean }[] = [
+    { key: 'revenue', label: '商家实收', width: '100px', sortable: true },
+    { key: 'orders', label: '订单量', width: '72px', sortable: true },
+    { key: 'totalCost', label: '总成本', width: '90px', sortable: true },
+    { key: 'promo', label: '推广费', width: '90px', sortable: true },
+    { key: 'roi', label: '投产比', width: '80px', sortable: true },
+    { key: 'refundRate', label: '退款率', width: '80px', sortable: true },
+    { key: 'otherCost', label: '其他成本', width: '90px', sortable: true },
+    { key: 'profit', label: '利润', width: '100px', sortable: true },
+  ];
+  const COLS_SINGLE: { key: string; label: string; width: string; sortable: boolean }[] = [
+    { key: 'skuPrice', label: '单品价格', width: '100px', sortable: true },
+    { key: 'skuCount', label: 'SKU数量', width: '72px', sortable: true },
+    { key: 'skuCost', label: '单品成本', width: '90px', sortable: true },
+    { key: 'promoAvg', label: '推广费', width: '90px', sortable: true },
+    { key: 'roi', label: '投产比', width: '80px', sortable: true },
+    { key: 'refundRate', label: '退款率', width: '80px', sortable: true },
+    { key: 'profitRate', label: '利润率', width: '80px', sortable: true },
+    { key: 'skuProfit', label: '单品利润', width: '100px', sortable: true },
+  ];
 
-      {/* 商品360度分析区域 */}
-      <motion.div id="product-360-analysis" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="pdd-card border border-pdd-gray-100 shadow-sm bg-pdd-card flex flex-col overflow-hidden">
-        <div className="px-5 py-4 border-b border-pdd-gray-100 bg-pdd-gray-50/30">
-          <h3 className="text-sm font-bold text-pdd-gray-800 flex items-center gap-2">
-            <Target size={15} color="var(--pdd-primary)" />
-            商品360°分析
-            {selectedProduct && compareProducts.length > 0 && (
-              <span className="text-xs text-pdd-gray-500 font-normal">
-                (已选{compareProducts.length + 1}个商品对比)
-              </span>
-            )}
-          </h3>
-        </div>
-        {/* 迷你雷达图 - 点击联动排序 */}
-        {selectedProduct && radarData.length > 0 && (
-          <div className="px-3 pt-3 border-b border-pdd-gray-50">
-            <div className="flex items-center gap-1.5 mb-1">
-              <span className="text-xs font-medium text-pdd-gray-500">雷达筛选</span>
-              <span className="text-pdd-gray-400" style={{ fontSize: '9px' }}>点击维度排序</span>
-            </div>
-            <ResponsiveContainer width="100%" height={160}>
-              <RadarChart data={radarData} onClick={(e: any) => {
-                if (!e || !e.activePayload || !e.activePayload.length) return;
-                const subject = e.activePayload[0]?.payload?.subject;
-                const mapping: Record<string, { field: string; desc: boolean }> = {
-                  '销量': { field: 'sales', desc: true },
-                  '收入': { field: 'revenue', desc: true },
-                  '利润': { field: 'profit', desc: true },
-                  '售后率': { field: 'afterSaleRate', desc: false },
-                  '动销': { field: 'orders', desc: true },
-                };
-                const m = mapping[subject];
-                if (m) {
-                  setSortField(m.field);
-                  setSortDesc(m.desc);
-                }
-              }} style={{ cursor: 'pointer' }}>
-                <PolarGrid stroke="var(--pdd-border)" />
-                <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }} />
-                <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fontSize: 8, fill: 'var(--pdd-text-secondary)' }} />
-                <Radar dataKey="A" stroke="var(--pdd-primary)" fill="var(--pdd-primary)" fillOpacity={0.2} />
-              </RadarChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-        <div className="flex-1 overflow-y-auto max-h-[700px] custom-scrollbar">
-          <Product360Analysis
-            product={selectedProduct ? productStats[selectedProduct] : null}
-            compareProducts={compareProducts.map(id => productStats[id]).filter(Boolean)}
-            onExport={() => {}}
-            orders={selectedProductOrders}
-            costConfig={{ productCosts, defaultCostRatio: defaultCostRatio ?? 30, packagingFeePerOrder, shippingFeePerOrder }}
-            gmvTrend={selectedProduct && prevProductStats[selectedProduct] && prevProductStats[selectedProduct].gmv > 0 ? ((productStats[selectedProduct].gmv - prevProductStats[selectedProduct].gmv) / prevProductStats[selectedProduct].gmv) * 100 : undefined}
-            refundRateTrend={selectedProduct && prevProductStats[selectedProduct] ? productStats[selectedProduct].refundRate - prevProductStats[selectedProduct].refundRate : undefined}
-          />
-        </div>
-      </motion.div>
-    </div>
-  );
-
-  const renderLifecyclePanel = () => (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pdd-card border border-pdd-gray-200">
-      <div className="px-4 py-3 border-b border-pdd-gray-200">
-        <h3 className="text-sm font-semibold flex items-center gap-1.5"><Clock size={14} color="var(--pdd-primary)" />动销分析</h3>
-      </div>
-      {noData ? <div className="h-40 flex items-center justify-center text-xs text-pdd-gray-500">请先上传数据</div> : (
-        <div>
-          {/* 生命周期摘要卡片 */}
-          {lifecycleSummary && (
-            <div className="grid grid-cols-3 md:grid-cols-6 gap-2 p-3">
-              <div className="bg-blue-50 rounded-lg p-2 text-center">
-                <div className="text-[10px] text-blue-600 font-medium">新品期</div>
-                <div className="text-lg font-bold text-blue-700">{lifecycleSummary['新品期']}</div>
-              </div>
-              <div className="bg-green-50 rounded-lg p-2 text-center">
-                <div className="text-[10px] text-green-600 font-medium">成长期</div>
-                <div className="text-lg font-bold text-green-700">{lifecycleSummary['成长期']}</div>
-              </div>
-              <div className="bg-yellow-50 rounded-lg p-2 text-center">
-                <div className="text-[10px] text-yellow-600 font-medium">成熟期</div>
-                <div className="text-lg font-bold text-yellow-700">{lifecycleSummary['成熟期']}</div>
-              </div>
-              <div className="bg-gray-100 rounded-lg p-2 text-center">
-                <div className="text-[10px] text-gray-500 font-medium">衰退期</div>
-                <div className="text-lg font-bold text-gray-600">{lifecycleSummary['衰退期']}</div>
-              </div>
-              <div className="bg-red-50 rounded-lg p-2 text-center">
-                <div className="text-[10px] text-red-500 font-medium">缺货</div>
-                <div className="text-lg font-bold text-red-600">{lifecycleSummary.outOfStock}</div>
-              </div>
-              <div className="bg-orange-50 rounded-lg p-2 text-center">
-                <div className="text-[10px] text-orange-500 font-medium">周转慢</div>
-                <div className="text-lg font-bold text-orange-600">{lifecycleSummary.slowTurnover}</div>
-              </div>
-            </div>
-          )}
-          <div className="overflow-x-auto max-h-[400px]">
-            <table className="w-full text-xs">
-              <thead><tr className="text-pdd-gray-500 border-b border-pdd-gray-200 bg-pdd-gray-50 sticky top-0 z-10">
-                <th className="py-2 px-3 text-left">商品</th><th className="py-2 px-2 text-left">阶段</th><th className="py-2 px-2 text-right">上架天数</th><th className="py-2 px-2 text-right">日销</th><th className="py-2 px-2 text-right">销量</th><th className="py-2 px-2 text-right">实收</th><th className="py-2 px-2 text-right">利润</th><th className="py-2 px-2 text-right">售罄率</th><th className="py-2 px-2 text-right">周转天</th><th className="py-2 px-2">库存</th>
-              </tr></thead>
-              <tbody>{lifecycleData.slice(0, 30).map((p: any, i: number) => (
-                <tr key={i} className="border-b border-pdd-gray-200 hover:bg-pdd-gray-50 transition-colors">
-                  <td className="py-2 px-3 font-medium max-w-[100px] truncate" title={p.name}>{p.name}</td>
-                  <td className="py-2 px-2"><span className={`px-1.5 py-0.5 rounded font-medium whitespace-nowrap ${p.stage === '新品期' ? 'bg-blue-100 text-blue-700' : p.stage === '成长期' ? 'bg-green-100 text-green-700' : p.stage === '成熟期' ? 'bg-yellow-100 text-yellow-700' : 'bg-pdd-gray-100 text-pdd-gray-700'}`} style={{ fontSize: '10px' }}>{p.stage}</span></td>
-                  <td className="py-2 px-2 text-right">{p.days.toFixed(0)}天</td>
-                  <td className="py-2 px-2 text-right tabular-nums">{p.avgDailySales.toFixed(1)}</td>
-                  <td className="py-2 px-2 text-right tabular-nums">{p.sales}</td>
-                  <td className="py-2 px-2 text-right tabular-nums">¥{p.revenue.toFixed(0)}</td>
-                  <td className="py-2 px-2 text-right tabular-nums" style={{ color: p.profit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' }}>¥{p.profit.toFixed(0)}</td>
-                  <td className="py-2 px-2 text-right tabular-nums">{p.sellThroughRate.toFixed(1)}%</td>
-                  <td className="py-2 px-2 text-right tabular-nums" style={{ color: p.turnoverDays > 30 ? 'var(--pdd-danger)' : p.turnoverDays > 14 ? '#faad14' : 'var(--pdd-success)' }}>{p.turnoverDays < 999 ? `${p.turnoverDays}天` : '-'}</td>
-                  <td className="py-2 px-2"><span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                    p.stockStatus === '缺货' ? 'bg-red-100 text-red-600' : p.stockStatus === '低库存' ? 'bg-orange-100 text-orange-600' : 'bg-green-100 text-green-600'
-                  }`}>{p.stockStatus}</span><span className="ml-1 tabular-nums">{p.inventory}</span></td>
-                </tr>
-              ))}</tbody>
-            </table>
-            {lifecycleData.length > 30 && <p className="text-[10px] text-pdd-gray-400 text-center py-2">显示前30款，共{lifecycleData.length}款商品</p>}
-          </div>
-        </div>
-      )}
-    </motion.div>
-  );
-
-  const renderSkuPanel = () => (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pdd-card border border-pdd-gray-200">
-      <div className="px-4 py-3 border-b border-pdd-gray-200">
-        <h3 className="text-sm font-semibold flex items-center gap-1.5"><Layers size={14} color="var(--pdd-primary)" />SKU矩阵 <span className="text-xs font-normal text-pdd-gray-400">({skuData.length}个规格)</span></h3>
-      </div>
-      {skuData.length === 0 ? <div className="h-40 flex items-center justify-center text-xs text-pdd-gray-500">请先上传订单数据</div> : (
-        <div className="overflow-x-auto max-h-[400px]">
-          <table className="w-full text-xs">
-            <thead><tr className="text-pdd-gray-500 border-b border-pdd-gray-200 bg-pdd-gray-50 sticky top-0 z-10">
-              <th className="py-2 px-3 text-left">SKU编码</th><th className="py-2 px-3 text-left">商品</th><th className="py-2 px-2 text-left">规格</th><th className="py-2 px-2 text-right">销量</th><th className="py-2 px-2 text-right">占商品比</th><th className="py-2 px-2 text-right">实收</th><th className="py-2 px-2 text-right">均价</th><th className="py-2 px-2 text-right">利润率</th>
-            </tr></thead>
-            <tbody className="divide-y divide-pdd-gray-50">{skuData.slice(0, 50).map((s: any, i: number) => (
-              <tr key={i} className="hover:bg-pdd-gray-50 transition-colors">
-                <td className="py-2 px-3 font-mono text-pdd-gray-500 max-w-[80px] truncate" style={{ fontSize: '10px' }} title={s.skuCode}>{s.skuCode.slice(-8)}</td>
-                <td className="py-2 px-3 font-medium max-w-[100px] truncate" title={s.productName}>{s.productName}</td>
-                <td className="py-2 px-2 text-pdd-gray-600 max-w-[80px] truncate" title={s.skuName}>{s.skuName}</td>
-                <td className="py-2 px-2 text-right tabular-nums font-medium">{s.sales}</td>
-                <td className="py-2 px-2 text-right tabular-nums">
-                  <div className="w-full bg-pdd-gray-100 rounded-full h-1.5 min-w-[40px]">
-                    <div className="h-1.5 rounded-full" style={{ width: `${Math.min(100, s.salesShare)}%`, backgroundColor: s.salesShare > 50 ? 'var(--pdd-primary)' : s.salesShare > 20 ? '#faad14' : 'var(--pdd-gray-400)' }} />
-                  </div>
-                  <span className="text-[10px] mt-0.5">{s.salesShare.toFixed(0)}%</span>
-                </td>
-                <td className="py-2 px-2 text-right tabular-nums">¥{s.revenue.toFixed(0)}</td>
-                <td className="py-2 px-2 text-right tabular-nums">¥{s.avgPrice.toFixed(0)}</td>
-                <td className="py-2 px-2 text-right tabular-nums" style={{ color: s.profitRate >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' }}>{s.profitRate.toFixed(1)}%</td>
-              </tr>
-            ))}</tbody>
-          </table>
-          {skuData.length > 50 && <p className="text-[10px] text-pdd-gray-400 text-center py-2">显示前50个，共{skuData.length}个规格</p>}
-        </div>
-      )}
-    </motion.div>
-  );
-
-  const renderPricePanel = () => {
-    const { scatter, bands } = priceElasticity as { scatter: any[]; bands: any[] };
-    return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pdd-card border border-pdd-gray-200">
-      <div className="px-4 py-3 border-b border-pdd-gray-200">
-        <h3 className="text-sm font-semibold flex items-center gap-1.5"><Zap size={14} color="var(--pdd-primary)" />定价洞察</h3>
-      </div>
-      {noData ? <div className="h-40 flex items-center justify-center text-xs text-pdd-gray-500">请先上传数据</div> : (
-        <div className="p-3 space-y-4">
-          {/* 价格带分布 */}
-          {bands.length > 0 && (
-            <div>
-              <h4 className="text-xs font-semibold text-pdd-text mb-2 flex items-center gap-1"><BarChart3 size={12} color="var(--pdd-primary)" />价格带销售分布</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <ResponsiveContainer width="100%" height={180}>
-                  <BarChart data={bands}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" vertical={false} />
-                    <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'var(--pdd-text-secondary)' }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 9, fill: 'var(--pdd-text-secondary)' }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '11px' }} formatter={(v: number, n: string) => [n === 'count' ? `${v}款` : `${v}件`, n === 'count' ? '商品数' : '销量']} />
-                    <Bar dataKey="count" name="商品数" fill="var(--pdd-primary)" radius={[4, 4, 0, 0]} barSize={24} />
-                  </BarChart>
-                </ResponsiveContainer>
-                <div className="space-y-1.5">
-                  {bands.map((b: any) => (
-                    <div key={b.label} className="flex items-center gap-2 text-xs">
-                      <span className="w-16 text-pdd-text-secondary font-mono text-[10px]">{b.label}</span>
-                      <span className="flex-1 text-pdd-text">{b.count}款</span>
-                      <span className="text-pdd-text tabular-nums">{b.totalSales}件</span>
-                      <span className="w-16 text-right tabular-nums" style={{ color: b.avgProfitRate >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' }}>{b.avgProfitRate.toFixed(1)}%</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-          {/* 价格 vs 销量散点图 */}
-          <div>
-            <h4 className="text-xs font-semibold text-pdd-text mb-2 flex items-center gap-1"><Activity size={12} color="#722ed1" />价格-销量关系 (前30款)</h4>
-            <ResponsiveContainer width="100%" height={220}>
-              <ScatterChart>
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
-                <XAxis type="number" dataKey="price" name="客单价" tick={{ fontSize: 10 }} unit="元" />
-                <YAxis type="number" dataKey="sales" name="销量" tick={{ fontSize: 10 }} />
-                <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: '11px' }}
-                  formatter={(v: number, n: string, p: any) => [v, p?.payload?.name || n]} />
-                <Scatter data={scatter} fill="var(--pdd-primary)">
-                  {scatter.map((entry: any, index: number) => (
-                    <Cell key={`cell-${index}`} fill={entry.profit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)'} fillOpacity={0.6} />
-                  ))}
-                </Scatter>
-              </ScatterChart>
-            </ResponsiveContainer>
-            <div className="flex items-center gap-4 text-[10px] text-pdd-text-secondary justify-center mt-1">
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-pdd-success/60" />盈利</span>
-              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-pdd-danger/60" />亏损</span>
-            </div>
-          </div>
-          {/* 折扣率分析 */}
-          <div>
-            <h4 className="text-xs font-semibold text-pdd-text mb-2 flex items-center gap-1"><Percent size={12} color="#faad14" />折扣率与利润关系</h4>
-            <div className="max-h-[120px] overflow-y-auto space-y-1">
-              {[...scatter].sort((a: any, b: any) => b.discountRatio - a.discountRatio).slice(0, 10).map((p: any, i: number) => (
-                <div key={i} className="flex items-center gap-2 text-xs py-1 px-2 bg-pdd-gray-50 rounded">
-                  <span className="w-20 truncate text-pdd-text text-[10px]" title={p.name}>{p.name}</span>
-                  <div className="flex-1 h-1.5 bg-pdd-gray-200 rounded-full">
-                    <div className="h-full rounded-full" style={{ width: `${Math.min(100, p.discountRatio)}%`, backgroundColor: p.discountRatio > 20 ? 'var(--pdd-danger)' : p.discountRatio > 10 ? '#faad14' : 'var(--pdd-success)' }} />
-                  </div>
-                  <span className="w-12 text-right font-mono text-[10px]">{p.discountRatio.toFixed(1)}%</span>
-                  <span className="w-16 text-right tabular-nums text-[10px]" style={{ color: p.profit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' }}>¥{p.profit.toFixed(0)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </motion.div>
-  );};
-
-  const renderPanel = (panelId: string) => {
-    switch (panelId) {
-      case 'kpi': return renderKpiPanel();
-      case 'overview': return activeView === 'overview' ? renderOverviewPanel() : null;
-      case 'lifecycle': return activeView === 'lifecycle' ? renderLifecyclePanel() : null;
-      case 'sku': return activeView === 'sku' ? renderSkuPanel() : null;
-      case 'price': return activeView === 'price' ? renderPricePanel() : null;
-      case 'fulllink': return activeView === 'fulllink' ? <ProductFullLinkTab productStats={productStats} /> : null;
-      case 'profit': return activeView === 'profit' ? <ProfitDiagnosisPanel productStats={productStats} /> : null;
-      default: return null;
+  function getMergedCellData(colKey: string, p: any, rowMode: '单品' | '总额') {
+    switch (colKey) {
+      case 'revenue': {
+        const r = p.revenue || 0;
+        return { val: r, tgtNum: 0, refNum: r, fmt: r >= 10000 ? '¥' + (r / 10000).toFixed(1) + '万' : '¥' + r.toFixed(0), refFmt: r >= 10000 ? '¥' + (r / 10000).toFixed(1) + '万' : '¥' + r.toFixed(0) };
+      }
+      case 'orders': return getCellData('orders', p);
+      case 'totalCost': return getCellData('totalCost', p);
+      case 'promo': {
+        const pc = p.promoCost || 0;
+        return { val: pc, tgtNum: 0, refNum: pc, fmt: pc >= 10000 ? '¥' + (pc / 10000).toFixed(1) + '万' : (pc >= 100 ? '¥' + pc.toFixed(0) : '¥' + pc.toFixed(1)), refFmt: pc >= 10000 ? '¥' + (pc / 10000).toFixed(1) + '万' : (pc >= 100 ? '¥' + pc.toFixed(0) : '¥' + pc.toFixed(1)) };
+      }
+      case 'roi': return getCellData('roi', p);
+      case 'refundRate': return getCellData('refundRate', p);
+      case 'otherCost': {
+        const cb = p.costBreakdown || {};
+        const oc = (cb.packagingFee || 0) + (cb.shippingFee || 0) + (cb.platformFee || 0) + (cb.taxes || 0) + (cb.customDeductions || 0);
+        return { val: oc, tgtNum: 0, refNum: oc, fmt: oc > 0 ? '¥' + oc.toFixed(0) : '--', refFmt: oc > 0 ? '¥' + oc.toFixed(0) : '--' };
+      }
+      case 'profit': return getCellData('totalProfit', p);
+      case 'skuPrice': return getCellData('price', p);
+      case 'skuCount': return { val: 0, tgtNum: 0, refNum: 0, fmt: '--', refFmt: '--' };
+      case 'skuCost': return getCellData('cost', p);
+      case 'promoAvg': return getCellData('promoPerUnit', p);
+      case 'profitRate': return getCellData('profitRate', p);
+      case 'skuProfit': return getCellData('profit', p);
+      default: return { val: 0, tgtNum: 0, refNum: 0, fmt: '--', refFmt: '--' };
     }
+  }
+
+  // ── 排序切换 ──
+  const handleSort = (key: string) => {
+    if (sortField === key) setSortDesc(prev => !prev);
+    else { setSortField(key); setSortDesc(true); }
   };
 
-  return (
-    <div className="p-4 space-y-4 min-h-screen bg-gradient-to-b from-pdd-gray-50 to-pdd-gray-100">
-      {/* 时间筛选 */}
-      <TimeFilter state={tf} />
+  const SortIcon = ({ colKey }: { colKey: string }) => {
+    if (sortField !== colKey) return <span className="inline-block ml-1 text-xs text-pdd-text-secondary/20">⇅</span>;
+    return <span className="inline-block ml-1 text-xs text-pdd-primary">{sortDesc ? '↓' : '↑'}</span>;
+  };
 
-      {/* 工具栏：Tab + 筛选 + 对比 */}
-      <div className="flex items-center gap-2 flex-wrap">
-        <div className="flex items-center gap-0.5 bg-pdd-card rounded-xl px-1.5 py-1 border border-pdd-gray-200 shadow-sm">
-          {[{k:'overview',l:'商品概览'}, {k:'lifecycle',l:'动销分析'}, {k:'sku',l:'SKU矩阵'}, {k:'price',l:'定价洞察'}, {k:'fulllink',l:'全链路追踪'}, {k:'profit',l:'盈利诊断'}].map(v => (
-            <motion.button key={v.k} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setActiveView(v.k as any)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${activeView === v.k ? 'text-white shadow-md' : 'text-pdd-gray-500 hover:text-pdd-gray-900 hover:bg-pdd-gray-100'}`}
-              style={activeView === v.k ? { background: 'linear-gradient(to right, var(--pdd-primary), var(--pdd-primary-light))', boxShadow: '0 4px 6px -1px rgba(224, 46, 36, 0.2)' } : {}}>{v.l}</motion.button>
-          ))}
-        </div>
-        <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setShowFilters(!showFilters)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all shadow-sm ${showFilters ? 'text-white border-pdd-primary shadow-md' : 'border-pdd-gray-300 text-pdd-gray-500 hover:border-pdd-primary hover:text-pdd-primary'}`}
-          style={showFilters ? { background: 'linear-gradient(to right, var(--pdd-primary), var(--pdd-primary-light))', boxShadow: '0 4px 6px -1px rgba(224, 46, 36, 0.2)' } : {}}>
-          <Filter size={12} />筛选
-        </motion.button>
-        <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setShowCompare(!showCompare)}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all shadow-sm ${showCompare ? 'text-white border-purple-600 shadow-md' : 'border-pdd-gray-300 text-pdd-gray-500 hover:border-purple-600 hover:text-purple-600'}`}
-          style={showCompare ? { background: 'linear-gradient(to right, #722ed1, #b37feb)', boxShadow: '0 4px 6px -1px rgba(114, 46, 209, 0.2)' } : {}}>
-          <BarChart3 size={12} />对比{compareProducts.length > 0 && `(${compareProducts.length})`}
-        </motion.button>
-        <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => { setDeepAnalysisProductId(undefined); setDeepAnalysisOpen(true); }}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all shadow-sm border-cyan-400 text-cyan-600 hover:bg-cyan-50"
-          title="单商品深度解析">
-          <Search size={12} />单商品深度解析
-        </motion.button>
-      </div>
 
-      {/* 筛选面板 */}
-      <AnimatePresence>{showFilters && (
-        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
-          className="pdd-card p-3 space-y-2 border border-pdd-gray-200 shadow-sm">
-          <div className="flex items-center gap-2 text-xs"><span className="text-pdd-gray-500 w-14 shrink-0">价格带:</span>
-            {['all','0-50','50-100','100-200','200-500','500-max'].map(k => (
-              <motion.button key={k} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setPriceFilter(k)}
-                className={`px-2.5 py-1 rounded-lg transition-all ${priceFilter === k ? 'text-white shadow-sm' : 'bg-pdd-gray-100 text-pdd-gray-500 hover:text-pdd-gray-900'}`}
-                style={priceFilter === k ? { background: 'linear-gradient(to right, var(--pdd-primary), var(--pdd-primary-light))' } : {}}>{k === 'all' ? '全部' : k === '500-max' ? '500+' : k}</motion.button>
-            ))}
+  const renderProductTable = () => {
+    const currentCols = dimMode === '单品' ? COLS_SINGLE : COLS_TOTAL;
+    return (
+    <>
+      <div className="bg-pdd-card rounded-lg overflow-hidden border border-pdd-border/60">
+      {noData ? (
+          <div className="h-56 flex flex-col items-center justify-center text-sm text-pdd-text-secondary gap-2">
+            <Package size={36} className="text-pdd-text-secondary/30" />
+            <span>{'暂无数据，请先上传订单'}</span>
           </div>
-          <div className="flex items-center gap-2 text-xs"><span className="text-pdd-gray-500 w-14 shrink-0">销量:</span>
-            {['all','0-10','10-50','50-100','100-500','500-max'].map(k => (
-              <motion.button key={k} whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={() => setSalesFilter(k)}
-                className={`px-2.5 py-1 rounded-lg transition-all ${salesFilter === k ? 'text-white shadow-sm' : 'bg-pdd-gray-100 text-pdd-gray-500 hover:text-pdd-gray-900'}`}
-                style={salesFilter === k ? { background: 'linear-gradient(to right, #1890ff, #69c0ff)' } : {}}>{k === 'all' ? '全部' : k === '500-max' ? '500+' : k}</motion.button>
-            ))}
-          </div>
-        </motion.div>
-      )}</AnimatePresence>
+        ) : (
+          <>
 
-      {/* 可拖拽面板区域 */}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <SortableContext items={panelOrder} strategy={verticalListSortingStrategy}>
-          <div className="space-y-4">
-            {panelOrder.map((panelId) => {
-              const content = renderPanel(panelId);
-              if (!content) return null;
-              return (
-                <SortableItem key={panelId} id={panelId}>
-                  {content}
-                </SortableItem>
-              );
-            })}
-          </div>
-        </SortableContext>
-        <DragOverlay>
-          {activeId ? (
-            <div className="bg-pdd-card rounded-lg shadow-2xl border-2 border-pdd-primary p-4 opacity-90">
-              <div className="text-sm font-medium text-pdd-primary">拖动中...</div>
+          {/* ── 标签栏：只显示投产类标签，去掉分组文字和多余颜色 ── */}
+          {products.length > 0 && (
+            <div className="px-4 py-2.5 border-b border-pdd-border/20 bg-pdd-bg/10">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {activeTagFilter && (() => {
+                  const activeDef = TAG_DEF_MAP[activeTagFilter];
+                  const activeBg = activeDef?.bg || '#f3f4f6';
+                  const activeColor = activeDef?.color || '#374151';
+                  return (
+                    <button onClick={() => setActiveTagFilter(null)}
+                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md border transition-colors hover:opacity-80"
+                      style={{ backgroundColor: activeBg, color: activeColor, borderColor: activeColor + '30' }}>
+                      <X size={12} />
+                      {getTagLabel(activeTagFilter)}
+                    </button>
+                  );
+                })()}
+                {/* 只显示效率类（投产）标签，使用语义色 */}
+                {TAG_GROUPS.filter(g => g.group === '效率').flatMap(g => g.tags).map(t => {
+                  const count = tagCounts[t.key] || 0;
+                  if (count === 0) return null;
+                  const isHidden = hiddenTags.has(t.key);
+                  const def = TAG_DEF_MAP[t.key];
+                  const bgColor = def?.bg || '#f5f5f5';
+                  const textColor = def?.color || '#6b7280';
+                  return (
+                    <button key={t.key} onClick={() => toggleTagVisibility(t.key)}
+                      className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md border transition-all hover:shadow-sm`}
+                      style={{
+                        backgroundColor: isHidden ? '#f9fafb' : bgColor,
+                        color: isHidden ? '#d1d5db' : textColor,
+                        borderColor: isHidden ? '#f0f0f0' : textColor + '30',
+                        textDecoration: isHidden ? 'line-through' : 'none',
+                      }}
+                      title={isHidden ? `点击显示「${t.label}」标签` : `点击隐藏「${t.label}」标签`}>
+                      <span>{t.label}</span>
+                      <span className="text-[10px]" style={{ opacity: 0.6 }}>({count})</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {activeTagFilter && (
+                <div className="mt-1.5 text-[11px] text-pdd-text-secondary/60">
+                  已筛选：{getTagLabel(activeTagFilter)} — {tagCounts[activeTagFilter] || 0} 款商品
+                  <button onClick={() => setActiveTagFilter(null)} className="ml-2 text-pdd-text-secondary hover:text-pdd-text underline">清除</button>
+                </div>
+              )}
             </div>
-          ) : null}
-        </DragOverlay>
-      </DndContext>
+          )}
 
-      {/* 商品对比面板 */}
-      <AnimatePresence>{showCompare && compareData.length > 0 && (
-        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="pdd-card border border-pdd-gray-200">
-          <div className="px-4 py-3 border-b border-pdd-gray-200">
-            <h4 className="text-sm font-semibold flex items-center gap-1.5"><BarChart3 size={14} color="var(--pdd-primary)" />商品对比({compareData.length})</h4>
-          </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="text-pdd-gray-500 border-b border-pdd-gray-200 bg-pdd-gray-50">
-                <th className="py-2 px-3 text-left">商品</th><th className="py-2 px-3 text-right">GMV</th><th className="py-2 px-3 text-right">实收</th><th className="py-2 px-3 text-right">利润</th><th className="py-2 px-3 text-right">利润率</th><th className="py-2 px-3 text-right">推广花费</th><th className="py-2 px-3 text-right">推广成交</th><th className="py-2 px-3 text-right">售后率</th>
-              </tr></thead>
-              <tbody>{compareData.map(p => (
-                <tr key={p.id} className="border-b border-pdd-gray-200 hover:bg-pdd-gray-50 transition-colors">
-                  <td className="py-2 px-3 truncate max-w-[120px] font-medium">{p.name}</td>
-                  <td className="py-2 px-3 text-right">¥{p.gmv.toFixed(0)}</td>
-                  <td className="py-2 px-3 text-right">¥{p.revenue.toFixed(0)}</td>
-                  <td className="py-2 px-3 text-right">¥{p.profit.toFixed(0)}</td>
-                  <td className="py-2 px-3 text-right">{p.profitRate.toFixed(1)}%</td>
-                  <td className="py-2 px-3 text-right">{p.promoCost > 0 ? `¥${p.promoCost.toFixed(0)}` : '-'}</td>
-                  <td className="py-2 px-3 text-right">{p.promoTransaction > 0 ? `¥${p.promoTransaction.toFixed(0)}` : '-'}</td>
-                  <td className="py-2 px-3 text-right">{p.afterSaleRate.toFixed(1)}%</td>
+            <table className="w-full">
+              {/* ── 京东风格表头：浅灰底、小字 ── */}
+              <thead>
+                <tr className="border-b border-pdd-border/30 bg-pdd-gray-50">
+                  <th className="py-3 px-1 text-center text-xs font-medium text-pdd-text-secondary/40 w-5">#</th>
+                  <th className="py-3 px-3 text-left text-xs font-medium text-pdd-text-secondary/60 min-w-[240px]">
+                    商品信息 <SortIcon colKey="name" />
+                  </th>
+                  <th className="py-3 px-0 text-center text-xs font-medium text-pdd-text-secondary/40" style={{ width: '36px' }}> </th>
+                  {currentCols.map(col => (
+                    <th key={col.key}
+                      onClick={() => handleSort(col.key)}
+                      className="py-3 px-1 text-right text-xs font-medium text-pdd-text-secondary/60 cursor-pointer hover:text-pdd-text select-none whitespace-nowrap"
+                      style={{ width: col.width }}>
+                      {col.label} <SortIcon colKey={col.key} />
+                    </th>
+                  ))}
+                  <th className="py-3 px-0.5 text-center text-xs font-medium text-pdd-text-secondary/60" style={{ width: '70px' }}>操作</th>
                 </tr>
-              ))}</tbody>
+              </thead>
+              {/* ── 京东风格行：大图 + 蓝链商品名 + 编号 ── */}
+              <tbody className="divide-y divide-pdd-border/20">
+                {paginatedProducts.flatMap((p, i) => {
+                  const profit = p.profit || 0;
+                  const isExpanded = expandedRows.has(p.id);
+                  const rec = calcRecommendation(p);
+                  const img = productImages[p.id];
+                  const alias = productAliases[p.id];
+                  const displayName = alias || p.name;
+                  const productSkuData = skuData.filter(s => s.productId === p.id);
+                  let skuGroups = groupSKUs(productSkuData);
+                  // 应用用户覆盖（移动SKU、自定义分组）
+                  skuGroups = {
+                    groups: applyGroupOverrides(skuGroups.groups, p.id, productSkuData),
+                  };
+                  // 没有SKU数据的商品也要有默认分组，保证所有行文字区高度一致
+                  if (skuGroups.groups.length === 0) {
+                    skuGroups = {
+                      groups: [{
+                        label: '规格一', price: p.avgPrice || 0,
+                        count: 1, sales: p.sales || 0, revenue: p.revenue || 0,
+                        profit: p.profit || 0, orders: p.orders || 0,
+                        items: [{ skuKey: '', skuName: '-', sales: p.sales || 0, price: p.avgPrice || 0, revenue: p.revenue || 0, profit: p.profit || 0 }],
+                      }],
+                    };
+                  }
+                  const rowMode = getRowDimMode(p.id);
+
+                  const row = (
+                    <tr key={p.id}
+                      className={`transition-colors ${isExpanded ? 'bg-blue-50/40' : 'hover:bg-pdd-gray-50'}`}>
+                      {/* 序号 */}
+                      <td className="py-1 px-1 text-center text-xs text-pdd-text-secondary/30 font-mono align-middle">{(currentPage - 1) * pageSize + i + 1}</td>
+
+                      {/* ── 商品信息：左图 + 右文字（紧凑版） ── */}
+                      <td className="py-2 px-3 align-middle">
+                        <div className="flex gap-2 items-stretch">
+                          {/* 商品图 — 88px正方形 */}
+                          <div className="w-[88px] flex-shrink-0 flex flex-col justify-center">
+                            <div className="w-full aspect-square rounded-lg overflow-hidden border border-gray-200 cursor-pointer group relative bg-gray-50"
+                              onMouseEnter={(e) => {
+                                if (img) {
+                                  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                  setHoveredImage({ id: p.id, src: img, x: rect.right + 8, y: rect.top });
+                                }
+                              }}
+                              onMouseLeave={() => setHoveredImage(null)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (img) { setEnlargedImage(img); return; }
+                                const input = document.createElement('input');
+                                input.type = 'file'; input.accept = 'image/*';
+                                input.onchange = (ev: any) => { const f = ev.target?.files?.[0]; if (f) handleImageUpload(p.id, f); };
+                                input.click();
+                              }}>
+                              {img ?
+                                <div className="w-full h-full bg-cover bg-center transition-transform duration-200 group-hover:scale-110"
+                                  style={{ backgroundImage: `url(${img})`, imageRendering: 'auto' }} />
+                                : <div className="w-full h-full flex items-center justify-center"><ImageIcon size={16} className="text-gray-300" /></div>
+                              }
+                            </div>
+                          </div>
+                          {/* 文字区 */}
+                          <div className="flex-1 min-w-0 space-y-0.5">
+                            <div className="flex items-center gap-1 flex-wrap">
+                              <span className="text-[13px] font-medium text-blue-600 hover:text-blue-800 cursor-pointer truncate max-w-[180px] leading-snug"
+                                title={displayName}
+                                onClick={(e) => { e.stopPropagation(); setDrawerProductId(p.id); }}>
+                                {displayName}
+                              </span>
+                              <button onClick={(e) => { e.stopPropagation(); setExpandedRows(prev => { const n = new Set(prev); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; }); }}
+                                className="text-[10px] font-medium px-1.5 py-0.5 rounded border border-gray-200 text-gray-400 hover:bg-gray-50">
+                                {skuGroups.groups.length}个规格
+                              </button>
+                              <div className="inline-flex bg-gray-100 rounded text-[9px] leading-none p-[1px]">
+                                <button onClick={(e) => { e.stopPropagation(); setDimMode('单品'); }}
+                                  className={'px-1.5 py-0.5 rounded ' + (dimMode === '单品' ? 'bg-white text-gray-700 shadow-sm font-medium' : 'text-gray-400')}>单品</button>
+                                <button onClick={(e) => { e.stopPropagation(); setDimMode('总额'); }}
+                                  className={'px-1.5 py-0.5 rounded ' + (dimMode === '总额' ? 'bg-white text-gray-700 shadow-sm font-medium' : 'text-gray-400')}>总额</button>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px] text-gray-400 flex-wrap">
+                              <span className="font-mono text-gray-500" title={p.id}>{p.id || '--'}</span>
+                              {p.code && <><span className="text-gray-300">|</span><span>编码 {p.code}</span></>}
+                              <span className="text-gray-300">|</span>
+                              <span>{p.firstDate || '--'}出单</span>
+                              {p.activeDays > 0 && <><span className="text-gray-300">|</span><span>活跃{p.activeDays}天</span></>}
+                            </div>
+                            <div className="flex items-center gap-1.5 text-[10px] text-gray-500 flex-wrap">
+                              {(() => {
+                                const unitCost = p.costs > 0 && p.sales > 0 ? p.costs / p.sales : 0;
+                                const sellingPrice = p.avgPrice || 0;
+                                const unitProfit = sellingPrice > 0 && unitCost > 0 ? sellingPrice - unitCost : 0;
+                                const marginRate = sellingPrice > 0 && unitCost > 0 ? (unitProfit / sellingPrice) * 100 : 0;
+                                return (<>
+                                  <span>成本<span className="font-semibold text-gray-600 ml-0.5">¥{unitCost > 0 ? unitCost.toFixed(1) : '--'}</span></span>
+                                  <span className="text-gray-300">|</span>
+                                  <span>售价<span className="font-semibold text-gray-600 ml-0.5">¥{sellingPrice > 0 ? sellingPrice.toFixed(sellingPrice < 10 ? 2 : 1) : '--'}</span></span>
+                                  <span className="text-gray-300">|</span>
+                                  <span>利润<span className={`font-semibold ml-0.5 ${unitProfit !== 0 ? 'text-pdd-text' : 'text-gray-500'}`}>
+                                    {unitProfit > 0 ? '¥' + unitProfit.toFixed(2) : unitProfit < 0 ? '-¥' + Math.abs(unitProfit).toFixed(2) : '--'}
+                                  </span></span>
+                                  {marginRate > 0 && <><span className="text-gray-300">|</span><span>毛利率<span className="font-semibold text-gray-600 ml-0.5">{marginRate.toFixed(1)}%</span></span></>}
+                                </>);
+                              })()}
+                            </div>
+                            {/* ── 推广数据行（仅在有推广数据时显示）── */}
+                            {p.promoCost > 0 && (
+                              <div className="flex items-center gap-1.5 text-[10px] text-gray-500 flex-wrap">
+                                <span className="inline-flex items-center gap-1">
+                                  <Megaphone size={9} className="text-orange-400" />
+                                  推广费<span className="font-semibold text-orange-600 ml-0.5">{p.promoCost >= 10000 ? '¥' + (p.promoCost / 10000).toFixed(1) + '万' : '¥' + p.promoCost.toFixed(0)}</span>
+                                </span>
+                                <span className="text-gray-300">|</span>
+                                <span>ROI<span className={'font-semibold ml-0.5 ' + ((p.roi || 0) >= 1 ? 'text-green-600' : 'text-red-500')}>{(p.roi || 0).toFixed(1)}</span></span>
+                                <span className="text-gray-300">|</span>
+                                <span>成交<span className="font-semibold text-blue-600 ml-0.5">{p.promoTransaction >= 10000 ? '¥' + (p.promoTransaction / 10000).toFixed(1) + '万' : '¥' + (p.promoTransaction || 0).toFixed(0)}</span></span>
+                                <span className="text-gray-300">|</span>
+                                <span>费比<span className="font-semibold text-purple-600 ml-0.5">{(p.promoCostRatio || 0).toFixed(1)}%</span></span>
+                                <span className="text-gray-300">|</span>
+                                <span>点击<span className="font-semibold text-amber-600 ml-0.5">{(p.promoClicks || 0) >= 10000 ? ((p.promoClicks || 0) / 10000).toFixed(1) + '万' : (p.promoClicks || 0).toFixed(0)}</span></span>
+                              </div>
+                            )}
+                            <div className="flex items-center gap-1 flex-wrap mt-[2px]">
+                              {/* 全店占比标签 */}
+                              <span className="text-[9px] font-medium px-1.5 py-[1px] rounded-sm border bg-blue-50 text-blue-600 border-blue-200">
+                                销{(storeTotals.totalSales > 0 ? ((p.sales / storeTotals.totalSales) * 100) : 0).toFixed(1)}%
+                              </span>
+                              {p.promoCost > 0 && (
+                                <span className="text-[9px] font-medium px-1.5 py-[1px] rounded-sm border bg-orange-50 text-orange-500 border-orange-200">
+                                  推{(storeTotals.totalPromo > 0 ? (((p.promoCost || 0) / storeTotals.totalPromo) * 100) : 0).toFixed(1)}%
+                                </span>
+                              )}
+                              <span className="text-[9px] font-medium px-1.5 py-[1px] rounded-sm border bg-green-50 text-green-600 border-green-200">
+                                单{(storeTotals.totalOrders > 0 ? ((p.orders / storeTotals.totalOrders) * 100) : 0).toFixed(1)}%
+                              </span>
+                              {(autoTags[p.id] || []).filter(tk => {
+                                const def = TAG_DEF_MAP[tk];
+                                return def && def.group === '效率' && !hiddenTags.has(tk);
+                              }).slice(0, 4).map(tk => {
+                                const def = TAG_DEF_MAP[tk];
+                                return (
+                                  <span key={tk}
+                                    className="text-[9px] font-medium px-1.5 py-[1px] rounded-sm cursor-pointer border"
+                                    style={{
+                                      backgroundColor: def?.bg || 'var(--pdd-gray-100)',
+                                      color: def?.color || 'var(--pdd-text-secondary)',
+                                      borderColor: (def?.color || 'var(--pdd-text-secondary)') + '30',
+                                    }}
+                                    onClick={(e) => { e.stopPropagation(); setActiveTagFilter(activeTagFilter === tk ? null : tk); }}>
+                                    {getTagLabel(tk)}
+                                  </span>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                        {/* 悬停弹窗 */}
+                        {hoveredImage && hoveredImage.id === p.id && img && (
+                          <div className="fixed z-[9999] rounded-xl overflow-hidden shadow-2xl border border-gray-200 pointer-events-none"
+                            style={{ left: hoveredImage.x, top: hoveredImage.y, maxWidth: 280, maxHeight: 280 }}>
+                            <img src={img} alt="" className="w-full h-full object-contain" />
+                          </div>
+                        )}
+                      </td>
+
+                      {/* ── 数据列：8列，每列竖排三行（目标/本期/同比），左标签右数值 ── */}
+                      {(() => {
+                        const smartTargets = computeSmartTargets(p, rowMode);
+                        const prevP = prevProductMap[p.id];
+                        function getCompare(colKey: string): { fmt: string; cls: string } {
+                          if (!prevP) return { fmt: '', cls: 'text-gray-300' };
+                          let curVal = 0, prevVal = 0;
+                          switch (colKey) {
+                            case 'revenue': curVal = p.revenue || 0; prevVal = prevP.revenue || 0; break;
+                            case 'orders': curVal = p.orders || 0; prevVal = prevP.orders || 0; break;
+                            case 'totalCost': curVal = p.costs || 0; prevVal = prevP.costs || 0; break;
+                            case 'promo': curVal = p.promoCost || 0; prevVal = prevP.promoCost || 0; break;
+                            case 'roi': curVal = p.roi || 0; prevVal = prevP.roi || 0; break;
+                            case 'refundRate': curVal = p.refundRate || 0; prevVal = prevP.refundRate || 0; break;
+                            case 'otherCost': {
+                              const calcOC = (pp: any) => { const cb = pp.costBreakdown || {}; return (cb.packagingFee || 0) + (cb.shippingFee || 0) + (cb.platformFee || 0) + (cb.taxes || 0) + (cb.customDeductions || 0); };
+                              curVal = calcOC(p); prevVal = calcOC(prevP); break;
+                            }
+                            case 'profit': curVal = p.profit || 0; prevVal = prevP.profit || 0; break;
+                            case 'skuPrice': curVal = p.avgPrice || 0; prevVal = prevP.avgPrice || 0; break;
+                            case 'skuCount': return { fmt: '-', cls: 'text-gray-300' };
+                            case 'skuCost': {
+                              const uc = p.costs > 0 && p.sales > 0 ? p.costs / p.sales : 0;
+                              const puc = prevP.costs > 0 && prevP.sales > 0 ? prevP.costs / prevP.sales : 0;
+                              curVal = uc; prevVal = puc; break;
+                            }
+                            case 'promoAvg': {
+                              curVal = p.promoCost > 0 && p.orders > 0 ? p.promoCost / p.orders : 0;
+                              prevVal = prevP.promoCost > 0 && prevP.orders > 0 ? prevP.promoCost / prevP.orders : 0;
+                              break;
+                            }
+                            case 'profitRate': curVal = p.profitRate || 0; prevVal = prevP.profitRate || 0; break;
+                            case 'skuProfit': {
+                              curVal = p.profit > 0 && p.sales > 0 ? p.profit / p.sales : 0;
+                              prevVal = prevP.profit > 0 && prevP.sales > 0 ? prevP.profit / prevP.sales : 0;
+                              break;
+                            }
+                            default: return { fmt: '-', cls: 'text-gray-300' };
+                          }
+                          if (prevVal > 0 && curVal !== prevVal) {
+                            const change = ((curVal - prevVal) / prevVal) * 100;
+                            const fmt = (change > 0 ? '+' : '') + change.toFixed(1) + '%';
+                            const isGood = colKey === 'profit' || colKey === 'profitRate' || colKey === 'revenue' || colKey === 'orders' || colKey === 'roi' || colKey === 'skuProfit' || colKey === 'skuPrice';
+                            const isBad = colKey === 'refundRate' || colKey === 'totalCost' || colKey === 'promo' || colKey === 'promoAvg' || colKey === 'otherCost' || colKey === 'skuCost';
+                            const cls = (isGood && change > 0) || (isBad && change < 0) ? 'text-green-600' : (isGood && change < 0) || (isBad && change > 0) ? 'text-red-500' : 'text-gray-400';
+                            return { fmt, cls };
+                          }
+                          return { fmt: '-', cls: 'text-gray-300' };
+                        }
+                        return [
+                          <td key="label" className="p-0 align-middle" style={{ width: '36px' }}>
+                            <div className="flex flex-col h-full">
+                              <div className="flex-1 flex items-center justify-center border-b border-dashed border-gray-100 min-h-[26px]">
+                                <span className="text-[9px] text-gray-400 font-medium leading-[26px]">目标</span>
+                              </div>
+                              <div className="flex-1 flex items-center justify-center border-b border-dashed border-gray-100 min-h-[26px]">
+                                <span className="text-[9px] text-gray-400 font-medium leading-[26px]">本期</span>
+                              </div>
+                              <div className="flex-1 flex items-center justify-center min-h-[26px]">
+                                <span className="text-[9px] text-gray-400 font-medium leading-[26px]">同比</span>
+                              </div>
+                            </div>
+                          </td>,
+                          ...currentCols.map(col => {
+                            let cd = getMergedCellData(col.key, p, rowMode);
+                            if (col.key === 'skuCount') {
+                              const count = skuGroups.groups.length;
+                              cd = { ...cd, val: count, fmt: String(count) };
+                            }
+                            const st = smartTargets[col.key];
+                            const cmp = getCompare(col.key);
+                            const profitCol = col.key === 'profit' || col.key === 'profitRate' || col.key === 'skuProfit';
+                            const profitVal = col.key === 'profit' ? (p.profit || 0) : (col.key === 'profitRate' ? (p.profitRate || 0) : (col.key === 'skuProfit' ? (p.profit > 0 && p.sales > 0 ? p.profit / p.sales : 0) : 0));
+                            const valColor = profitCol ? 'text-pdd-text' : 'text-pdd-text';
+                            return (
+                              <td key={col.key} className="p-0 align-middle" style={{ width: col.width }}>
+                                <div className="flex flex-col h-full">
+                                  <div className="flex-1 flex items-center justify-end px-1.5 border-b border-dashed border-gray-100 min-h-[26px]">
+                                    <span className="text-[11px] font-semibold text-gray-400 tabular-nums leading-[26px] cursor-pointer hover:text-pdd-primary transition-colors"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        const cfg = productTargets[p.id] || { profitPerOrder: 10 };
+                                        const ppo = cfg.profitPerOrder || 10;
+                                        const er = computeTargetsByProfit(p, ppo, undefined, cfg.manualOverrides);
+                                        setTargetDetailProduct({ product: p, engineResult: er, rowMode, profitPerOrder: ppo });
+                                      }}>{st.value > 0 ? st.fmt : '--'}</span>
+                                  </div>
+                                  <div className="flex-1 flex items-center justify-end px-1.5 border-b border-dashed border-gray-100 min-h-[26px]">
+                                    <span className={'text-[14px] font-bold tabular-nums leading-[26px] ' + valColor}>{cd.fmt}</span>
+                                  </div>
+                                  <div className="flex-1 flex items-center justify-end px-1.5 min-h-[26px]">
+                                    <span className={'text-[11px] font-semibold tabular-nums leading-[26px] ' + cmp.cls}>{cmp.fmt || '--'}</span>
+                                  </div>
+                                </div>
+                              </td>
+                            );
+                          }),
+                          ];
+                      })()}
+                      {/* 操作 - 四个竖直排列按钮：商品分析/商品复盘/推广数据/商品编辑 */}
+                      <td className="py-1 px-0.5 text-center align-middle" style={{ width: '70px' }}>
+                        <div className="flex flex-col items-center justify-center">
+                          <button onClick={(e) => { e.stopPropagation(); setDataAnalysisProductId(p.id); }}
+                            className="flex items-center justify-center gap-1 w-full px-1 py-0.5 rounded text-[9px] text-blue-600 hover:bg-blue-50 transition-colors font-medium"
+                            title="商品分析">
+                            <BarChart3 size={10} /><span>商品分析</span>
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); setRetrospectiveProductId(p.id); }}
+                            className="flex items-center justify-center gap-1 w-full px-1 py-0.5 rounded text-[9px] text-amber-600 hover:bg-amber-50 transition-colors font-medium"
+                            title="商品复盘">
+                            <RotateCcw size={10} /><span>商品复盘</span>
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); setPromoDataProductId(p.id); }}
+                            className="flex items-center justify-center gap-1 w-full px-1 py-0.5 rounded text-[9px] text-orange-600 hover:bg-orange-50 transition-colors font-medium"
+                            title="推广数据">
+                            <Megaphone size={10} /><span>推广数据</span>
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); setEditorProductId(p.id); }}
+                            className="flex items-center justify-center gap-1 w-full px-1 py-0.5 rounded text-[9px] text-violet-600 hover:bg-violet-50 transition-colors font-medium"
+                            title="商品编辑">
+                            <Edit3 size={10} /><span>商品编辑</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+
+                  const skuRow = isExpanded && skuGroups.groups.length > 0 ? (
+                    <tr key={p.id + '_sku'}>
+                      <td colSpan={12} className="p-0">
+                        <div className="border-t border-pdd-border bg-pdd-bg/40">
+                          {/* Level 1: Compressed groups */}
+                          <table className="w-full text-xs">
+                            <thead>
+                              <tr className="border-b border-pdd-border/40">
+                                <th className="px-4 py-2 text-left text-xs font-semibold text-pdd-text-secondary w-36">规格 / SKU</th>
+                                <th className="px-3 py-2 text-right text-xs font-semibold text-pdd-text-secondary w-20">历史最低价</th>
+                                <th className="px-3 py-2 text-right text-xs font-semibold text-pdd-text-secondary w-16">销量</th>
+                                <th className="px-3 py-2 text-right text-xs font-semibold text-pdd-text-secondary w-20">收入</th>
+                                <th className="px-4 py-2 text-right text-xs font-semibold text-pdd-text-secondary w-20">利润</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {skuGroups.groups.map((g, gi) => {
+                                const subKey = `${p.id}::${gi}`;
+                                const isSubExpanded = expandedSkuSubGroups.has(subKey);
+                                // 构建 skuName → skuEntry 映射 (用于移动操作)
+                                const skuEntryMap = new Map<string, { skuId: string; skuKey: string }>();
+                                productSkuData.forEach(se => {
+                                  if (se.skuName) skuEntryMap.set(se.skuName, { skuId: se.skuId, skuKey: `${se.productId}_${se.skuId}` });
+                                });
+                                // 计算该规格组的历史最低价
+                                const groupHistLow = (() => {
+                                  const histForProduct = historicalMinPrices[p.id];
+                                  if (!histForProduct) return null;
+                                  let min = Infinity;
+                                  g.items.forEach(item => {
+                                    const entry = productSkuData.find(s => s.skuName === item.skuName);
+                                    if (entry) {
+                                      const price = histForProduct[entry.skuId];
+                                      if (price !== undefined && price < min) min = price;
+                                    }
+                                  });
+                                  return min === Infinity ? null : min;
+                                })();
+                                const displayPrice = groupHistLow !== null ? groupHistLow : g.price;
+                                // 获取当前所有组标签（含覆盖）
+                                const currentOverrides = loadSpecOverrides(p.id);
+                                const allLabels = skuGroups.groups.map(gg => currentOverrides.labels[gg.label] || gg.label);
+                                // 悬浮预览
+                                const previewItems = g.items.map(item => ({
+                                  skuName: item.skuName,
+                                  price: item.price,
+                                  orders: item.sales,
+                                  sales: 0,
+                                }));
+                                return (
+                                  <React.Fragment key={gi}>
+                                    <tr className={`border-b border-pdd-border/30 transition-colors ${isSubExpanded ? 'bg-pdd-bg/50' : ''} ${g.count > 1 ? 'cursor-pointer hover:bg-pdd-bg/50' : ''}`}
+                                      onClick={() => {
+                                        if (g.count > 1) {
+                                          setExpandedSkuSubGroups(prev => {
+                                            const n = new Set(prev);
+                                            if (n.has(subKey)) n.delete(subKey); else n.add(subKey);
+                                            return n;
+                                          });
+                                        }
+                                      }}>
+                                      <td className="px-4 py-2">
+                                        <div className="flex items-center gap-2">
+                                          {g.count > 1 ? (
+                                            <span className={`inline-block w-4 text-center text-xs font-mono transition-transform duration-100 ${isSubExpanded ? 'text-pdd-primary' : 'text-pdd-text-secondary/70'}`}>
+                                              {isSubExpanded ? '▼' : '▶'}
+                                            </span>
+                                          ) : (
+                                            <span className="inline-block w-4" />
+                                          )}
+                                          <span
+                                            onMouseEnter={(e) => {
+                                              clearTimeout(hoverTimer.current);
+                                              const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                              hoverTimer.current = setTimeout(() => {
+                                                setHoverInfo({ label: currentOverrides.labels[g.label] || g.label, items: previewItems, x: rect.right + 8, y: rect.top - 10 });
+                                              }, 200);
+                                            }}
+                                            onMouseLeave={() => {
+                                              clearTimeout(hoverTimer.current);
+                                              hoverTimer.current = setTimeout(() => setHoverInfo(null), 300);
+                                            }}
+                                          >
+                                            <EditableSpecLabel productId={p.id} defaultLabel={g.label} version={specVersion} onRename={() => setSpecVersion(v => v + 1)} />
+                                          </span>
+                                          {g.count > 1 && (
+                                            <span className="text-[11px] font-medium text-pdd-primary bg-pdd-primary/10 px-2 py-0.5 rounded"
+                                              onMouseEnter={(e) => {
+                                                clearTimeout(hoverTimer.current);
+                                                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                                hoverTimer.current = setTimeout(() => {
+                                                  setHoverInfo({ label: currentOverrides.labels[g.label] || g.label, items: previewItems, x: rect.right + 8, y: rect.top - 10 });
+                                                }, 200);
+                                              }}
+                                              onMouseLeave={() => {
+                                                clearTimeout(hoverTimer.current);
+                                                hoverTimer.current = setTimeout(() => setHoverInfo(null), 300);
+                                              }}
+                                            >
+                                              {g.count}个规格
+                                            </span>
+                                          )}
+                                        </div>
+                                      </td>
+                                      <td className="px-3 py-2 text-right align-middle">
+                                        <div className="font-mono text-sm font-semibold text-pdd-text tabular-nums">¥{displayPrice.toFixed(2)}</div>
+                                        {groupHistLow !== null && Math.abs(groupHistLow - g.price) > 0.01 && (
+                                          <div className="text-[10px] text-pdd-text-secondary/40 line-through mt-0.5">¥{g.price.toFixed(2)}</div>
+                                        )}
+                                      </td>
+                                      <td className="px-3 py-2 text-right text-pdd-text-secondary tabular-nums font-semibold text-sm">{g.sales}</td>
+                                      <td className="px-3 py-2 text-right text-pdd-text-secondary tabular-nums font-medium text-sm">{(g.revenue || 0) >= 10000 ? ((g.revenue || 0) / 10000).toFixed(1) + '万' : '¥' + (g.revenue || 0).toFixed(0)}</td>
+                                      <td className="px-4 py-2 text-right tabular-nums font-mono text-sm font-semibold text-pdd-text">
+                                        {g.profit >= 0 ? '+' : ''}¥{Math.abs(g.profit).toFixed(0)}
+                                        {/* 信息按钮触发预览 */}
+                                        <button
+                                          className="ml-1.5 p-0.5 rounded text-gray-300 hover:text-gray-500 hover:bg-gray-100 inline-flex align-middle"
+                                          onClick={e => { e.stopPropagation(); }}
+                                          onMouseEnter={(e) => {
+                                            clearTimeout(hoverTimer.current);
+                                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                                            hoverTimer.current = setTimeout(() => {
+                                              setHoverInfo({ label: currentOverrides.labels[g.label] || g.label, items: previewItems, x: rect.right + 8, y: rect.top - 10 });
+                                            }, 100);
+                                          }}
+                                          onMouseLeave={() => {
+                                            clearTimeout(hoverTimer.current);
+                                            hoverTimer.current = setTimeout(() => setHoverInfo(null), 300);
+                                          }}
+                                          title="预览SKU"
+                                        >
+                                          <Info size={10} />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                    {/* Level 2: Expanded sub-items */}
+                                    {isSubExpanded && g.count > 1 && (
+                                      <tr key={`${gi}_sub`}>
+                                        <td colSpan={5} className="p-0">
+                                          <table className="w-full text-xs bg-pdd-bg/50">
+                                            <tbody>
+                                              {g.items.map((item, ii) => {
+                                                const histForProduct = historicalMinPrices[p.id];
+                                                const skuEntry = productSkuData.find(s => s.skuName === item.skuName);
+                                                const skuKey = skuEntry ? `${skuEntry.productId}_${skuEntry.skuId}` : `${p.id}_${item.skuName}`;
+                                                const skuHistLow = skuEntry && histForProduct ? histForProduct[skuEntry.skuId] : null;
+                                                const itemDisplayPrice = skuHistLow !== null ? skuHistLow : item.price;
+                                                const isThisMoving = movingSkuId === skuKey;
+                                                return (
+                                                <tr key={ii} className={`border-b border-pdd-border/20 group/sku ${isThisMoving ? 'bg-blue-50' : ''}`}>
+                                                  <td className="pl-10 pr-3 py-1.5 text-pdd-text-secondary text-xs w-[32%] flex items-center gap-1">
+                                                    <span className="truncate">{item.skuName}</span>
+                                                    {skuEntry?.skuId && <span className="text-[9px] text-gray-300 font-mono shrink-0">{skuEntry.skuId.slice(-4)}</span>}
+                                                  </td>
+                                                  <td className="px-3 py-1.5 text-right align-middle w-[17%]">
+                                                    <div className="font-mono text-pdd-text-secondary tabular-nums text-xs">¥{itemDisplayPrice.toFixed(2)}</div>
+                                                    {skuHistLow !== null && Math.abs(skuHistLow - item.price) > 0.01 && (
+                                                      <div className="text-[9px] text-pdd-text-secondary/30 line-through">¥{item.price.toFixed(2)}</div>
+                                                    )}
+                                                  </td>
+                                                  <td className="px-3 py-1.5 text-right text-pdd-text-secondary tabular-nums w-[13%]">{item.sales}</td>
+                                                  <td className="px-3 py-1.5 text-right text-pdd-text-secondary tabular-nums w-[19%]">{(item.revenue || 0) >= 10000 ? ((item.revenue || 0) / 10000).toFixed(1) + '万' : '¥' + (item.revenue || 0).toFixed(0)}</td>
+                                                  <td className="px-4 py-1.5 text-right tabular-nums font-mono w-[19%] text-pdd-text relative">
+                                                    {item.profit >= 0 ? '+' : ''}¥{Math.abs(item.profit).toFixed(0)}
+                                                    {/* 移动按钮 */}
+                                                    <div className="relative inline-block ml-1">
+                                                      <button
+                                                        onClick={(e) => { e.stopPropagation(); setMovingSkuId(isThisMoving ? null : skuKey); }}
+                                                        className={`p-0.5 rounded transition-colors align-middle ${
+                                                          isThisMoving
+                                                            ? 'bg-blue-100 text-blue-600'
+                                                            : 'opacity-0 group-hover/sku:opacity-100 text-gray-300 hover:text-blue-500 hover:bg-blue-50'
+                                                        }`}
+                                                        title="移动到其他分组"
+                                                      >
+                                                        <Move size={10} />
+                                                      </button>
+                                                      {isThisMoving && (
+                                                        <div className="absolute right-0 top-full mt-1 z-50 bg-white rounded-xl shadow-xl border border-gray-200 py-1 min-w-[120px]"
+                                                          onClick={e => e.stopPropagation()}>
+                                                          <div className="px-3 py-1.5 text-[10px] text-gray-400 font-medium border-b border-gray-100">移动到</div>
+                                                          {allLabels.filter(l => l !== (currentOverrides.labels[g.label] || g.label)).map(label => (
+                                                            <button
+                                                              key={label}
+                                                              onClick={() => {
+                                                                const ov = loadSpecOverrides(p.id);
+                                                                ov.moves[skuKey] = label;
+                                                                saveOverrides(p.id, ov);
+                                                                setMovingSkuId(null);
+                                                              }}
+                                                              className="block w-full text-left px-3 py-1.5 text-xs text-gray-600 hover:bg-blue-50 hover:text-blue-700 transition-colors"
+                                                            >
+                                                              {label}
+                                                            </button>
+                                                          ))}
+                                                          {allLabels.length <= 1 && (
+                                                            <div className="px-3 py-2 text-[10px] text-gray-300 text-center">无其他分组</div>
+                                                          )}
+                                                        </div>
+                                                      )}
+                                                    </div>
+                                                  </td>
+                                                </tr>
+                                                );
+                                              })}
+                                            </tbody>
+                                          </table>
+                                          {/* New group button at bottom */}
+                                          <div className="px-4 py-2 bg-pdd-bg/30 border-t border-pdd-border/20">
+                                            {showNewSpecGroupInput ? (
+                                              <div className="flex items-center gap-1.5 text-xs">
+                                                <input
+                                                  className="w-24 px-2 py-1 border border-blue-300 rounded text-xs outline-none bg-white"
+                                                  value={newSpecGroupName}
+                                                  autoFocus
+                                                  placeholder="新规格名称"
+                                                  onChange={e => setNewSpecGroupName(e.target.value)}
+                                                  onKeyDown={e => {
+                                                    if (e.key === 'Enter' && newSpecGroupName.trim()) {
+                                                      const ov = loadSpecOverrides(p.id);
+                                                      ov.customGroups = [...(ov.customGroups || []), { label: newSpecGroupName.trim(), skuKeys: [] }];
+                                                      saveOverrides(p.id, ov);
+                                                      setShowNewSpecGroupInput(false);
+                                                      setNewSpecGroupName('');
+                                                    }
+                                                    if (e.key === 'Escape') { setShowNewSpecGroupInput(false); setNewSpecGroupName(''); }
+                                                  }}
+                                                />
+                                                <button onClick={() => {
+                                                  if (newSpecGroupName.trim()) {
+                                                    const ov = loadSpecOverrides(p.id);
+                                                    ov.customGroups = [...(ov.customGroups || []), { label: newSpecGroupName.trim(), skuKeys: [] }];
+                                                    saveOverrides(p.id, ov);
+                                                  }
+                                                  setShowNewSpecGroupInput(false);
+                                                  setNewSpecGroupName('');
+                                                }} className="p-1 text-blue-500 hover:text-blue-700"><Check size={12} /></button>
+                                                <button onClick={() => { setShowNewSpecGroupInput(false); setNewSpecGroupName(''); }} className="p-1 text-gray-400 hover:text-gray-600"><X size={12} /></button>
+                                              </div>
+                                            ) : (
+                                              <button
+                                                onClick={(e) => { e.stopPropagation(); setShowNewSpecGroupInput(true); }}
+                                                className="flex items-center gap-1 text-xs text-gray-400 hover:text-blue-500 transition-colors"
+                                              >
+                                                <Plus size={12} /> 新建规格分组
+                                              </button>
+                                            )}
+                                          </div>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </td>
+                    </tr>
+                  ) : null;
+
+                  return isExpanded && skuRow ? [row, skuRow] : [row];
+                })}
+              </tbody>
             </table>
           </div>
-        </motion.div>
-      )}</AnimatePresence>
+        </>
+        )}
 
-      {/* 商品详情抽屉 */}
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between px-5 py-3 border-t border-pdd-border/30 bg-pdd-bg/20">
+            <span className="text-sm text-pdd-text-secondary/70">
+              {'共 '}{sortedProducts.length}{' 款商品'}
+              {listFilter === 'active' && `（有销量 ${sortedProducts.filter(p => p.sales > 0).length} 款）`}
+              {listFilter === 'zero' && `（零动销 ${sortedProducts.filter(p => p.sales <= 0).length} 款）`}
+            </span>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setCurrentPage(Math.max(1, currentPage - 1))} disabled={currentPage === 1}
+                className="p-2 rounded-lg hover:bg-pdd-bg disabled:opacity-30 text-pdd-text-secondary transition-colors"><ChevronLeft size={15} /></button>
+              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                const startP = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
+                const page = startP + i;
+                if (page > totalPages) return null;
+                return (
+                  <button key={page} onClick={() => setCurrentPage(page)}
+                    className={'w-8 h-8 text-xs font-semibold rounded-lg transition-all ' + (currentPage === page ? 'bg-pdd-primary text-white shadow-sm' : 'text-pdd-text-secondary/70 hover:bg-pdd-bg')}>
+                    {page}
+                  </button>
+                );
+              })}
+              <button onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))} disabled={currentPage === totalPages}
+                className="p-2 rounded-lg hover:bg-pdd-bg disabled:opacity-30 text-pdd-text-secondary transition-colors"><ChevronRight size={15} /></button>
+            </div>
+          </div>
+        )}
+        </div>
+
+        {/* Target Dialog (old format compat) */}
+        {editingTarget && (
+          <TargetDialog
+            product={products.find(p => p.id === editingTarget) || null}
+            targets={productTargets[editingTarget]}
+            recommendation={products.find(p => p.id === editingTarget) ? calcRecommendation(products.find(p => p.id === editingTarget)!) : null}
+            onSave={(vals) => { setProductTargets(prev => ({ ...prev, [editingTarget]: vals })); setEditingTarget(null); }}
+            onClose={() => setEditingTarget(null)}
+          />
+        )}
+
+        {/* Target Detail Modal (new engine) */}
+        {targetDetailProduct && (
+          <TargetDetailModal
+            isOpen={!!targetDetailProduct}
+            onClose={() => setTargetDetailProduct(null)}
+            product={targetDetailProduct.product}
+            engineResult={targetDetailProduct.engineResult}
+            rowMode={targetDetailProduct.rowMode}
+            profitPerOrder={targetDetailProduct.profitPerOrder}
+            onSaveTarget={(pid, cfg) => {
+              setProductTargets(prev => ({ ...prev, [pid]: cfg }));
+              setTargetDetailProduct(null);
+            }}
+          />
+        )}
+
+        {/* Product Detail */}
+        {selectedProduct && productStats[selectedProduct] && (
+          <div className="border border-pdd-border rounded bg-pdd-card overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-pdd-border/50">
+              <div className="flex items-center gap-2 text-sm font-semibold text-pdd-text">
+                {'商品详情'}
+                <span className="text-[11px] font-mono text-pdd-text-secondary bg-pdd-gray-50 px-1.5 py-0.5 rounded">{selectedProduct.slice(-8)}</span>
+              </div>
+              <button onClick={() => setSelectedProduct(null)} className="p-1 rounded text-pdd-text-secondary hover:text-pdd-text hover:bg-pdd-gray-100 transition-all"><X size={14} /></button>
+            </div>
+            <div className="p-0">
+              <Product360Analysis
+                product={productStats[selectedProduct] || null}
+                compareProducts={compareProducts.map(id => productStats[id]).filter(Boolean)}
+                onExport={() => {}}
+                orders={selectedProductOrders}
+                costConfig={{ productCosts, defaultCostRatio: defaultCostRatio ?? 30, packagingFeePerOrder, shippingFeePerOrder }}
+                gmvTrend={prevProductStats[selectedProduct]?.gmv > 0 ? ((productStats[selectedProduct]?.gmv - prevProductStats[selectedProduct]?.gmv) / prevProductStats[selectedProduct]?.gmv) * 100 : undefined}
+                refundRateTrend={prevProductStats[selectedProduct] ? (productStats[selectedProduct]?.refundRate || 0) - (prevProductStats[selectedProduct]?.refundRate || 0) : undefined}
+              />
+            </div>
+          </div>
+        )}
+      </>
+    );
+  };
+function TargetDialog({ product, targets, recommendation, onSave, onClose }: {
+    product: any; targets: any; recommendation: { targetProfit: number; targetProfitRate: number; targetROI: number; targetGMV: number; suggestion: string } | null; onSave: (vals: any) => void; onClose: () => void;
+  }) {
+    const [profit, setProfit] = useState(targets?.targetProfit ?? recommendation?.targetProfit ?? 0);
+    const [profitRate, setProfitRate] = useState(targets?.targetProfitRate ?? recommendation?.targetProfitRate ?? 0);
+    const [roi, setRoi] = useState(targets?.targetROI ?? recommendation?.targetROI ?? 0);
+    const [gmv, setGmv] = useState(targets?.targetGMV ?? recommendation?.targetGMV ?? 0);
+    return (
+      <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center p-4" onClick={onClose}>
+        <div className="bg-pdd-card rounded border border-pdd-border shadow-lg max-w-md w-full p-5" onClick={e => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Target size={15} className="text-pdd-primary" />
+              <span className="text-sm font-semibold text-pdd-text">设定目标</span>
+            </div>
+            <button onClick={onClose} className="text-pdd-text-secondary hover:text-pdd-text"><X size={15} /></button>
+          </div>
+          {product && (
+            <div className="text-xs text-pdd-text-secondary mb-4">
+              <span className="font-medium text-pdd-text">{product.name || product.id}</span>
+            </div>
+          )}
+          {recommendation && (
+            <div className="bg-pdd-primary/10 rounded p-3 mb-4 text-xs text-pdd-primary flex items-start gap-2">
+              <Lightbulb size={13} className="shrink-0 mt-0.5" />
+              <div>{recommendation.suggestion}</div>
+            </div>
+          )}
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <div>
+              <label className="text-[10px] font-medium text-pdd-text-secondary">目标利润</label>
+              <input type="number" value={profit} onChange={e => setProfit(parseFloat(e.target.value) || 0)}
+                className="w-full mt-1 px-2.5 py-1.5 text-xs border border-pdd-border rounded focus:outline-none focus:border-pdd-primary bg-pdd-card" />
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-pdd-text-secondary">目标利润率 (%)</label>
+              <input type="number" value={profitRate} onChange={e => setProfitRate(parseFloat(e.target.value) || 0)}
+                className="w-full mt-1 px-2.5 py-1.5 text-xs border border-pdd-border rounded focus:outline-none focus:border-pdd-primary bg-pdd-card" />
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-pdd-text-secondary">目标ROI</label>
+              <input type="number" value={roi} onChange={e => setRoi(parseFloat(e.target.value) || 0)}
+                className="w-full mt-1 px-2.5 py-1.5 text-xs border border-pdd-border rounded focus:outline-none focus:border-pdd-primary bg-pdd-card" />
+            </div>
+            <div>
+              <label className="text-[10px] font-medium text-pdd-text-secondary">目标GMV</label>
+              <input type="number" value={gmv} onChange={e => setGmv(parseFloat(e.target.value) || 0)}
+                className="w-full mt-1 px-2.5 py-1.5 text-xs border border-pdd-border rounded focus:outline-none focus:border-pdd-primary bg-pdd-card" />
+            </div>
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button onClick={onClose} className="px-3 py-1.5 text-xs font-medium text-pdd-text-secondary bg-pdd-card border border-pdd-border rounded hover:bg-pdd-gray-50 transition-colors">取消</button>
+            <button onClick={() => onSave({ targetProfit: profit || 0, targetProfitRate: profitRate || 0, targetROI: roi || 0, targetGMV: gmv || 0 })}
+              className="px-3 py-1.5 text-xs font-medium text-white bg-pdd-primary rounded hover:bg-pdd-primary-dark transition-colors">保存</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const renderContent = () => renderProductTable();
+
+  return (
+    <div className="min-h-screen bg-pdd-bg p-4 lg:p-6 space-y-4">
+      {/* ── 统一筛选栏 ── */}
+      <UnifiedFilterBar
+        timeFilter={tf}
+        search={{ value: searchKeyword, onChange: (v) => { setSearchKeyword(v); setCurrentPage(1); }, placeholder: '搜索商品ID/名称...' }}
+        dropdowns={[
+          { value: listFilter, onChange: (v) => { setListFilter(v as any); setCurrentPage(1); }, options: [{ value: 'all', label: '全部' }, { value: 'active', label: '有销量' }, { value: 'zero', label: '零动销' }], placeholder: '全部' },
+        ]}
+        showAdvanced={showFilterDropdown}
+        onToggleAdvanced={() => setShowFilterDropdown(!showFilterDropdown)}
+        advancedFilterPanel={
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-pdd-text-secondary font-medium">价格</span>
+              <div className="flex bg-pdd-bg rounded-lg p-0.5 border border-pdd-border/50">
+                {['all','0-50','50-100','100-200','200-max'].map(k => (
+                  <button key={k} onClick={() => { setPriceFilter(k); setCurrentPage(1); }}
+                    className={`px-2.5 py-1 text-[11px] rounded-md transition-all ${
+                      priceFilter === k ? 'bg-pdd-card text-pdd-text shadow-sm font-medium' : 'text-pdd-text-secondary hover:text-pdd-text'
+                    }`}>
+                    {k === 'all' ? '不限' : k === '200-max' ? '¥200+' : '¥' + k.replace('-', '~').replace('max', '')}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-pdd-text-secondary font-medium">销量</span>
+              <div className="flex bg-pdd-bg rounded-lg p-0.5 border border-pdd-border/50">
+                {['all','0-10','10-50','50-100','100-max'].map(k => (
+                  <button key={k} onClick={() => { setSalesFilter(k); setCurrentPage(1); }}
+                    className={`px-2.5 py-1 text-[11px] rounded-md transition-all ${
+                      salesFilter === k ? 'bg-pdd-card text-pdd-text shadow-sm font-medium' : 'text-pdd-text-secondary hover:text-pdd-text'
+                    }`}>
+                    {k === 'all' ? '不限' : k === '100-max' ? '100+' : k.replace('-', '~').replace('max', '')}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[11px] text-pdd-text-secondary font-medium">售后率</span>
+              <div className="flex bg-pdd-bg rounded-lg p-0.5 border border-pdd-border/50">
+                {['all','0-5','5-10','10-20','20-max'].map(k => (
+                  <button key={k} onClick={() => { setAfterSaleFilter(k); setCurrentPage(1); }}
+                    className={`px-2.5 py-1 text-[11px] rounded-md transition-all ${
+                      afterSaleFilter === k ? 'bg-pdd-card text-pdd-text shadow-sm font-medium' : 'text-pdd-text-secondary hover:text-pdd-text'
+                    }`}>
+                    {k === 'all' ? '不限' : k === '20-max' ? '20%+' : k.replace('-', '~').replace('max', '') + '%'}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {(priceFilter !== 'all' || salesFilter !== 'all' || afterSaleFilter !== 'all') && (
+              <button onClick={() => { setPriceFilter('all'); setSalesFilter('all'); setAfterSaleFilter('all'); setShowFilterDropdown(false); }}
+                className="text-[11px] text-pdd-danger/70 hover:text-pdd-danger font-medium">清除全部</button>
+            )}
+          </div>
+        }
+        activeFilterTags={[
+          ...(priceFilter !== 'all' ? [{ key: 'price', label: `价格 ¥${priceFilter === '200-max' ? '200+' : priceFilter.replace('-', '~')}`, onRemove: () => setPriceFilter('all') }] : []),
+          ...(salesFilter !== 'all' ? [{ key: 'sales', label: `销量 ${salesFilter === '100-max' ? '100+' : salesFilter.replace('-', '~')}`, onRemove: () => setSalesFilter('all') }] : []),
+          ...(afterSaleFilter !== 'all' ? [{ key: 'afterSale', label: `售后率 ${afterSaleFilter === '20-max' ? '20%+' : afterSaleFilter.replace('-', '~') + '%'}`, onRemove: () => setAfterSaleFilter('all') }] : []),
+        ]}
+        onClearAllFilters={() => { setPriceFilter('all'); setSalesFilter('all'); setAfterSaleFilter('all'); setShowFilterDropdown(false); }}
+        actions={[
+          ...(compareProducts.length > 0 ? [{ label: `对比(${compareProducts.length})`, onClick: () => setShowCompare(!showCompare), active: showCompare }] : []),
+          { label: '指标', onClick: () => setShowKpiSelector(true) },
+          { label: 'CSV', onClick: handleExportCSV },
+        ]}
+      />
+
+      {/* ── 主体内容 ── */}
+      <div className="space-y-4">
+        {/* KPI 卡片 */}
+        {renderKpiPanel()}
+
+        {/* 商品表格 */}
+        {renderContent()}
+
+        {/* ── 商品对比面板 ── */}
+        {showCompare && compareData.length > 0 && (
+          <div className="bg-pdd-card rounded-lg border border-pdd-border overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2.5 border-b border-pdd-border/50">
+              <span className="text-xs font-semibold text-pdd-text-secondary">商品对比 ({compareData.length})</span>
+              <button onClick={() => setShowCompare(false)} className="text-pdd-text-secondary/50 hover:text-pdd-text/70 p-1"><X size={13} /></button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="border-b border-pdd-border/30 text-pdd-text-secondary">
+                    <th className="py-2.5 px-4 text-left font-medium text-[11px]">商品</th>
+                    <th className="py-2.5 px-3 text-right font-medium text-[11px]">GMV</th>
+                    <th className="py-2.5 px-3 text-right font-medium text-[11px]">实收</th>
+                    <th className="py-2.5 px-3 text-right font-medium text-[11px]">利润</th>
+                    <th className="py-2.5 px-3 text-right font-medium text-[11px]">利润率</th>
+                    <th className="py-2.5 px-3 text-right font-medium text-[11px]">推广花费</th>
+                    <th className="py-2.5 px-3 text-right font-medium text-[11px]">售后率</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-pdd-border/20">
+                  {compareData.map(p => (
+                    <tr key={p.id} className="hover:bg-pdd-bg/30 transition-colors">
+                      <td className="py-2.5 px-4 truncate max-w-[140px] text-pdd-text">{p.name}</td>
+                      <td className="py-2.5 px-3 text-right text-pdd-text-secondary tabular-nums">{(p.gmv || 0) >= 10000 ? ((p.gmv || 0) / 10000).toFixed(1) + '万' : (p.gmv || 0).toFixed(0)}</td>
+                      <td className="py-2.5 px-3 text-right text-pdd-text-secondary tabular-nums">{(p.revenue || 0) >= 10000 ? ((p.revenue || 0) / 10000).toFixed(1) + '万' : (p.revenue || 0).toFixed(0)}</td>
+                      <td className="py-2.5 px-3 text-right tabular-nums font-medium text-pdd-text">{(p.profit || 0) >= 10000 ? ((p.profit || 0) / 10000).toFixed(1) + '万' : (p.profit || 0).toFixed(0)}</td>
+                      <td className="py-2.5 px-3 text-right text-pdd-text-secondary tabular-nums">{(p.profitRate || 0).toFixed(1)}%</td>
+                      <td className="py-2.5 px-3 text-right text-pdd-text-secondary tabular-nums">{(p.promoCost || 0) > 0 ? ((p.promoCost || 0) >= 10000 ? ((p.promoCost || 0) / 10000).toFixed(1) + '万' : (p.promoCost || 0).toFixed(0)) : '-'}</td>
+                      <td className="py-2.5 px-3 text-right text-pdd-text-secondary tabular-nums">{(p.afterSaleRate || 0).toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* ── 商品详情 & 目标设定弹窗 — 由 renderProductTable 内部渲染 ── */}
+        {/* 这两个组件在 renderProductTable() 中已经包含，不需要重复渲染 */}
+      </div>
+
+      {/* ── 商品详情抽屉 ── */}
       <ProductDetailDrawer
         product={drawerProduct}
+        skuList={drawerProductId ? skuData.filter(s => s.productId === drawerProductId) : []}
         isOpen={!!drawerProductId}
         onClose={() => setDrawerProductId(null)}
       />
 
-      {/* 单商品深度解析全屏模态框 */}
+      {/* ── 单商品深度解析全屏模态框 ── */}
       <AnalysisProvider>
         <ProductDeepAnalysis
           isOpen={deepAnalysisOpen}
@@ -1213,6 +2479,113 @@ export default function ProductPage() {
           prevProductStats={prevProductStats}
         />
       </AnalysisProvider>
+
+      {/* ── 商品数据分析 ── */}
+      <ProductDataAnalysis
+        productId={dataAnalysisProductId || ''}
+        storeId={currentStore?.id || ''}
+        isOpen={!!dataAnalysisProductId}
+        onClose={() => setDataAnalysisProductId(null)}
+        skuList={dataAnalysisProductId ? skuData.filter(s => s.productId === dataAnalysisProductId) : undefined}
+        timeRange={timeRange}
+        customStart={customStart}
+        customEnd={customEnd}
+      />
+
+      {/* ── 商品复盘 ── */}
+      <ProductRetrospective
+        productId={retrospectiveProductId}
+        storeId={currentStore?.id || ''}
+        isOpen={!!retrospectiveProductId}
+        onClose={() => setRetrospectiveProductId(null)}
+        timeRange={timeRange}
+        customStart={customStart}
+        customEnd={customEnd}
+      />
+
+      {/* ── 商品编辑 ── */}
+      <ProductEditor
+        product={editorProductId ? productStats[editorProductId] || null : null}
+        isOpen={!!editorProductId}
+        onClose={() => setEditorProductId(null)}
+        currentImage={editorProductId ? productImages[editorProductId] : undefined}
+        onImageUpload={handleImageUpload}
+        currentTargets={productTargets}
+        onSaveTargets={(pid, targets) => { setProductTargets(prev => ({ ...prev, [pid]: targets })); }}
+        productCosts={productCosts}
+      />
+
+      {/* ── 推广数据 ── */}
+      <PromotionDataPanel
+        isOpen={!!promoDataProductId}
+        onClose={() => setPromoDataProductId(null)}
+        product={promoDataProductId ? productStats[promoDataProductId] || null : null}
+        timeRange={timeRange}
+      />
+
+      {/* ── 图片全屏放大 ── */}
+      {enlargedImage && (
+        <div className="fixed inset-0 z-[99999] bg-black/70 flex items-center justify-center cursor-pointer"
+          onClick={() => setEnlargedImage(null)}>
+          <div className="relative max-w-[90vw] max-h-[90vh]" onClick={(e) => e.stopPropagation()}>
+            <img src={enlargedImage} alt="" className="max-w-full max-h-[90vh] object-contain rounded-xl shadow-2xl" />
+            <button onClick={() => setEnlargedImage(null)}
+              className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white/90 shadow flex items-center justify-center hover:bg-white transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+      {/* 规格悬浮预览卡片 */}
+      <SpecPreviewCard
+        label={hoverInfo?.label || ''}
+        items={hoverInfo?.items || []}
+        visible={!!hoverInfo}
+        x={hoverInfo?.x || 0}
+        y={hoverInfo?.y || 0}
+      />
+    </div>
+  );
+}
+
+/* ── 三点操作菜单 ── */
+function ActionMenuButton({ productId, onDataAnalysis, onRetrospective, onEditor }: {
+  productId: string;
+  onDataAnalysis: () => void;
+  onRetrospective: () => void;
+  onEditor: () => void;
+}) {
+  const [open, setOpen] = React.useState(false);
+
+  return (
+    <div className="relative">
+      <button
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-600 transition-all"
+        title="操作"
+      >
+        <GripVertical size={14} />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-50" onClick={(e) => { e.stopPropagation(); setOpen(false); }} />
+          <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[120px]"
+            onClick={(e) => e.stopPropagation()}>
+            <button onClick={(e) => { e.stopPropagation(); setOpen(false); onDataAnalysis(); }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-600 transition-colors text-left">
+              <BarChart3 size={13} /> 数据分析
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); setOpen(false); onRetrospective(); }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-amber-50 hover:text-amber-600 transition-colors text-left">
+              <RotateCcw size={13} /> 商品复盘
+            </button>
+            <button onClick={(e) => { e.stopPropagation(); setOpen(false); onEditor(); }}
+              className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-violet-50 hover:text-violet-600 transition-colors text-left">
+              <Edit3 size={13} /> 商品编辑
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }

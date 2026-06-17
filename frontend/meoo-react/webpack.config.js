@@ -3,6 +3,22 @@ const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
 
+/**
+ * 构建时自动生成 build-meta.json（含 buildId），前端运行时通过对比此文件判断是否有新版本发布
+ */
+class BuildMetaPlugin {
+  apply(compiler) {
+    compiler.hooks.emit.tapAsync('BuildMetaPlugin', (compilation, callback) => {
+      const buildId = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+      const content = JSON.stringify({ buildId });
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { RawSource } = require('webpack').sources;
+      compilation.emitAsset('build-meta.json', new RawSource(content));
+      callback();
+    });
+  }
+}
+
 module.exports = (env, argv) => {
   const isDev = argv.mode !== 'production';
 
@@ -107,7 +123,22 @@ module.exports = (env, argv) => {
           rewrites: [
             { from: /^\/_p\/\d+\//, to: '/index.html' }
           ]
-        }
+        },
+        proxy: [
+          {
+            context: ['/api'],
+            target: 'http://localhost:3007',
+            changeOrigin: true,
+            on: {
+              proxyReq: function(proxyReq, req, _res) {
+                // 透传 Authorization header
+                if (req.headers['authorization']) {
+                  proxyReq.setHeader('Authorization', req.headers['authorization']);
+                }
+              }
+            }
+          }
+        ]
       },
       plugins: [
         ...common.plugins,
@@ -115,7 +146,10 @@ module.exports = (env, argv) => {
           template: './index.html',
           inject: 'body',
           filename: 'index.html',
-          chunks: ['main']
+          chunks: ['main'],
+          templateParameters: {
+            APP_VERSION: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          },
         }),
         new HtmlWebpackPlugin({
           template: './admin.html',
@@ -148,15 +182,20 @@ module.exports = (env, argv) => {
       output: {
         path: path.resolve(__dirname, 'dist'),
         filename: 'bundle.[contenthash:8].js',
+        chunkFilename: '[name].[contenthash:8].' + Date.now().toString(36) + '.js',
         publicPath: 'auto'
       },
       plugins: [
         ...common.plugins,
+        new BuildMetaPlugin(),
         new HtmlWebpackPlugin({
           template: './index.html',
           inject: 'body',
           filename: 'index.html',
-          chunks: ['main']
+          chunks: ['main'],
+          templateParameters: {
+            APP_VERSION: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+          },
         }),
         // 静态法律页面（不含 JS 注入）
         new HtmlWebpackPlugin({
@@ -180,10 +219,12 @@ module.exports = (env, argv) => {
       output: {
         path: path.resolve(__dirname, 'dist-admin'),
         filename: 'admin.[contenthash:8].js',
+        chunkFilename: '[name].[contenthash:8].' + Date.now().toString(36) + '.js',
         publicPath: 'auto'
       },
       plugins: [
         ...common.plugins,
+        new BuildMetaPlugin(),
         new HtmlWebpackPlugin({
           template: './admin.html',
           inject: 'body',

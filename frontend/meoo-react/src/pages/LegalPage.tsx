@@ -76,7 +76,7 @@ const privacyContent: LegalContent = {
     {
       title: '3. 数据存储',
       content: [
-        '3.1 您的所有数据均存储在云端服务器，确保数据安全与多设备同步。',
+        '3.1 您的所有数据均存储在云端，确保数据安全与多设备同步。',
         '3.2 数据通过 HTTPS 加密传输，采用 JWT 认证保护您的账户安全。',
         '3.3 您可在设置页面随时删除店铺数据，操作即时生效不可恢复。',
       ],
@@ -118,9 +118,9 @@ export const LegalPage: React.FC<{ type: LegalType }> = ({ type }) => {
   return (
     <div style={{
       minHeight: '100vh',
-      background: '#f5f5f5',
+      background: 'var(--pdd-bg)',
       fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif",
-      color: '#333',
+      color: 'var(--pdd-text)',
       lineHeight: 1.8,
     }}>
       <div style={{ maxWidth: 800, margin: '0 auto', padding: '40px 24px' }}>
@@ -132,39 +132,39 @@ export const LegalPage: React.FC<{ type: LegalType }> = ({ type }) => {
             gap: 6,
             marginBottom: 20,
             padding: '8px 16px',
-            background: '#fff',
-            border: '1px solid #e5e5e5',
+            background: 'var(--pdd-card)',
+            border: '1px solid var(--pdd-border)',
             borderRadius: 8,
             cursor: 'pointer',
             fontSize: 14,
-            color: '#666',
+            color: 'var(--pdd-text-secondary)',
             transition: 'all 0.2s',
           }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = '#e02e24'; e.currentTarget.style.color = '#e02e24'; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = '#e5e5e5'; e.currentTarget.style.color = '#666'; }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--pdd-danger)'; e.currentTarget.style.color = 'var(--pdd-danger)'; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--pdd-border)'; e.currentTarget.style.color = 'var(--pdd-text-secondary)'; }}
         >
           ← 返回
         </button>
 
         <div style={{
-          background: '#fff',
+          background: 'var(--pdd-card)',
           borderRadius: 12,
           padding: 40,
-          boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+          border: '1px solid var(--pdd-border)',
         }}>
-          <h1 style={{ fontSize: 24, marginBottom: 8, color: '#1a1a1a' }}>{content.title}</h1>
-          <p style={{ fontSize: 13, color: '#999', marginBottom: 32 }}>最后更新日期：2026年5月1日</p>
+          <h1 style={{ fontSize: 24, marginBottom: 8, color: 'var(--pdd-text)' }}>{content.title}</h1>
+          <p style={{ fontSize: 13, color: 'var(--pdd-gray-400)', marginBottom: 32 }}>最后更新日期：2026年5月1日</p>
 
           {content.sections.map((section, idx) => (
             <div key={idx}>
-              <h2 style={{ fontSize: 18, margin: '28px 0 12px', color: '#1a1a1a' }}>{section.title}</h2>
+              <h2 style={{ fontSize: 18, margin: '28px 0 12px', color: 'var(--pdd-text)' }}>{section.title}</h2>
               {section.content.map((paragraph, pIdx) => (
-                <p key={pIdx} style={{ fontSize: 15, color: '#555', marginBottom: 12 }}>{paragraph}</p>
+                <p key={pIdx} style={{ fontSize: 15, color: 'var(--pdd-text-secondary)', marginBottom: 12 }}>{paragraph}</p>
               ))}
             </div>
           ))}
 
-          <div style={{ textAlign: 'center', marginTop: 32, fontSize: 13, color: '#999' }}>
+          <div style={{ textAlign: 'center', marginTop: 32, fontSize: 13, color: 'var(--pdd-gray-400)' }}>
             © 2026 店分析 版权所有
           </div>
         </div>

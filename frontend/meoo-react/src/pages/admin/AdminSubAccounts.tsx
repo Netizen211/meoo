@@ -1,11 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Ban, CheckCircle, Trash2, Shield, Clock,
   UserPlus, Users, ChevronLeft, ChevronRight,
   AlertTriangle, FileText,
 } from 'lucide-react';
-import { adminApi } from '../../../api/adminApi';
+import { useSubAccounts, useParentUsers, useSubAccountLogs, useCreateSubAccount, useDeleteSubAccount, useToggleSubAccountBan } from '../../hooks/useAdminData';
 import { useAuth } from '../../App';
 
 const PAGE_SIZE_OPTIONS = [20, 50, 100];
@@ -13,60 +13,36 @@ const ROLES = ['管理员', '运营专员', '客服专员', '财务专员', '只
 
 export default function AdminSubAccounts() {
   const { user: currentUser } = useAuth();
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [search, setSearch] = useState('');
   const [parentFilter, setParentFilter] = useState('');
-  const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState('');
   const [tab, setTab] = useState<'accounts' | 'logs'>('accounts');
-  const [logs, setLogs] = useState<any[]>([]);
   const [logsPage, setLogsPage] = useState(1);
-  const [logsTotal, setLogsTotal] = useState(0);
-  const [logsLoading, setLogsLoading] = useState(false);
-  const [parentUsers, setParentUsers] = useState<any[]>([]);
 
   // Create modal
   const [showCreate, setShowCreate] = useState(false);
   const [newUser, setNewUser] = useState({ username: '', password: '', parentId: '', roleName: '只读观察' });
-  const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState('');
 
   // Delete confirmation
   const [deleteConfirm, setDeleteConfirm] = useState<{ id: string; username: string } | null>(null);
   const [banModal, setBanModal] = useState<{ subId: string; username: string; isBanned: boolean } | null>(null);
   const [banReason, setBanReason] = useState('');
-  const [banSubmitting, setBanSubmitting] = useState(false);
 
-  const loadAccounts = useCallback(async () => {
-    setLoading(true);
-    const res = await adminApi.getSubAccounts({
-      page, pageSize,
-      search: search || undefined,
-      parentId: parentFilter || undefined,
-    });
-    if (res.success) { setAccounts(res.data || []); setTotal((res as any).total ?? 0); }
-    setLoading(false);
-  }, [page, pageSize, search, parentFilter]);
+  const { data: accountsData, isLoading } = useSubAccounts({ page, pageSize, search: search || undefined, parentId: parentFilter || undefined });
+  const { data: parentUsersData } = useParentUsers();
+  const { data: logsData, isLoading: logsLoading } = useSubAccountLogs(tab === 'logs' ? logsPage : 0);
+  const createMutation = useCreateSubAccount();
+  const deleteMutation = useDeleteSubAccount();
+  const banMutation = useToggleSubAccountBan();
 
-  useEffect(() => { loadAccounts(); }, [loadAccounts]);
-
-  useEffect(() => {
-    adminApi.getParentUsers().then(res => {
-      if (res.success && res.data) setParentUsers(res.data);
-    });
-  }, []);
-
-  useEffect(() => {
-    if (tab !== 'logs') return;
-    setLogsLoading(true);
-    adminApi.getSubAccountLogs({ page: logsPage }).then(res => {
-      if (res.success) { setLogs(res.data || []); setLogsTotal((res as any).total ?? 0); }
-      setLogsLoading(false);
-    });
-  }, [tab, logsPage]);
+  const accounts = accountsData?.items ?? [];
+  const total = accountsData?.total ?? 0;
+  const parentUsers = (parentUsersData as any)?.data ?? [];
+  const logs = logsData?.items ?? [];
+  const logsTotal = logsData?.total ?? 0;
 
   const handleCreate = async () => {
     const { username, password, parentId, roleName } = newUser;
@@ -74,19 +50,16 @@ export default function AdminSubAccounts() {
     if (username.length < 3) { setCreateError('用户名至少3个字符'); return; }
     if (password.length < 6) { setCreateError('密码至少6个字符'); return; }
     if (!parentId) { setCreateError('请选择主账号'); return; }
-    setCreateSubmitting(true);
-    const res = await adminApi.createSubAccount({
+    const res = await createMutation.mutateAsync({
       username: username.trim(),
       password: password.trim(),
       parentUserId: parentId,
       roleName,
     });
-    setCreateSubmitting(false);
     if (res.success) {
       setActionMsg('子账号创建成功');
       setShowCreate(false);
       setNewUser({ username: '', password: '', parentId: '', roleName: '只读观察' });
-      loadAccounts();
     } else {
       setCreateError(res.error || '创建失败');
     }
@@ -95,37 +68,23 @@ export default function AdminSubAccounts() {
 
   const handleDelete = async () => {
     if (!deleteConfirm) return;
-    await adminApi.deleteSubAccount(deleteConfirm.id);
+    await deleteMutation.mutateAsync(deleteConfirm.id);
     setActionMsg('子账号已删除');
     setDeleteConfirm(null);
-    loadAccounts();
     setTimeout(() => setActionMsg(''), 2000);
   };
 
   const handleBan = async () => {
     if (!banModal) return;
-    setBanSubmitting(true);
-    const res = await adminApi.toggleSubAccountBan(
-      banModal.subId, !banModal.isBanned, banReason || undefined,
-    );
-    setBanSubmitting(false);
-    if (res.success) {
-      setAccounts(prev =>
-        prev.map(a =>
-          a.id === banModal.subId ? { ...a, isBanned: !banModal.isBanned } : a
-        )
-      );
-      setActionMsg(banModal.isBanned ? '已解封' : '已封禁');
-      setBanModal(null);
-    } else {
-      setActionMsg('操作失败');
-    }
+    await banMutation.mutateAsync({ subId: banModal.subId, isBanned: !banModal.isBanned, reason: banReason || undefined });
+    setActionMsg(banModal.isBanned ? '已解封' : '已封禁');
+    setBanModal(null);
     setTimeout(() => setActionMsg(''), 2000);
   };
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
-  if (loading) return <div className="p-4 text-pdd-text-secondary">加载中...</div>;
+  if (isLoading) return <div className="p-4 text-pdd-text-secondary">加载中...</div>;
 
   return (
     <div className="space-y-4">
@@ -426,10 +385,10 @@ export default function AdminSubAccounts() {
               <div className="flex gap-2 pt-2">
                 <button
                   onClick={handleCreate}
-                  disabled={createSubmitting}
+                  disabled={createMutation.isPending}
                   className="flex-1 py-2 bg-pdd-primary text-white rounded-lg text-sm disabled:opacity-50"
                 >
-                  {createSubmitting ? '创建中...' : '创建'}
+                  {createMutation.isPending ? '创建中...' : '创建'}
                 </button>
                 <button
                   onClick={() => setShowCreate(false)}
@@ -535,12 +494,12 @@ export default function AdminSubAccounts() {
                 </button>
                 <button
                   onClick={handleBan}
-                  disabled={banSubmitting}
+                  disabled={banMutation.isPending}
                   className={`flex-1 py-2 text-white rounded-lg text-sm disabled:opacity-50 ${
                     banModal.isBanned ? 'bg-pdd-success' : 'bg-pdd-danger'
                   }`}
                 >
-                  {banSubmitting ? '处理中...' : '确认'}
+                  {banMutation.isPending ? '处理中...' : '确认'}
                 </button>
               </div>
             </motion.div>

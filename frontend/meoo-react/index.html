@@ -1,11 +1,14 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>店分析 - 拼多多商家数据分析</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%23e02e24'/><text x='16' y='22' text-anchor='middle' font-size='18' font-weight='bold' fill='white'>店</text></svg>">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231F6BFF'/><text x='16' y='22' text-anchor='middle' font-size='18' font-weight='bold' fill='white'>运</text></svg>">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self'; frame-ancestors 'none';">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
   <style>
     html, body { margin: 0; padding: 0; width: 100%; height: 100%; }
     html.light, html.light body { background-color: #ffffff !important; color: #000000; }
@@ -28,7 +31,10 @@
         });
       } else {
         var saved = localStorage.getItem('dianfx_dark_mode');
-        applyThemeToDOM(saved === 'false' ? 'light' : 'dark');
+        if (saved === 'true') { applyThemeToDOM('dark'); }
+        else if (saved === 'false') { applyThemeToDOM('light'); }
+        else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) { applyThemeToDOM('dark'); }
+        else { applyThemeToDOM('light'); }
       }
       // Enable smooth theme transitions after initial paint
       requestAnimationFrame(function() {
@@ -82,9 +88,9 @@
     })();
   </script>
   <script>
-    // 域名绑定检查 — 非授权域名直接白屏
+    // 鍩熷悕缁戝畾妫€鏌?鈥?闈炴巿鏉冨煙鍚嶇洿鎺ョ櫧灞?
     (function() {
-      var allowedHosts = ['localhost', '127.0.0.1', '121.40.196.79', 'melody.wang', 'www.melody.wang', 'admin.melody.wang'];
+      var allowedHosts = ['localhost', '127.0.0.1', 'melody.wang', 'www.melody.wang', 'admin.melody.wang'];
       try {
         var configHosts = localStorage.getItem('dianfx_allowed_hosts');
         if (configHosts) {
@@ -101,7 +107,7 @@
     })();
   </script>
   <script>
-    // 反调试保护
+    // 鍙嶈皟璇曚繚鎶?
     (function() {
       if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') return;
       setInterval(function() {
@@ -109,7 +115,7 @@
         debugger;
         var end = performance.now();
         if (end - start > 100) {
-          document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:24px;color:#999;">请关闭开发者工具后刷新页面</div>';
+          document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:24px;color:#999;">璇峰叧闂紑鍙戣€呭伐鍏峰悗鍒锋柊椤甸潰</div>';
         }
       }, 1000);
     })();
@@ -117,25 +123,62 @@
 </head>
 <body>
   <div id="root"></div>
-  <!-- ★ 版本标记 vdeccb18f -->
+    <!-- 版本标记: <%= APP_VERSION %> -->
   <script>
-  // ★ 强制清除所有缓存（每次部署执行一次）
   (function(){
+    // 四重缓存防护：fetch远程版本 → pageshow/bfcache → localStorage → 时间戳
+    var VER = "<%= APP_VERSION %>";
+    var BUILD_TS = "<%= Date.now() %>";
+    var hash = window.location.hash;
+
+    // 第一重：同步 fetch 远程版本文件（绕过所有缓存）
+    try {
+      var xhr = new XMLHttpRequest();
+      var ts = Date.now();
+      xhr.open('GET', '/build-meta.json?_=' + ts, false);
+      xhr.send();
+      if (xhr.status === 200) {
+        var remote = JSON.parse(xhr.responseText);
+        if (remote.buildId && localStorage.getItem('__app_buildId') && 
+            localStorage.getItem('__app_buildId') !== remote.buildId) {
+          localStorage.setItem('__app_buildId', remote.buildId);
+          if ('caches' in window) { caches.keys().then(function(ks){ ks.forEach(function(k){ caches.delete(k); }); }); }
+          if ('serviceWorker' in navigator) { navigator.serviceWorker.getRegistrations().then(function(rs){ rs.forEach(function(r){ r.unregister(); }); }); }
+          window.location.reload(true);
+          return;
+        }
+        localStorage.setItem('__app_buildId', remote.buildId);
+      }
+    } catch(e) {}
+
+    // 第二重：pageshow + bfcache
+    window.addEventListener('pageshow', function(ev) {
+      if (ev.persisted) {
+        var last = localStorage.getItem('__app_version');
+        if (last && last !== VER) {
+          localStorage.setItem('__app_version', VER);
+          if ('caches' in window) { caches.keys().then(function(ks){ ks.forEach(function(k){ caches.delete(k); }); }); }
+          window.location.reload();
+        }
+      }
+    });
+
+    // 第三重：localStorage 版本比对
     if (window.__versionChecked) return;
     window.__versionChecked = true;
-    var VER = '457d0cd4';
-    var lastVer = localStorage.getItem('__app_version');
-    if (lastVer && lastVer !== VER) {
-      // 新版本：清除所有缓存
-      if ('caches' in window) {
-        caches.keys().then(function(keys){ keys.forEach(function(k){ caches.delete(k); }); });
-      }
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(regs){ regs.forEach(function(r){ r.unregister(); }); });
-      }
+    var last = localStorage.getItem('__app_version');
+    if (last && last !== VER) {
+      localStorage.setItem('__app_version', VER);
+      if ('caches' in window) { caches.keys().then(function(ks){ ks.forEach(function(k){ caches.delete(k); }); }); }
+      if ('serviceWorker' in navigator) { navigator.serviceWorker.getRegistrations().then(function(rs){ rs.forEach(function(r){ r.unregister(); }); }); }
+      window.location.reload(true);
+      return;
     }
+
+    // 第四重：兜底标记
     localStorage.setItem('__app_version', VER);
+    localStorage.setItem('__app_last_loaded', Date.now().toString());
   })();
   </script>
-</body>
+  <script>window.__BUILD_ID="65628189";console.log("BUILD:"+window.__BUILD_ID);</script></body>
 </html>

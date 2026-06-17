@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import {
@@ -6,7 +6,7 @@ import {
   Search, ChevronDown, ChevronUp, Clock, Package,
   Activity, ShieldAlert, TrendingUp, RefreshCw,
 } from 'lucide-react';
-import { adminApi } from '../../../api/adminApi';
+import { useDataStats } from '../../hooks/useAdminData';
 
 interface StoreData {
   storeId: string;
@@ -28,14 +28,14 @@ interface StoreData {
 type SortKey = 'storeName' | 'userName' | 'orders' | 'afterSaleRecords' | 'totalRows' | 'storageBytes' | 'lastUploadAt';
 
 const CATEGORY_CONFIG: Array<{ key: string; label: string; color: string }> = [
-  { key: 'orders', label: '订单', color: '#3b82f6' },
-  { key: 'promotionSummary', label: '推广概览', color: '#f59e0b' },
-  { key: 'promotionProducts', label: '推广商品', color: '#8b5cf6' },
-  { key: 'afterSaleRecords', label: '售后', color: '#ef4444' },
-  { key: 'shippingInsurance', label: '运费险', color: '#06b6d4' },
-  { key: 'starStoreSummary', label: '星标', color: '#22c55e' },
-  { key: 'liveStreamSummary', label: '直播', color: '#ec4899' },
-  { key: 'financialRecords', label: '财务', color: '#14b8a6' },
+  { key: 'orders', label: '订单', color: 'var(--pdd-info)' },
+  { key: 'promotionSummary', label: '推广概览', color: 'var(--pdd-warning)' },
+  { key: 'promotionProducts', label: '推广商品', color: 'var(--pdd-purple)' },
+  { key: 'afterSaleRecords', label: '售后', color: 'var(--pdd-danger)' },
+  { key: 'shippingInsurance', label: '运费险', color: 'var(--pdd-cyan)' },
+  { key: 'starStoreSummary', label: '星标', color: 'var(--pdd-success)' },
+  { key: 'liveStreamSummary', label: '直播', color: 'var(--pdd-pink)' },
+  { key: 'financialRecords', label: '财务', color: 'var(--pdd-cyan)' },
 ];
 
 function isAnomaly(s: StoreData): string[] {
@@ -55,8 +55,7 @@ function isAnomaly(s: StoreData): string[] {
 }
 
 export default function AdminData() {
-  const [stores, setStores] = useState<StoreData[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { data: stores, isLoading, refetch } = useDataStats();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [sortKey, setSortKey] = useState<SortKey>('totalRows');
@@ -64,30 +63,22 @@ export default function AdminData() {
   const [page, setPage] = useState(1);
   const [showAnomalyOnly, setShowAnomalyOnly] = useState(false);
   const pageSize = 10;
-
-  const fetchData = () => {
-    adminApi.getDataStats().then(res => {
-      if (res.success && res.data) setStores(res.data);
-      setLoading(false);
-    });
-  };
-
-  useEffect(() => { fetchData(); }, []);
+  const sd = (stores || []) as StoreData[];
 
   const filteredStores = useMemo(() => {
-    let result = stores;
+    let result = sd;
     if (search) {
       const q = search.toLowerCase();
-      result = result.filter(s =>
+      result = result.filter((s: StoreData) =>
         s.storeName.toLowerCase().includes(q) ||
         s.userName.toLowerCase().includes(q)
       );
     }
     if (showAnomalyOnly) {
-      result = result.filter(s => isAnomaly(s).length > 0);
+      result = result.filter((s: StoreData) => isAnomaly(s).length > 0);
     }
     return result;
-  }, [stores, search, showAnomalyOnly]);
+  }, [sd, search, showAnomalyOnly]);
 
   const sortedStores = useMemo(() => {
     return [...filteredStores].sort((a, b) => {
@@ -114,31 +105,31 @@ export default function AdminData() {
   const totalPages = Math.max(1, Math.ceil(sortedStores.length / pageSize));
 
   const overview = useMemo(() => {
-    const totalStores = stores.length;
-    const totalRows = stores.reduce((s, v) => s + v.totalRows, 0);
-    const totalStorage = stores.reduce((s, v) => s + v.storageBytes, 0);
-    const todayCount = stores.filter(s => {
+    const totalStores = sd.length;
+    const totalRows = sd.reduce((s: number, v: StoreData) => s + v.totalRows, 0);
+    const totalStorage = sd.reduce((s, v) => s + v.storageBytes, 0);
+    const todayCount = sd.filter(s => {
       if (!s.lastUploadAt) return false;
       const d = new Date(s.lastUploadAt);
       const now = new Date();
       return d.toDateString() === now.toDateString();
     }).length;
     return { totalStores, totalRows, totalStorage, todayCount };
-  }, [stores]);
+  }, [sd]);
 
   const categoryPieData = useMemo(() => {
     return CATEGORY_CONFIG
       .map(c => ({
         name: c.label,
-        value: stores.reduce((s, v) => s + ((v as any)[c.key] ?? 0), 0),
+        value: sd.reduce((s, v) => s + ((v as any)[c.key] ?? 0), 0),
         color: c.color,
       }))
       .filter(d => d.value > 0)
       .sort((a, b) => b.value - a.value);
-  }, [stores]);
+  }, [sd]);
 
   const top10Data = useMemo(() =>
-    [...stores]
+    [...sd]
       .sort((a, b) => b.totalRows - a.totalRows)
       .slice(0, 10)
       .map(s => ({
@@ -147,9 +138,9 @@ export default function AdminData() {
         售后: s.afterSaleRecords,
         推广: s.promotionSummary,
       }))
-  , [stores]);
+  , [sd]);
 
-  const anomalyCount = stores.filter(s => isAnomaly(s).length > 0).length;
+  const anomalyCount = sd.filter(s => isAnomaly(s).length > 0).length;
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
@@ -185,7 +176,7 @@ export default function AdminData() {
     return <span className="text-[10px] ml-0.5">{sortDir === 'asc' ? '↑' : '↓'}</span>;
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-3">
         <RefreshCw size={24} className="animate-spin text-pdd-text-secondary" />
@@ -215,7 +206,7 @@ export default function AdminData() {
               <AlertTriangle size={12} /> {anomalyCount} 个异常
             </span>
           )}
-          <button onClick={fetchData} className="p-2 rounded-lg hover:bg-pdd-card text-pdd-text-secondary hover:text-pdd-text transition-colors">
+          <button onClick={() => refetch()} className="p-2 rounded-lg hover:bg-pdd-card text-pdd-text-secondary hover:text-pdd-text transition-colors">
             <RefreshCw size={16} />
           </button>
         </div>
@@ -223,10 +214,10 @@ export default function AdminData() {
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
-          { label: '店铺总数', value: overview.totalStores, icon: Store, color: '#8b5cf6', bg: 'bg-violet-500/10' },
-          { label: '总记录行数', value: overview.totalRows.toLocaleString(), icon: Database, color: '#3b82f6', bg: 'bg-blue-500/10' },
-          { label: '总存储空间', value: formatStorage(overview.totalStorage), icon: HardDrive, color: '#22c55e', bg: 'bg-green-500/10' },
-          { label: '今日上传', value: overview.todayCount, icon: Upload, color: '#f59e0b', bg: 'bg-amber-500/10' },
+          { label: '店铺总数', value: overview.totalStores, icon: Store, color: 'var(--pdd-purple)', bg: 'bg-violet-500/10' },
+          { label: '总记录行数', value: overview.totalRows.toLocaleString(), icon: Database, color: 'var(--pdd-info)', bg: 'bg-blue-500/10' },
+          { label: '总存储空间', value: formatStorage(overview.totalStorage), icon: HardDrive, color: 'var(--pdd-success)', bg: 'bg-green-500/10' },
+          { label: '今日上传', value: overview.todayCount, icon: Upload, color: 'var(--pdd-warning)', bg: 'bg-amber-500/10' },
         ].map((c, i) => (
           <motion.div key={c.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}
             className="bg-pdd-card rounded-xl border border-pdd-border p-4">
@@ -250,10 +241,10 @@ export default function AdminData() {
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
                 <XAxis dataKey="name" tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }} />
                 <YAxis tick={{ fontSize: 11, fill: 'var(--pdd-text-secondary)' }} />
-                <Tooltip contentStyle={{ background: '#171717', border: '1px solid #262626', borderRadius: 8, fontSize: 12 }} />
-                <Bar dataKey="订单" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="推广" fill="#f59e0b" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="售后" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                <Tooltip contentStyle={{ background: 'var(--pdd-card)', border: '1px solid var(--pdd-border)', borderRadius: 8, fontSize: 12 }} />
+                <Bar dataKey="订单" fill="var(--pdd-primary)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="推广" fill="var(--pdd-warning)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="售后" fill="var(--pdd-danger)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           ) : (
@@ -270,7 +261,7 @@ export default function AdminData() {
                   {categoryPieData.map((d, i) => <Cell key={i} fill={d.color} />)}
                 </Pie>
                 <Tooltip
-                  contentStyle={{ background: '#171717', border: '1px solid #262626', borderRadius: 8, fontSize: 12 }}
+                  contentStyle={{ background: 'var(--pdd-card)', border: '1px solid var(--pdd-border)', borderRadius: 8, fontSize: 12 }}
                   formatter={(value: number, name: string) => [`${value.toLocaleString()} 行`, name]}
                 />
               </PieChart>

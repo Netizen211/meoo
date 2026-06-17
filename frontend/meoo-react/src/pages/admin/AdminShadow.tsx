@@ -66,7 +66,7 @@ export default function AdminShadow() {
         username = match.username;
       } else {
         // Username search
-        const usersRes = await adminApi.getUsers(1, 10, input.trim());
+        const usersRes = await adminApi.getUsers({ page: 1, pageSize: 10, search: input.trim() });
         if (!usersRes.success || !usersRes.data?.length) {
           setError('未找到该用户'); setLoading(false); return;
         }
@@ -144,7 +144,7 @@ export default function AdminShadow() {
       {/* Main input area */}
       <div className="bg-pdd-card rounded-xl border border-pdd-border p-6">
         <div className="flex items-center gap-3 mb-4 p-3 rounded-lg text-xs"
-          style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)', color: '#d97706' }}>
+          style={{ background: 'rgba(245, 158, 11, 0.08)', border: '1px solid rgba(245, 158, 11, 0.2)', color: 'var(--pdd-warning)' }}>
           <Shield size={16} className="shrink-0" />
           <span>只读模式，无法修改任何数据。每次访问均记录审计日志。仅用于技术支持和故障排查。</span>
         </div>

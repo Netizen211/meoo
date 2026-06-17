@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -9,21 +9,37 @@ import {
 } from 'lucide-react';
 import { adminApi, type AdminUser, type UserStore, type UserRechargeRecord, type GetUsersParams } from '../../../api/adminApi';
 import { useAuth } from '../../App';
+import { useAdminUsers, useBanUser, useBatchBanUsers, useBatchNotify, useCreateUser } from '../../hooks/useAdminData';
 
 const PAGE_SIZE_OPTIONS = [10, 20, 50, 100];
 
 export default function AdminUsers() {
   const { user: currentUser } = useAuth();
   const navigate = useNavigate();
-  const [users, setUsers] = useState<AdminUser[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [levelFilter, setLevelFilter] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [activityFilter, setActivityFilter] = useState('');
+  const [riskFilter, setRiskFilter] = useState('');
   const [actionMsg, setActionMsg] = useState('');
+
+  // ── react-query 用户列表（自动缓存/刷新） ──
+  const queryParams: GetUsersParams = { page, pageSize, search };
+  if (roleFilter) queryParams.role = roleFilter;
+  if (levelFilter) queryParams.membershipLevel = levelFilter;
+  if (activityFilter) queryParams.activityLevel = activityFilter;
+  if (riskFilter) queryParams.hasRisk = riskFilter;
+  const { data, isLoading } = useAdminUsers(queryParams);
+  const users = data?.users || [];
+  const total = data?.total || 0;
+
+  // ── react-query 变更操作（自动刷新列表） ──
+  const banMutation = useBanUser();
+  const batchBanMutation = useBatchBanUsers();
+  const notifyMutation = useBatchNotify();
+  const createUserMutation = useCreateUser();
 
   // Expand row
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -65,23 +81,6 @@ export default function AdminUsers() {
   const [createSubmitting, setCreateSubmitting] = useState(false);
   const [createError, setCreateError] = useState('');
 
-  const loadUsers = useCallback(async () => {
-    setLoading(true);
-    const params: GetUsersParams = { page, pageSize, search };
-    if (roleFilter) params.role = roleFilter;
-    if (levelFilter) params.membershipLevel = levelFilter;
-    const res = await adminApi.getUsers(params);
-    if (res.success) {
-      setUsers(res.data || []);
-      setTotal((res as any).total ?? 0);
-    }
-    setLoading(false);
-  }, [page, pageSize, search, roleFilter, levelFilter]);
-
-  useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
-
   // Load user detail when expanding
   const handleExpand = async (userId: string) => {
     if (expandedId === userId) {
@@ -114,16 +113,13 @@ export default function AdminUsers() {
   const handleBan = async () => {
     if (!banModal) return;
     setBanSubmitting(true);
-    const ok = await adminApi.toggleBan(banModal.userId, !banModal.isBanned, banReason || undefined);
+    const ok = await banMutation.mutateAsync({
+      userId: banModal.userId,
+      isBanned: !banModal.isBanned,
+      reason: banReason || undefined,
+    });
     setBanSubmitting(false);
     if (ok) {
-      setUsers(prev =>
-        prev.map(u =>
-          u.id === banModal.userId
-            ? { ...u, isBanned: !banModal.isBanned, bannedReason: banReason || null }
-            : u
-        )
-      );
       setActionMsg(banModal.isBanned ? '已解封' : '已封禁');
       setBanModal(null);
     } else {
@@ -159,16 +155,9 @@ export default function AdminUsers() {
     if (!batchBanConfirm) return;
     setBatchBanSubmitting(true);
     const ids = Array.from(selectedIds);
-    const ok = await adminApi.batchToggleBan(ids, batchBanConfirm.isBanned, batchBanReason || undefined);
+const ok = await batchBanMutation.mutateAsync({ userIds: ids, isBanned: batchBanConfirm.isBanned, reason: batchBanReason || undefined });
     setBatchBanSubmitting(false);
     if (ok) {
-      setUsers(prev =>
-        prev.map(u =>
-          selectedIds.has(u.id)
-            ? { ...u, isBanned: batchBanConfirm.isBanned, bannedReason: batchBanReason || null }
-            : u
-        )
-      );
       setSelectedIds(new Set());
       setActionMsg(batchBanConfirm.isBanned ? `已封禁 ${ids.length} 个用户` : `已解封 ${ids.length} 个用户`);
     } else {
@@ -182,7 +171,7 @@ export default function AdminUsers() {
     if (!notifyMessage.trim()) return;
     setNotifySubmitting(true);
     const ids = Array.from(selectedIds);
-    const ok = await adminApi.batchNotify(ids, notifyMessage);
+    const ok = await notifyMutation.mutateAsync({ userIds: ids, message: notifyMessage });
     setNotifySubmitting(false);
     if (ok) {
       setSelectedIds(new Set());
@@ -219,9 +208,8 @@ export default function AdminUsers() {
       setCreateEmail('');
       setCreateRole('normal');
       setCreateLevel('free');
-      setActionMsg(`账号 ${(res.data as any)?.username || ''} 创建成功`);
+      setActionMsg(`账号创建成功`);
       setTimeout(() => setActionMsg(''), 2000);
-      loadUsers();
     } else {
       setCreateError(res.error || '创建失败');
     }
@@ -328,6 +316,26 @@ export default function AdminUsers() {
           <option value="pro">专业</option>
           <option value="enterprise">企业</option>
         </select>
+        <select
+          value={activityFilter}
+          onChange={e => { setActivityFilter(e.target.value); setPage(1); }}
+          className="bg-pdd-card border border-pdd-border rounded-lg px-3 py-2 text-sm text-pdd-text-primary outline-none focus:border-pdd-primary/50"
+        >
+          <option value="">全部活跃度</option>
+          <option value="high">高活跃</option>
+          <option value="medium">中活跃</option>
+          <option value="low">低活跃</option>
+          <option value="silent">沉默用户</option>
+        </select>
+        <select
+          value={riskFilter}
+          onChange={e => { setRiskFilter(e.target.value); setPage(1); }}
+          className="bg-pdd-card border border-pdd-border rounded-lg px-3 py-2 text-sm text-pdd-text-primary outline-none focus:border-pdd-primary/50"
+        >
+          <option value="">全部风险</option>
+          <option value="true">有风险</option>
+          <option value="false">无风险</option>
+        </select>
 
         <div className="flex-1" />
 
@@ -383,7 +391,7 @@ export default function AdminUsers() {
       {/* Table */}
       <div className="bg-pdd-card rounded-xl border border-pdd-border overflow-hidden">
         <div className="overflow-x-auto">
-          {loading ? (
+          {isLoading ? (
             <div className="text-center py-16 text-pdd-text-secondary">加载中...</div>
           ) : users.length === 0 ? (
             <div className="text-center py-16 text-pdd-text-secondary">
@@ -409,6 +417,8 @@ export default function AdminUsers() {
                   <th className="text-left py-3 px-2 font-medium text-pdd-text-secondary">最后登录</th>
                   <th className="text-center py-3 px-2 font-medium text-pdd-text-secondary">店铺数</th>
                   <th className="text-center py-3 px-2 font-medium text-pdd-text-secondary">数据量</th>
+                  <th className="text-center py-3 px-2 font-medium text-pdd-text-secondary">活跃度</th>
+                  <th className="text-center py-3 px-2 font-medium text-pdd-text-secondary">风险</th>
                   <th className="text-center py-3 px-2 font-medium text-pdd-text-secondary">状态</th>
                   <th className="text-right py-3 px-2 font-medium text-pdd-text-secondary">操作</th>
                 </tr>
@@ -467,6 +477,30 @@ export default function AdminUsers() {
                         {u.dataVolume != null ? `${u.dataVolume.toLocaleString()} 行` : '-'}
                       </td>
                       <td className="py-3 px-2 text-center">
+                        {u.activityLevel ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium ${
+                            u.activityLevel === 'high' ? 'bg-green-50 text-green-700 border border-green-200' :
+                            u.activityLevel === 'medium' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                            u.activityLevel === 'low' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                            'bg-gray-50 text-gray-500 border border-gray-200'
+                          }`}>
+                            {u.activityLevel === 'high' ? '高' : u.activityLevel === 'medium' ? '中' : u.activityLevel === 'low' ? '低' : '沉默'}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-pdd-text-secondary">-</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-2 text-center">
+                        {u.riskEventCount != null && u.riskEventCount > 0 ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-red-50 text-red-700 border border-red-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                            {u.riskEventCount}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-pdd-text-secondary">-</span>
+                        )}
+                      </td>
+                      <td className="py-3 px-2 text-center">
                         {u.isBanned ? (
                           <span className="text-xs text-pdd-danger">已封禁</span>
                         ) : (
@@ -502,7 +536,7 @@ export default function AdminUsers() {
                           exit={{ opacity: 0, height: 0 }}
                           className="border-b border-pdd-border/30 bg-pdd-bg/20"
                         >
-                          <td colSpan={10} className="p-0">
+                          <td colSpan={12} className="p-0">
                             {detailLoading ? (
                               <div className="text-center py-6 text-pdd-text-secondary text-xs">
                                 加载详情中...

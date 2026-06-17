@@ -1,50 +1,57 @@
 import React from 'react';
-import { motion } from 'framer-motion';
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
-import { Move, Info } from 'lucide-react';
-
-const STATUS_COLORS = ['var(--pdd-success)', 'var(--pdd-info)', 'var(--pdd-primary-light)', 'var(--pdd-warning)', '#a855f7', '#64748b'];
 
 interface Props {
   statusDist: any[];
   noData: boolean;
-  draggedPanel: string | null;
-  onDragStart: (p: string) => void;
-  onDragOver: (e: React.DragEvent, p: string) => void;
-  onDragEnd: () => void;
+  totalOrders?: number;
 }
 
-export default function DashboardStatusPanel({ statusDist, noData, draggedPanel, onDragStart, onDragOver, onDragEnd }: Props) {
-  return (
-    <motion.div key="status" layoutId="status" draggable onDragStart={() => onDragStart('status')} onDragOver={e => onDragOver(e, 'status')} onDragEnd={onDragEnd}
-      className={`bg-pdd-card rounded-xl border border-pdd-border p-3 cursor-move transition-all ${draggedPanel === 'status' ? 'opacity-50 scale-95' : ''}`}>
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <h3 className="text-sm font-semibold text-pdd-text">订单状态分布</h3>
-          <span className="text-[9px] text-gray-400/60 italic flex items-center gap-0.5"><Info size={8} />订单·订单状态 GROUP BY</span>
-        </div>
-        <Move size={14} className="text-pdd-text-secondary" />
+export default function DashboardStatusPanel({ statusDist, noData, totalOrders = 0 }: Props) {
+  if (noData) {
+    return (
+      <div className="bg-pdd-card rounded-lg border border-pdd-border p-4">
+        <h3 className="text-xs font-bold text-gray-700 mb-3">订单状态</h3>
+        <div className="text-xs text-pdd-text-secondary">暂无数据</div>
       </div>
-      {noData ? (
-        <div className="h-40 flex flex-col items-center justify-center text-xs text-pdd-text-secondary">
-          <p className="mb-2">请先上传数据</p>
-          <p className="text-[10px] text-pdd-text-muted">支持订单数据、推广数据、运费险数据等</p>
-        </div>
-      ) : statusDist.length === 0 ? (
-        <div className="h-40 flex items-center justify-center text-xs text-pdd-text-secondary">暂无状态数据</div>
-      ) : (
-        <ResponsiveContainer width="100%" height={200}>
-          <PieChart>
-            <Pie data={statusDist} cx="50%" cy="50%" innerRadius={40} outerRadius={70} dataKey="value" label={({ name, percent }) => `${name.length > 6 ? name.slice(0, 6) + '…' : name} ${(percent * 100).toFixed(0)}%`}>
-              {statusDist.map((_, i) => <Cell key={i} fill={STATUS_COLORS[i % STATUS_COLORS.length]} />)}
-            </Pie>
-            <Tooltip
-              contentStyle={{ background: 'var(--pdd-card)', border: '1px solid var(--pdd-border)', borderRadius: '8px', fontSize: '11px', color: 'var(--pdd-text)' }}
-              itemStyle={{ color: 'var(--pdd-text)' }}
-            />
-          </PieChart>
-        </ResponsiveContainer>
-      )}
-    </motion.div>
+    );
+  }
+  if (!statusDist.length) {
+    return (
+      <div className="bg-pdd-card rounded-lg border border-pdd-border p-4">
+        <h3 className="text-xs font-bold text-gray-700 mb-3">订单状态</h3>
+        <div className="text-xs text-pdd-text-secondary">暂无状态数据</div>
+      </div>
+    );
+  }
+
+  const total = statusDist.reduce((s: number, d: any) => s + d.value, 0);
+  const topStatuses = statusDist.slice(0, 5);
+
+  return (
+    <div className="bg-pdd-card rounded-lg border border-pdd-border p-4">
+      <h3 className="text-xs font-bold text-gray-700 mb-3">订单状态</h3>
+      <div className="space-y-2">
+        {topStatuses.map((d: any, i: number) => {
+          const pct = total > 0 ? (d.value / total) * 100 : 0;
+          return (
+            <div key={i} className="flex items-center gap-3">
+              <span className="text-xs text-pdd-text-secondary w-16 truncate">{d.name}</span>
+              <div className="flex-1 h-1.5 bg-pdd-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-pdd-primary rounded-full"
+                  style={{ width: `${Math.max(pct, 1)}%` }}
+                />
+              </div>
+              <span className="text-xs text-pdd-text font-medium tabular-nums w-12 text-right">{d.value}</span>
+              <span className="text-[11px] text-pdd-text-secondary w-10 text-right">{pct.toFixed(0)}%</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-2 pt-2 border-t border-pdd-border flex justify-between text-xs text-pdd-text-secondary">
+        <span>合计</span>
+        <span className="font-medium text-pdd-text">{total} 单</span>
+      </div>
+    </div>
   );
 }

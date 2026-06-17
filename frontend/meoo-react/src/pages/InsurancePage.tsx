@@ -5,13 +5,14 @@ import { ShieldCheck, Percent, DollarSign, ArrowUp, ArrowDown } from 'lucide-rea
 import { useData } from '../App';
 import { findField } from '../utils';
 import TimeFilter, { TimeRange, TimeGranularity, safeFloat, filterByTimeRange, getCompareOrders, getAllDateGroups, aggregateByGranularity, changePct, formatLabel, useTimeFilter } from '../components/TimeFilter';
+import FilterToolbar from '../components/FilterToolbar';
 
 const cardV = { hidden: { opacity: 0, y: 20 }, visible: (i: number) => ({ opacity: 1, y: 0, transition: { delay: i * 0.1 } }) };
 
 export default function InsurancePage() {
   const { currentDisplayData } = useData();
   const tf = useTimeFilter('7', 'day');
-  const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
+  const { timeRange, granularity, compareEnabled, useNaturalDate, setUseNaturalDate, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
   const [insPage, setInsPage] = useState(1);
   const [insDetail, setInsDetail] = useState<any>(null);
   const insPageSize = 12;
@@ -23,7 +24,7 @@ export default function InsurancePage() {
   }, [currentDisplayData]);
 
   const allDates = useMemo(() => getAllDateGroups(orders), [orders]);
-  const filteredOrders = useMemo(() => filterByTimeRange(orders, allDates, timeRange, customStart, customEnd, quickRange), [orders, allDates, timeRange, customStart, customEnd, quickRange]);
+  const filteredOrders = useMemo(() => filterByTimeRange(orders, allDates, timeRange, customStart, customEnd, quickRange, useNaturalDate), [orders, allDates, timeRange, customStart, customEnd, quickRange]);
   const compareOrders = useMemo(() => compareEnabled ? getCompareOrders(orders, allDates, timeRange, compareStart, compareEnd, customStart, customEnd, quickRange) : [], [orders, allDates, timeRange, compareEnabled, compareStart, compareEnd, customStart, customEnd, quickRange]);
 
   const filteredData = useMemo(() => {
@@ -109,7 +110,15 @@ export default function InsurancePage() {
 
   return (
     <div className="p-4 space-y-3">
-      <TimeFilter state={tf} />
+      <FilterToolbar tf={tf} />
+        {timeRange !== 'all' && timeRange !== 'custom' && (
+          <div className="flex items-center rounded border border-pdd-border overflow-hidden text-[11px]">
+            <button onClick={() => setUseNaturalDate(false)}
+              className={`px-2 py-1 transition-colors ${!useNaturalDate ? 'bg-pdd-primary text-white' : 'text-pdd-text-secondary hover:text-pdd-text'}`}>按订单时间</button>
+            <button onClick={() => setUseNaturalDate(true)}
+              className={`px-2 py-1 transition-colors ${useNaturalDate ? 'bg-pdd-primary text-white' : 'text-pdd-text-secondary hover:text-pdd-text'}`}>按当前时间</button>
+          </div>
+        )}
       <div className="grid grid-cols-3 gap-3">
         {kpiCards.map((c, i) => (
           <motion.div key={c.label} custom={i} variants={cardV} initial="hidden" animate="visible"
@@ -128,7 +137,7 @@ export default function InsurancePage() {
       </div>
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.4 }} className="pdd-card">
-        <h3 className="text-sm font-semibold mb-2">运费险费用趋势({rangeLabel} · {granLabel}){compareEnabled && <span className="text-xs text-[#722ed1] ml-1">+环比</span>}</h3>
+        <h3 className="text-sm font-semibold mb-2">运费险费用趋势({rangeLabel} · {granLabel}){compareEnabled && <span className="text-xs text-purple-600 ml-1">+环比</span>}</h3>
         {noData ? <div className="h-48 flex items-center justify-center text-xs text-[var(--pdd-text-secondary)]">请先上传运费险数据</div> : (
           <ResponsiveContainer width="100%" height={220}>
             <LineChart data={mergedTrend}>

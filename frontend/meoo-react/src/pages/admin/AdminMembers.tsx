@@ -1,10 +1,11 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, Crown, Shield, Clock, ChevronLeft, ChevronRight,
   AlertTriangle, History, Edit3, Store, X,
 } from 'lucide-react';
-import { adminApi, type AdminUser, type MembershipHistory } from '../../../api/adminApi';
+import type { AdminUser } from '../../../api/adminApi';
+import { useAdminUsers, useAdjustMembership, useMembershipHistory } from '../../hooks/useAdminData';
 
 const PAGE_SIZE = 20;
 const LEVEL_LABELS: Record<string, string> = { free: '免费', pro: '专业', enterprise: '企业' };
@@ -18,49 +19,43 @@ const DURATION_LABELS: Record<string, string> = { monthly: '月付', yearly: '�
 type FilterType = 'all' | 'free' | 'pro' | 'enterprise' | 'expired';
 
 export default function AdminMembers() {
-  const [users, setUsers] = useState<AdminUser[]>([]);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<FilterType>('all');
-  const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState('');
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
 
   // Adjust membership modal
   const [adjustModal, setAdjustModal] = useState<AdminUser | null>(null);
   const [adjustLevel, setAdjustLevel] = useState('free');
   const [adjustExpires, setAdjustExpires] = useState('');
   const [adjustNote, setAdjustNote] = useState('');
-  const [adjustSubmitting, setAdjustSubmitting] = useState(false);
 
   // History modal
   const [historyModal, setHistoryModal] = useState<{ userId: string; username: string } | null>(null);
-  const [history, setHistory] = useState<MembershipHistory[]>([]);
-  const [historyLoading, setHistoryLoading] = useState(false);
 
-  const loadUsers = useCallback(async () => {
-    setLoading(true);
-    let membershipLevel: string | undefined;
-    if (filter === 'free' || filter === 'pro' || filter === 'enterprise') {
-      membershipLevel = filter;
-    }
-    const res = await adminApi.getUsers({ page, pageSize: PAGE_SIZE, search, membershipLevel });
-    if (res.success) {
-      let data = res.data || [];
-      // Filter expired on client side
-      if (filter === 'expired') {
-        const now = new Date();
-        data = data.filter((u: AdminUser) => u.membershipLevel !== 'free' && u.membershipExpiresAt && new Date(u.membershipExpiresAt) < now);
-      }
-      setUsers(data);
-      setTotal((res as any).total ?? 0);
-    }
-    setLoading(false);
-  }, [page, search, filter]);
+  const membershipLevel = (filter === 'free' || filter === 'pro' || filter === 'enterprise') ? filter : undefined;
+  const { data: usersData, isLoading } = useAdminUsers({ page, pageSize: PAGE_SIZE, search, membershipLevel });
+  const adjustMutation = useAdjustMembership();
+  const { data: history = [], isLoading: historyLoading } = useMembershipHistory(historyModal?.userId ?? null);
 
-  useEffect(() => {
-    loadUsers();
-  }, [loadUsers]);
+  // Apply client-side expired filter + compute total
+  const { users, total } = useMemo(() => {
+    const raw = usersData?.users ?? [];
+    const totalRaw = usersData?.total ?? 0;
+    if (filter === 'expired') {
+      const now = new Date();
+      const filtered = raw.filter((u: AdminUser) =>
+        u.membershipLevel !== 'free' && u.membershipExpiresAt && new Date(u.membershipExpiresAt) < now
+      );
+      return { users: filtered, total: filtered.length };
+    }
+    return { users: raw, total: totalRaw };
+  }, [usersData, filter]);
+
+  const showMsg = (msg: string) => {
+    setActionMsg(msg);
+    setTimeout(() => setActionMsg(''), 2000);
+  };
 
   const openAdjustModal = (u: AdminUser) => {
     setAdjustModal(u);
@@ -71,39 +66,18 @@ export default function AdminMembers() {
 
   const handleAdjust = async () => {
     if (!adjustModal) return;
-    setAdjustSubmitting(true);
-    const ok = await adminApi.adjustMembership(
-      adjustModal.id,
-      adjustLevel,
-      adjustExpires || undefined,
-      adjustNote || undefined
-    );
-    setAdjustSubmitting(false);
+    const ok = await adjustMutation.mutateAsync({
+      userId: adjustModal.id,
+      membershipLevel: adjustLevel,
+      expiresAt: adjustExpires || undefined,
+      note: adjustNote || undefined,
+    });
     if (ok) {
-      setUsers(prev =>
-        prev.map(u =>
-          u.id === adjustModal.id
-            ? { ...u, membershipLevel: adjustLevel, membershipExpiresAt: adjustExpires || null }
-            : u
-        )
-      );
-      setActionMsg('会员调整成功');
+      showMsg('会员调整成功');
       setAdjustModal(null);
     } else {
-      setActionMsg('操作失败');
+      showMsg('操作失败');
     }
-    setTimeout(() => setActionMsg(''), 2000);
-  };
-
-  const openHistoryModal = async (userId: string, username: string) => {
-    setHistoryModal({ userId, username });
-    setHistoryLoading(true);
-    setHistory([]);
-    const res = await adminApi.getMembershipHistory(1, 100, userId);
-    if (res.success) {
-      setHistory(res.data || []);
-    }
-    setHistoryLoading(false);
   };
 
   // Compute expiry status
@@ -228,7 +202,7 @@ export default function AdminMembers() {
       {/* Table */}
       <div className="bg-pdd-card rounded-xl border border-pdd-border overflow-hidden">
         <div className="overflow-x-auto">
-          {loading ? (
+          {isLoading ? (
             <div className="text-center py-16 text-pdd-text-secondary">加载中...</div>
           ) : users.length === 0 ? (
             <div className="text-center py-16 text-pdd-text-secondary">
@@ -282,7 +256,7 @@ export default function AdminMembers() {
                     <td className="py-3 px-4 text-right">
                       <div className="flex items-center justify-end gap-1.5">
                         <button
-                          onClick={() => openHistoryModal(u.id, u.username)}
+                          onClick={() => setHistoryModal({ userId: u.id, username: u.username })}
                           className="p-1.5 rounded text-pdd-text-secondary hover:text-pdd-info hover:bg-pdd-info/10 transition-colors"
                           title="变更历史"
                         >
@@ -440,10 +414,10 @@ export default function AdminMembers() {
                 </button>
                 <button
                   onClick={handleAdjust}
-                  disabled={adjustSubmitting}
+                  disabled={adjustMutation.isPending}
                   className="flex-1 py-2.5 rounded-lg bg-pdd-primary hover:bg-pdd-primary-dark text-white text-sm font-medium transition-colors disabled:opacity-50"
                 >
-                  {adjustSubmitting ? '保存中...' : '确认调整'}
+                  {adjustMutation.isPending ? '保存中...' : '确认调整'}
                 </button>
               </div>
             </motion.div>

@@ -1,9 +1,7 @@
 // API 客户端：fetch 封装 + JWT 管理 + 自动刷新 + API 版本控制
 
 const API_VERSION = 'v1';
-const API_BASE = process.env.NODE_ENV === 'production'
-  ? `/api/${API_VERSION}`
-  : `http://localhost:3007/api/${API_VERSION}`;
+const API_BASE = `/api/${API_VERSION}`;
 
 interface TokenStore {
   accessToken: string | null;
@@ -61,7 +59,7 @@ export function getAccessToken(): string | null {
   return tokens.accessToken;
 }
 
-async function refreshAccessToken(): Promise<boolean> {
+export async function refreshAccessToken(): Promise<boolean> {
   if (!tokens.refreshToken) return false;
 
   // 避免并发刷新
@@ -102,7 +100,7 @@ async function refreshAccessToken(): Promise<boolean> {
 async function request<T = any>(
   path: string,
   options: RequestInit = {}
-): Promise<{ success: boolean; data?: T; error?: string; status: number }> {
+): Promise<{ success: boolean; data?: T; error?: string; status: number; total?: number; page?: number; pageSize?: number }> {
   const url = `${API_BASE}${path}`;
 
   const headers: Record<string, string> = {
@@ -114,14 +112,24 @@ async function request<T = any>(
     headers['Authorization'] = `Bearer ${tokens.accessToken}`;
   }
 
-  let res = await fetch(url, { ...options, headers });
+  let res: Response;
+  try {
+    res = await fetch(url, { ...options, headers });
+  } catch (e) {
+    // ★ 网络异常（DNS、超时、断网等）转为结构化错误，不抛异常
+    return { success: false, error: `网络错误: ${(e as Error)?.message || '连接失败'}`, status: 0 };
+  }
 
   // 401 时尝试刷新 token 并重试一次
   if (res.status === 401 && tokens.refreshToken) {
     const refreshed = await refreshAccessToken();
     if (refreshed) {
       headers['Authorization'] = `Bearer ${tokens.accessToken}`;
-      res = await fetch(url, { ...options, headers });
+      try {
+        res = await fetch(url, { ...options, headers });
+      } catch (e) {
+        return { success: false, error: `网络错误: ${(e as Error)?.message || '连接失败'}`, status: 0 };
+      }
     }
   }
 
@@ -129,21 +137,26 @@ async function request<T = any>(
   try {
     body = await res.json();
   } catch {
-    body = { success: !res.ok, error: res.statusText };
+    // ★ 修复：HTTP 错误不能误判为成功 (原 !res.ok 在错误时为 true)
+    body = { success: false, error: res.statusText || `HTTP ${res.status}` };
   }
 
   return {
-    success: body.success !== false,
+    // ★ 修复：同时检查 HTTP 状态码和业务 success 字段
+    success: res.ok && body.success !== false,
     data: body.data,
-    error: body.error,
+    error: res.ok ? body.error : (body.error || `请求失败 (${res.status})`),
     status: res.status,
+    total: body.total,
+    page: body.page,
+    pageSize: body.pageSize,
   };
 }
 
 /**
  * ★ 带重试的请求（指数退避）
  * 适用于关键 API 调用（登录、数据同步等）
- * 5xx 错误或网络错误自动重试，4xx 不重试
+ * 5xx 错误或网络错误自动重试，4xx 不重试（401 除外——401 时 request 内部已自动刷新）
  */
 async function requestWithRetry<T = any>(
   path: string,
@@ -153,16 +166,16 @@ async function requestWithRetry<T = any>(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const result = await request<T>(path, options);
 
-    // 4xx 错误不重试（客户端错误）
-    if (result.status >= 400 && result.status < 500) return result;
+    // 4xx 不重试（客户端错误），除非是 401（可能 refresh token 竞争导致）
+    if (result.status >= 400 && result.status < 500 && result.status !== 401) return result;
     // 成功不重试
     if (result.success) return result;
 
     // 最后一次尝试，直接返回
     if (attempt === maxRetries) return result;
 
-    // 指数退避：100ms, 200ms, 400ms
-    const delay = 100 * Math.pow(2, attempt);
+    // 指数退避：200ms, 500ms, 1000ms
+    const delay = 200 * Math.pow(2, attempt);
     await new Promise(r => setTimeout(r, delay));
   }
   // unreachable

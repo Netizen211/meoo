@@ -1,5 +1,6 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useMemo } from 'react';
 import { adminApi, type AdminLog } from '../../../api/adminApi';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { Download, Trash2, Search, Filter, Calendar, X } from 'lucide-react';
 
@@ -25,27 +26,18 @@ function formatDate(d: Date): string {
 }
 
 export default function AdminLogs() {
-  const [logs, setLogs] = useState<AdminLog[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [actionTypes, setActionTypes] = useState<string[]>([]);
-
   // 筛选状态
   const [filterAction, setFilterAction] = useState('all');
   const [filterAdmin, setFilterAdmin] = useState('');
   const [filterStart, setFilterStart] = useState('');
   const [filterEnd, setFilterEnd] = useState('');
-
   // 日期快捷方式
   const [datePreset, setDatePreset] = useState<string>('all');
-
   // 清理对话框
   const [showCleanDialog, setShowCleanDialog] = useState(false);
   const [cleanDays, setCleanDays] = useState(365);
-  const [cleaning, setCleaning] = useState(false);
   const [exporting, setExporting] = useState(false);
-
   // 消息
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
@@ -54,31 +46,50 @@ export default function AdminLogs() {
     setTimeout(() => setMsg(null), 3000);
   };
 
-  // 加载操作类型列表
-  useEffect(() => {
-    adminApi.getLogActions().then(setActionTypes).catch(() => {});
-  }, []);
+  const qc = useQueryClient();
 
-  // 加载日志
-  const fetchLogs = useCallback(async () => {
-    setLoading(true);
-    try {
-      const res = await adminApi.getLogs({
-        page, pageSize: PAGE_SIZE,
-        action: filterAction,
-        admin: filterAdmin || undefined,
-        startDate: filterStart || undefined,
-        endDate: filterEnd || undefined,
-      });
+  // 操作类型列表（固定数据，仅加载一次）
+  const { data: actionTypes = [] } = useQuery({
+    queryKey: ['admin', 'log-actions'],
+    queryFn: () => adminApi.getLogActions(),
+    staleTime: 600000, // 10分钟缓存
+  });
+
+  // 日志查询（自动响应筛选/翻页变化）
+  const logParams = useMemo(() => ({
+    page, pageSize: PAGE_SIZE,
+    action: filterAction !== 'all' ? filterAction : undefined,
+    admin: filterAdmin || undefined,
+    startDate: filterStart || undefined,
+    endDate: filterEnd || undefined,
+  }), [page, filterAction, filterAdmin, filterStart, filterEnd]);
+
+  const { data: logsRes, isLoading } = useQuery({
+    queryKey: ['admin', 'logs', logParams],
+    queryFn: async () => {
+      const res = await adminApi.getLogs(logParams);
+      return { logs: (res.data ?? []) as AdminLog[], total: (res as any).total ?? 0 };
+    },
+    placeholderData: (prev) => prev,
+  });
+
+  const logs = logsRes?.logs ?? [];
+  const total = logsRes?.total ?? 0;
+
+  // 清理日志 mutation
+  const cleanMutation = useMutation({
+    mutationFn: (days: number) => adminApi.cleanLogs(days),
+    onSuccess: (res: any) => {
       if (res.success) {
-        setLogs(res.data ?? []);
-        setTotal((res as any).total ?? 0);
+        showMsg('success', res.message || '清理完成');
+        setShowCleanDialog(false);
+        qc.invalidateQueries({ queryKey: ['admin', 'logs'] });
+      } else {
+        showMsg('error', res.error || '清理失败');
       }
-    } catch { /* ignore */ }
-    setLoading(false);
-  }, [page, filterAction, filterAdmin, filterStart, filterEnd]);
-
-  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+    },
+    onError: () => showMsg('error', '清理失败'),
+  });
 
   // 日期快捷筛选
   const setDateRange = (preset: string) => {
@@ -115,21 +126,7 @@ export default function AdminLogs() {
   };
 
   // 清理日志
-  const handleClean = async () => {
-    setCleaning(true);
-    try {
-      const res = await adminApi.cleanLogs(cleanDays);
-      if (res.success) {
-        showMsg('success', (res as any).message || '清理完成');
-        setShowCleanDialog(false);
-      } else {
-        showMsg('error', (res as any).error || '清理失败');
-      }
-    } catch {
-      showMsg('error', '清理失败');
-    }
-    setCleaning(false);
-  };
+  const handleClean = () => cleanMutation.mutate(cleanDays);
 
   const getActionConfig = (action: string) => {
     return ACTION_CONFIG[action] || { label: action, color: 'bg-gray-500/10 text-gray-400 border-gray-500/20' };
@@ -265,7 +262,7 @@ export default function AdminLogs() {
       </div>
 
       {/* 日志表格 */}
-      {loading ? (
+      {isLoading ? (
         <div className="text-center py-12 text-pdd-text-secondary">加载中...</div>
       ) : logs.length === 0 ? (
         <div className="text-center py-16 text-pdd-text-secondary bg-pdd-card rounded-xl border border-pdd-border">
@@ -382,10 +379,10 @@ export default function AdminLogs() {
               </button>
               <button
                 onClick={handleClean}
-                disabled={cleaning}
+                disabled={cleanMutation.isPending}
                 className="px-4 py-2 text-xs rounded-lg bg-red-500 text-white hover:bg-red-600 disabled:opacity-50"
               >
-                {cleaning ? '清理中...' : '确认清理'}
+                {cleanMutation.isPending ? '清理中...' : '确认清理'}
               </button>
             </div>
           </div>

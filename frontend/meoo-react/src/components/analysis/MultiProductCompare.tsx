@@ -65,10 +65,10 @@ export default function MultiProductCompare({ products, selectedIds, onRemove }:
   }, [rows]);
 
   return (
-    <div className="pdd-card rounded-xl border border-pdd-border p-4" id="kpi-compare">
-      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-3 flex items-center gap-1.5">
+    <div className="bg-pdd-card rounded-xl border border-pdd-border p-4" id="kpi-compare">
+      <h3 className="text-xs font-semibold text-pdd-text-secondary mb-3 flex items-center gap-1.5">
         <TrendingUp size={13} color="#7c3aed" />多商品对比
-        <span className="text-pdd-gray-400 font-normal ml-1">({selectedIds.length}个)</span>
+        <span className="text-pdd-text-secondary/50 font-normal ml-1">({selectedIds.length}个)</span>
       </h3>
       <div className="overflow-x-auto">
         <table className="w-full text-[11px]">
@@ -96,7 +96,7 @@ export default function MultiProductCompare({ products, selectedIds, onRemove }:
                   );
                 })}
                 <td className="py-2 px-2 text-center">
-                  <button onClick={() => onRemove(r.id)} className="text-pdd-gray-400 hover:text-red-500 text-xs">×</button>
+                  <button onClick={() => onRemove(r.id)} className="text-pdd-text-secondary/50 hover:text-red-500 text-xs">×</button>
                 </td>
               </tr>
             ))}

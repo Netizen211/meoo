@@ -1,77 +1,46 @@
-import React, { useEffect, useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
 import {
   Server, Database, Cpu, HardDrive, Activity, Shield,
   Wifi, WifiOff, RefreshCw, Clock, Monitor, Globe,
   Terminal, Save, ToggleLeft, ToggleRight, Users,
   AlertTriangle,
 } from 'lucide-react';
-import { adminApi, SystemInfo, MaintenanceStatus } from '../../../api/adminApi';
+import { useSystemInfo, useMaintenanceStatus, useUpdateMaintenance, useLoginHistory } from '../../hooks/useAdminData';
 
 export default function AdminSystemInfo() {
-  const [info, setInfo] = useState<SystemInfo | null>(null);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'info' | 'maintenance' | 'loginHistory'>('info');
-  const [maint, setMaint] = useState<MaintenanceStatus | null>(null);
   const [maintMsg, setMaintMsg] = useState('');
   const [maintIps, setMaintIps] = useState('');
-  const [maintSaving, setMaintSaving] = useState(false);
-  const [loginHistory, setLoginHistory] = useState<any[]>([]);
   const [loginPage, setLoginPage] = useState(1);
-  const [loginTotal, setLoginTotal] = useState(0);
   const [actionMsg, setActionMsg] = useState('');
 
+  const { data: info, isLoading, refetch: refetchInfo } = useSystemInfo();
+  const { data: maint, refetch: refetchMaint } = useMaintenanceStatus();
+  const maintMutation = useUpdateMaintenance();
+  const { data: loginData, refetch: refetchLogin } = useLoginHistory(activeTab === 'loginHistory' ? loginPage : 0);
+
+  // sync maintenance form state
   useEffect(() => {
-    loadInfo();
-    loadMaintenance();
-  }, []);
-
-  useEffect(() => {
-    if (activeTab === 'loginHistory') loadLoginHistory(1);
-  }, [activeTab]);
-
-  const loadInfo = async () => {
-    setLoading(true);
-    const data = await adminApi.getSystemInfo();
-    if (data) setInfo(data);
-    setLoading(false);
-  };
-
-  const loadMaintenance = async () => {
-    const data = await adminApi.getMaintenanceStatus();
-    if (data) {
-      setMaint(data);
-      setMaintMsg(data.message);
-      setMaintIps(data.allowedIps.join(', '));
+    if (maint) {
+      setMaintMsg(maint.message);
+      setMaintIps(maint.allowedIps.join(', '));
     }
-  };
+  }, [maint]);
+
+  const loginHistory = loginData?.items ?? [];
+  const loginTotal = loginData?.total ?? 0;
 
   const handleToggleMaintenance = async () => {
     if (!maint) return;
-    setMaintSaving(true);
-    const res = await adminApi.updateMaintenance({ enabled: !maint.enabled });
-    if (res.success) {
-      showMsg(maint.enabled ? '维护模式已关闭' : '维护模式已启用');
-      loadMaintenance();
-    }
-    setMaintSaving(false);
+    await maintMutation.mutateAsync({ enabled: !maint.enabled });
+    showMsg(maint.enabled ? '维护模式已关闭' : '维护模式已启用');
+    refetchMaint();
   };
 
   const handleSaveMaintenance = async () => {
-    setMaintSaving(true);
     const ips = maintIps.split(',').map(s => s.trim()).filter(Boolean);
-    const res = await adminApi.updateMaintenance({ message: maintMsg, allowedIps: ips });
-    if (res.success) showMsg('维护设置已保存');
-    setMaintSaving(false);
-  };
-
-  const loadLoginHistory = async (page: number) => {
-    const res = await adminApi.getLoginHistory(page, 20);
-    if (res.success) {
-      setLoginHistory(res.data || []);
-      setLoginTotal(res.total || 0);
-      setLoginPage(page);
-    }
+    await maintMutation.mutateAsync({ message: maintMsg, allowedIps: ips });
+    showMsg('维护设置已保存');
   };
 
   const showMsg = (msg: string) => {
@@ -79,7 +48,7 @@ export default function AdminSystemInfo() {
     setTimeout(() => setActionMsg(''), 3000);
   };
 
-  if (loading && !info) return <div className="p-4 text-pdd-text-secondary">加载中...</div>;
+  if (isLoading && !info) return <div className="p-4 text-pdd-text-secondary">加载中...</div>;
 
   const formatUptime = (seconds: number) => {
     const d = Math.floor(seconds / 86400);
@@ -103,7 +72,7 @@ export default function AdminSystemInfo() {
           </h2>
           <p className="text-xs text-pdd-text-secondary mt-0.5">系统信息、维护模式与会话管理</p>
         </div>
-        <button onClick={loadInfo} className="px-3 py-1.5 text-xs rounded-lg border border-pdd-border text-pdd-text-secondary hover:bg-pdd-bg flex items-center gap-1.5">
+        <button onClick={() => { refetchInfo(); refetchMaint(); }} className="px-3 py-1.5 text-xs rounded-lg border border-pdd-border text-pdd-text-secondary hover:bg-pdd-bg flex items-center gap-1.5">
           <RefreshCw size={13} /> 刷新
         </button>
       </div>
@@ -233,7 +202,7 @@ export default function AdminSystemInfo() {
                 </p>
               </div>
               <button onClick={handleToggleMaintenance}
-                disabled={maintSaving}
+                disabled={maintMutation.isPending}
                 className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                   maint.enabled
                     ? 'bg-green-500/10 text-green-400 border border-green-500/20 hover:bg-green-500/20'
@@ -271,9 +240,9 @@ export default function AdminSystemInfo() {
                   className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm bg-pdd-bg text-pdd-text-primary outline-none focus:border-pdd-primary/50 resize-none" />
                 <p className="text-[10px] text-pdd-text-secondary mt-1">白名单中的 IP 在维护模式下仍可正常访问</p>
               </div>
-              <button onClick={handleSaveMaintenance} disabled={maintSaving}
+              <button onClick={handleSaveMaintenance} disabled={maintMutation.isPending}
                 className="px-4 py-2 rounded-lg text-sm bg-amber-500/10 text-amber-400 hover:bg-amber-500/20 flex items-center gap-2 disabled:opacity-50">
-                <Save size={14} /> {maintSaving ? '保存中...' : '保存设置'}
+                <Save size={14} /> {maintMutation.isPending ? '保存中...' : '保存设置'}
               </button>
             </div>
           </div>
@@ -330,12 +299,12 @@ export default function AdminSystemInfo() {
               <div className="px-4 py-3 border-t border-pdd-border flex items-center justify-between">
                 <span className="text-xs text-pdd-text-secondary">共 {loginTotal} 条</span>
                 <div className="flex items-center gap-1">
-                  <button onClick={() => loadLoginHistory(loginPage - 1)} disabled={loginPage <= 1}
+                  <button onClick={() => setLoginPage(p => Math.max(1, p - 1))} disabled={loginPage <= 1}
                     className="px-2 py-1 text-xs rounded border border-pdd-border text-pdd-text-secondary disabled:opacity-30 hover:bg-pdd-bg">
                     上一页
                   </button>
                   <span className="text-xs text-pdd-text-secondary px-2">{loginPage} / {Math.ceil(loginTotal / 20)}</span>
-                  <button onClick={() => loadLoginHistory(loginPage + 1)} disabled={loginPage >= Math.ceil(loginTotal / 20)}
+                  <button onClick={() => setLoginPage(p => p + 1)} disabled={loginPage >= Math.ceil(loginTotal / 20)}
                     className="px-2 py-1 text-xs rounded border border-pdd-border text-pdd-text-secondary disabled:opacity-30 hover:bg-pdd-bg">
                     下一页
                   </button>

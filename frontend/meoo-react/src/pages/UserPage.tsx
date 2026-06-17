@@ -4,14 +4,16 @@ import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, LineChart, Line, Bar
 import { Users, DollarSign, Repeat, ShoppingCart, TrendingUp, Clock, Lock, Crown, CreditCard, Globe, ArrowUp, ArrowDown, UserCheck, UserPlus, Activity, Target, Tag, Filter, Search, Plus, X, ChevronDown } from 'lucide-react';
 import { useData, useAuth } from '../App';
 import TimeFilter, { TimeRange, TimeGranularity, safeFloat, filterByTimeRange, getAllDateGroups, useTimeFilter } from '../components/TimeFilter';
+import { findField, simpleHash } from '../utils';
+import FilterToolbar from '../components/FilterToolbar';
 
-const COLORS = ['#e02e24', '#ff6b5b', '#faad14', '#52c41a', '#1890ff', '#722ed1', '#13c2c2', '#eb2f96'];
+const COLORS = ['var(--pdd-primary)', '#69B1FF', '#faad14', '#52c41a', '#1890ff', 'var(--pdd-purple)', 'var(--pdd-cyan)', 'var(--pdd-pink)'];
 
 export default function UserPage() {
   const { currentDisplayData } = useData();
   const { isPaid } = useAuth();
   const tf = useTimeFilter('7', 'day');
-  const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
+  const { timeRange, granularity, compareEnabled, useNaturalDate, setUseNaturalDate, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
   const [selectedSegment, setSelectedSegment] = useState<string>('all');
   const [showTagModal, setShowTagModal] = useState(false);
   const [newTag, setNewTag] = useState('');
@@ -19,25 +21,26 @@ export default function UserPage() {
 
   const orders = useMemo(() => {
     if (!currentDisplayData?.orders?.length) return [];
-    return currentDisplayData.orders.filter((o: any) => String(o['订单状态'] || '').trim() !== '已取消');
+    return currentDisplayData.orders.filter((o: any) => String(findField(o, '订单状态', '状态') || '').trim() !== '已取消');
   }, [currentDisplayData]);
 
   const allDates = useMemo(() => getAllDateGroups(orders), [orders]);
-  const filteredOrders = useMemo(() => filterByTimeRange(orders, allDates, timeRange, customStart, customEnd, quickRange), [orders, allDates, timeRange, customStart, customEnd, quickRange]);
+  const filteredOrders = useMemo(() => filterByTimeRange(orders, allDates, timeRange, customStart, customEnd, quickRange, useNaturalDate), [orders, allDates, timeRange, customStart, customEnd, quickRange]);
 
   const stats = useMemo(() => {
     if (!filteredOrders.length) return null;
     const buyerMap: Record<string, { count: number; totalPaid: number; totalQty: number; lastOrder: string; firstOrder: string; orders: any[]; orderDates: string[] }> = {};
     filteredOrders.forEach((o: any, i: number) => {
-      const orderNo = String(o['订单号'] || '').trim();
-      // 用收货人手机号识别买家（无手机号时用完整订单号兜底）
-      const phone = String(o['收货人手机'] || o['收货人电话'] || o['手机号'] || '').trim();
-      const key = phone || orderNo || `anon-${i}`;
+      const orderNo = String(findField(o, '订单号') || '').trim();
+      // 用订单号 + 手机哈希识别回头客（手机仅用于去重，不展示不存储）
+      const rawPhone = String(findField(o, '收货人手机', '收货人电话', '手机号') || '').trim();
+      const buyerKey = rawPhone ? `phone_${simpleHash(rawPhone)}` : orderNo || `anon-${i}`;
+      const key = buyerKey;
       if (!buyerMap[key]) buyerMap[key] = { count: 0, totalPaid: 0, totalQty: 0, lastOrder: '', firstOrder: '', orders: [], orderDates: [] };
       buyerMap[key].count++;
-      buyerMap[key].totalPaid += safeFloat(o['用户实付金额(元)']);
-      buyerMap[key].totalQty += safeFloat(o['商品数量(件)']);
-      const t = String(o['支付时间'] || '').trim();
+      buyerMap[key].totalPaid += safeFloat(findField(o, '用户实付金额(元)', '用户实付金额', '用户实付', '实付金额'));
+      buyerMap[key].totalQty += safeFloat(findField(o, '商品数量(件)', '商品数量'));
+      const t = String(findField(o, '支付时间', '下单时间', '订单创建时间') || '').trim();
       if (t > buyerMap[key].lastOrder) buyerMap[key].lastOrder = t;
       if (!buyerMap[key].firstOrder || t < buyerMap[key].firstOrder) buyerMap[key].firstOrder = t;
       buyerMap[key].orders.push(o);
@@ -48,10 +51,13 @@ export default function UserPage() {
     const buyerCount = Object.keys(buyerMap).length;
     const repeatBuyers = Object.values(buyerMap).filter(b => b.count >= 2).length;
     const repeatRate = buyerCount > 0 ? (repeatBuyers / buyerCount) * 100 : 0;
-    const totalPaid = filteredOrders.reduce((s: number, o: any) => s + safeFloat(o['用户实付金额(元)']), 0);
-    const totalGMV = filteredOrders.reduce((s: number, o: any) => s + safeFloat(o['商家实收金额(元)'] || o['商品总价(元)']), 0);
+    const totalPaid = filteredOrders.reduce((s: number, o: any) => s + safeFloat(findField(o, '用户实付金额(元)', '用户实付金额', '用户实付', '实付金额')), 0);
+    const totalGMV = filteredOrders.reduce((s: number, o: any) => {
+      const merchantReceive = findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额');
+      return s + safeFloat(merchantReceive != null ? merchantReceive : findField(o, '商品总价(元)', '商品总价'));
+    }, 0);
     const avgAOV = filteredOrders.length > 0 ? totalGMV / filteredOrders.length : 0;
-    const totalQty = filteredOrders.reduce((s: number, o: any) => s + safeFloat(o['商品数量(件)']), 0);
+    const totalQty = filteredOrders.reduce((s: number, o: any) => s + safeFloat(findField(o, '商品数量(件)', '商品数量')), 0);
     const attachRate = filteredOrders.length > 0 ? totalQty / filteredOrders.length : 0;
     const avgPerBuyer = buyerCount > 0 ? totalPaid / buyerCount : 0;
 
@@ -110,13 +116,13 @@ export default function UserPage() {
 
     const hourMap: Record<number, number> = {};
     filteredOrders.forEach((o: any) => {
-      const h = parseInt(String(o['支付时间'] || '').split(' ')[1]?.split(':')[0] || '0', 10);
+      const h = parseInt(String(findField(o, '支付时间', '下单时间', '订单创建时间') || '').split(' ')[1]?.split(':')[0] || '0', 10);
       if (!isNaN(h)) hourMap[h] = (hourMap[h] || 0) + 1;
     });
     const hourData = Array.from({ length: 24 }, (_, i) => ({ hour: `${i}时`, orders: hourMap[i] || 0 }));
 
     const payMap: Record<string, number> = {};
-    filteredOrders.forEach((o: any) => { const p = String(o['支付方式'] || '').trim() || '未知'; payMap[p] = (payMap[p] || 0) + 1; });
+    filteredOrders.forEach((o: any) => { const p = String(findField(o, '支付方式') || '').trim() || '未知'; payMap[p] = (payMap[p] || 0) + 1; });
     const payData = Object.entries(payMap).map(([name, value]) => ({ name, value }));
 
     const retentionData = (() => {
@@ -143,7 +149,7 @@ export default function UserPage() {
       const dayName = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'][d];
       const hourCounts: Record<number, number> = {};
       filteredOrders.forEach((o: any) => {
-        const t = String(o['支付时间'] || '').trim();
+        const t = String(findField(o, '支付时间', '下单时间', '订单创建时间') || '').trim();
         if (!t) return;
         const date = new Date(t);
         let dayIdx = date.getDay();
@@ -212,8 +218,8 @@ export default function UserPage() {
     { label: '复购用户数', value: stats?.repeatBuyers, fmt: (v: number) => v.toFixed(0), icon: Repeat, color: '#1890ff' },
     { label: '复购率', value: stats?.repeatRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: TrendingUp, color: 'var(--pdd-success)' },
     { label: '平均客单价', value: stats?.avgAOV, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, color: 'var(--pdd-warning)' },
-    { label: '连带率', value: stats?.attachRate, fmt: (v: number) => v.toFixed(2), icon: ShoppingCart, color: '#722ed1' },
-    { label: '人均消费', value: stats?.avgPerBuyer, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: CreditCard, color: '#13c2c2' },
+    { label: '连带率', value: stats?.attachRate, fmt: (v: number) => v.toFixed(2), icon: ShoppingCart, color: 'var(--pdd-purple)' },
+    { label: '人均消费', value: stats?.avgPerBuyer, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: CreditCard, color: 'var(--pdd-cyan)' },
   ];
 
   const addTag = () => {
@@ -225,7 +231,15 @@ export default function UserPage() {
 
   return (
     <div className="p-4 space-y-3">
-      <TimeFilter state={tf} />
+      <FilterToolbar tf={tf} />
+        {timeRange !== 'all' && timeRange !== 'custom' && (
+          <div className="flex items-center rounded border border-pdd-border overflow-hidden text-[11px]">
+            <button onClick={() => setUseNaturalDate(false)}
+              className={`px-2 py-1 transition-colors ${!useNaturalDate ? 'bg-pdd-primary text-white' : 'text-pdd-text-secondary hover:text-pdd-text'}`}>按订单时间</button>
+            <button onClick={() => setUseNaturalDate(true)}
+              className={`px-2 py-1 transition-colors ${useNaturalDate ? 'bg-pdd-primary text-white' : 'text-pdd-text-secondary hover:text-pdd-text'}`}>按当前时间</button>
+          </div>
+        )}
 
       <div className="grid grid-cols-6 gap-2">
         {kpis.map((k, i) => (
@@ -261,7 +275,7 @@ export default function UserPage() {
                 { key: 'loyal', name: '重要保持', count: stats?.segments.loyal.length, color: '#1890ff' },
                 { key: 'potential', name: '重要发展', count: stats?.segments.potential.length, color: 'var(--pdd-success)' },
                 { key: 'new', name: '新用户', count: stats?.segments.new.length, color: 'var(--pdd-warning)' },
-                { key: 'atRisk', name: '重要挽留', count: stats?.segments.atRisk.length, color: '#722ed1' },
+                { key: 'atRisk', name: '重要挽留', count: stats?.segments.atRisk.length, color: 'var(--pdd-purple)' },
                 { key: 'lost', name: '流失用户', count: stats?.segments.lost.length, color: '#8c8c8c' },
               ].map(s => (
                 <div key={s.key} className={`text-center p-2 rounded border cursor-pointer transition-all ${selectedSegment === s.key ? 'border-[var(--pdd-primary)] bg-[var(--pdd-bg)]' : 'border-[var(--pdd-border)]'}`}
@@ -344,7 +358,7 @@ export default function UserPage() {
                 <React.Fragment key={day.day}>
                   <div className="text-xs text-[var(--pdd-text-secondary)] text-right pr-2">{day.day}</div>
                   {day.hours.map((h, i) => (
-                    <div key={i} className="h-4 rounded-sm" style={{ backgroundColor: h.value > 0 ? `rgba(224, 46, 36, ${Math.min(h.value / 50, 1)})` : 'transparent' }} />
+                    <div key={i} className="h-4 rounded-sm" style={{ backgroundColor: h.value > 0 ? `rgba(31, 107, 255, ${Math.min(h.value / 50, 1)})` : 'transparent' }} />
                   ))}
                 </React.Fragment>
               ))}

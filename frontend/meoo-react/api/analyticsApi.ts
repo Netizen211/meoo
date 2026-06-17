@@ -52,8 +52,9 @@ export interface DailyTrend { date: string; gmv: number; orders: number; revenue
 export interface RegionItem { province: string; orders: number; gmv: number; buyers: number; }
 export interface LogisticsSummary { distribution: { range: string; count: number }[]; shippedOrders: number; avgHours: number; totalOrders: number; }
 export interface PromoByDateItem { date: string; cost: number; gmv: number; orders: number; impressions: number; clicks: number; }
-export interface CostSummary { productCost: number; packagingFee: number; shippingFee: number; insuranceFee: number; totalCost: number; orderCount: number; }
-export interface PeriodCompare { current: { orders: number; gmv: number; revenue: number } | null; previous: { orders: number; gmv: number; revenue: number } | null; changes: { orders: number; gmv: number; revenue: number }; }
+export interface CostSummary { productCost: number; packagingFee: number; shippingFee: number; insuranceFee: number; laborFee: number; promotionFee: number; platformCommission: number; penalties: number; marketingFees: number; totalCost: number; totalRevenue: number; profit: number; profitMargin: number; netProfit: number; orderCount: number; totalQty: number; lossOrderCount: number; totalRefundAmount: number; duplicateFees: number; }
+export interface PeriodCompare { current: { orders: number; gmv: number; revenue: number; cost: number; profit: number } | null; previous: { orders: number; gmv: number; revenue: number; cost: number; profit: number } | null; changes: { orders: number; gmv: number; revenue: number; cost: number; profit: number }; }
+export interface CostTrendResponse { current: { revenue: number; cost: number; profit: number; penalties: number; marketingFees: number }; previous: { revenue: number; cost: number; profit: number }; changes: { revenue: number; cost: number; profit: number }; }
 export interface FinancialSummary { totalIncome: number; totalExpense: number; incomeCount: number; expenseCount: number; totalRecords: number; orderRevenue: number; }
 
 /** ★ 批量分析：单次请求获取全部数据 */
@@ -73,9 +74,10 @@ export interface BulkAnalytics {
 }
 
 export const analyticsApi = {
-  /** ★ 批量获取全部分析数据（推荐使用，减少请求次数） */
+  /** ★ 批量获取全部分析数据（推荐使用，减少请求次数）
+   *  使用带重试的可靠请求，应对瞬时网络波动 */
   async getBulk(storeId: string): Promise<BulkAnalytics | null> {
-    const res = await apiClient.get<BulkAnalytics>(`/analytics/bulk?storeId=${encodeURIComponent(storeId)}`);
+    const res = await apiClient.getReliable<BulkAnalytics>(`/analytics/bulk?storeId=${encodeURIComponent(storeId)}`);
     return res.success ? res.data! : null;
   },
 
@@ -116,8 +118,11 @@ export const analyticsApi = {
     return res.success ? res.data! : null;
   },
 
-  async getCosts(storeId: string): Promise<CostSummary | null> {
-    const res = await apiClient.get<CostSummary>(`/analytics/costs?storeId=${encodeURIComponent(storeId)}`);
+  async getCosts(storeId: string, startDate?: string, endDate?: string): Promise<CostSummary | null> {
+    const params = new URLSearchParams({ storeId });
+    if (startDate) params.set('startDate', startDate);
+    if (endDate) params.set('endDate', endDate);
+    const res = await apiClient.get<CostSummary>(`/analytics/costs?${params.toString()}`);
     return res.success ? res.data! : null;
   },
 
@@ -139,6 +144,27 @@ export const analyticsApi = {
 
   async getDashboardFull(storeId: string): Promise<any> {
     const res = await apiClient.get<any>(`/analytics/dashboard-full?storeId=${encodeURIComponent(storeId)}`);
+    return res.success ? res.data! : null;
+  },
+
+  /** ★ 成本环比趋势（带时间范围过滤） */
+  async getCostTrend(storeId: string, startDate: string, endDate: string, compareDays?: number): Promise<CostTrendResponse | null> {
+    const params = new URLSearchParams({ storeId, startDate, endDate });
+    if (compareDays) params.set('compareDays', String(compareDays));
+    const res = await apiClient.get<CostTrendResponse>(`/analytics/cost-trend?${params.toString()}`);
+    return res.success ? res.data! : null;
+  },
+
+  /** ★ 商品复盘数据 */
+  async getRetrospective(
+    storeId: string, productId: string,
+    timeRange: string = '30', customStart?: string, customEnd?: string,
+    compareWindow: number = 7
+  ): Promise<any> {
+    const params = new URLSearchParams({ storeId, productId, timeRange, compareWindow: String(compareWindow) });
+    if (customStart) params.set('customStart', customStart);
+    if (customEnd) params.set('customEnd', customEnd);
+    const res = await apiClient.get<any>(`/analytics/products/retrospective?${params.toString()}`);
     return res.success ? res.data! : null;
   },
 };

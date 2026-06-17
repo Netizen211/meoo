@@ -1,42 +1,44 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Package, TrendingUp, TrendingDown, DollarSign, AlertTriangle, RotateCcw, Target, BarChart3, Link2, Layers, Zap, ArrowRight } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
+import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
+import { X, Package, Copy, Check, Tag, ChevronDown, DollarSign, Activity, TrendingUp } from 'lucide-react';
 import { ProductStat } from '../../components/ProductLinkStats';
+
+interface SkuItem {
+  productId: string; productName: string; skuId: string; skuName: string;
+  sales: number; revenue: number; gmv: number; orders: number; refund: number;
+  prices: number[];
+}
 
 interface Props {
   product: ProductStat | null;
+  skuList: SkuItem[];
   isOpen: boolean;
   onClose: () => void;
 }
 
-const COLORS = ['var(--pdd-danger)', 'var(--pdd-primary)', 'var(--pdd-success)', 'var(--pdd-warning)', 'var(--pdd-purple)', '#13c2c2', '#eb2f96', '#fa541c'];
+const fmtMoney = (v: number) =>
+  v >= 10000 ? '¥' + (v / 10000).toFixed(1) + '万' :
+  v >= 100 ? '¥' + v.toFixed(0) : '¥' + v.toFixed(v < 10 ? 2 : 1);
 
-function fmt(n: number) { return n.toFixed(2); }
-function fmtInt(n: number) { return n.toFixed(0); }
+const fmtNum = (v: number) =>
+  v >= 10000 ? (v / 10000).toFixed(1) + '万' : v.toFixed(0);
 
-export default function ProductDetailDrawer({ product, isOpen, onClose }: Props) {
-  const waterfallData = useMemo(() => {
-    if (!product) return [];
-    const cb = product.costBreakdown || {};
-    const items: { name: string; value: number; fill: string }[] = [
-      { name: 'GMV', value: product.gmv, fill: 'var(--pdd-primary)' },
-      { name: '折扣', value: -product.discount, fill: 'var(--pdd-warning)' },
-      { name: '推广费', value: -product.promoCost, fill: 'var(--pdd-purple)' },
-    ];
-    if ((cb.platformFee || 0) > 0) items.push({ name: '平台扣点(已含实收)', value: -(cb.platformFee || 0), fill: '#ff7a45' });
-    if ((cb.insuranceFee || 0) > 0) items.push({ name: '运费险', value: -(cb.insuranceFee || 0), fill: '#ffc53d' });
-    if ((cb.penaltyFee || 0) > 0) items.push({ name: '罚款/扣款', value: -(cb.penaltyFee || 0), fill: '#f5222d' });
-    if ((cb.marketingFee || 0) > 0) items.push({ name: '营销费用', value: -(cb.marketingFee || 0), fill: '#eb2f96' });
-    items.push({ name: '成本', value: -(cb.productCost || product.totalCost || 0), fill: 'var(--pdd-danger)' });
-    items.push({ name: '净利润', value: product.netProfit, fill: product.netProfit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' });
-    return items;
-  }, [product]);
+export default function ProductDetailDrawer({ product, skuList, isOpen, onClose }: Props) {
+  const [copiedId, setCopiedId] = useState(false);
+  const [skuOpen, setSkuOpen] = useState(true);
 
-  const afterSalePieData = useMemo(() => {
-    if (!product) return [];
-    return Object.entries(product.afterSaleBreakdown).map(([name, value]) => ({ name, value }));
-  }, [product]);
+  const skuStats = useMemo(() => {
+    if (!skuList.length) return null;
+    const allPrices = skuList.flatMap(s => s.prices);
+    const avg = allPrices.length > 0 ? allPrices.reduce((a, b) => a + b, 0) / allPrices.length : 0;
+    const min = allPrices.length > 0 ? Math.min(...allPrices) : 0;
+    const max = allPrices.length > 0 ? Math.max(...allPrices) : 0;
+    const totalSales = skuList.reduce((s, i) => s + i.sales, 0);
+    const totalRevenue = skuList.reduce((s, i) => s + i.revenue, 0);
+    const totalOrders = skuList.reduce((s, i) => s + i.orders, 0);
+    return { avgPrice: avg, minPrice: min, maxPrice: max, totalSales, totalRevenue, totalOrders };
+  }, [skuList]);
 
   if (!product) return null;
 
@@ -44,7 +46,6 @@ export default function ProductDetailDrawer({ product, isOpen, onClose }: Props)
     <AnimatePresence>
       {isOpen && (
         <>
-          {/* Backdrop */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -52,330 +53,241 @@ export default function ProductDetailDrawer({ product, isOpen, onClose }: Props)
             onClick={onClose}
             className="fixed inset-0 bg-black/20 backdrop-blur-sm z-40"
           />
-          
-          {/* Drawer */}
           <motion.div
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 28, stiffness: 220 }}
-            className="fixed right-0 top-0 bottom-0 w-full sm:w-[520px] max-w-full bg-pdd-card shadow-2xl z-50 flex flex-col border-l border-pdd-border"
+            className="fixed right-0 top-0 bottom-0 w-full sm:w-[520px] max-w-full bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200"
           >
             {/* Header */}
-            <div className="shrink-0 bg-pdd-card border-b border-pdd-border px-4 sm:px-6 py-4 sm:py-5 flex items-start justify-between">
-              <div className="flex-1 min-w-0 pr-2 sm:pr-4">
-                <h2 className="text-base sm:text-lg font-bold text-pdd-text truncate flex items-center gap-2">
-                  <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-pdd-danger/10 flex items-center justify-center shrink-0">
-                    <Package size={14} color="var(--pdd-danger)" />
+            <div className="shrink-0 bg-white border-b border-gray-200 px-4 sm:px-5 py-4 flex items-start justify-between">
+              <div className="flex-1 min-w-0 pr-2">
+                <h2 className="text-base sm:text-[15px] font-bold text-gray-800 truncate flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center shrink-0">
+                    <Package size={14} className="text-blue-600" />
                   </div>
                   <span className="truncate">{product.productName}</span>
                 </h2>
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2 text-xs text-pdd-text-secondary pl-[36px] sm:pl-[42px]">
-                  {product.productCode && <span className="font-mono bg-pdd-bg px-1.5 py-0.5 rounded text-pdd-text">{product.productCode}</span>}
-                  {product.firstOrderDate && <span>上架: {product.firstOrderDate}</span>}
-                  <span>活跃 {product.activeDays} 天</span>
+                <div className="flex flex-wrap items-center gap-1.5 mt-1.5 text-[11px] text-gray-400 pl-[36px]">
+                  <span className="font-mono text-gray-500">{product.productId}</span>
+                  <span className="ml-1 inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors cursor-pointer"
+                    onClick={() => { navigator.clipboard.writeText(product.productId).then(() => { setCopiedId(true); setTimeout(() => setCopiedId(false), 1500); }); }}>
+                    {copiedId ? <Check size={9} className="text-green-500" /> : <Copy size={9} />}
+                    {copiedId ? '已复制' : '复制ID'}
+                  </span>
+                  {product.productCode && (
+                    <span className="bg-gray-100 px-1.5 py-0.5 rounded text-gray-500">编码: {product.productCode}</span>
+                  )}
                 </div>
               </div>
-              <button onClick={onClose} className="p-2 rounded-xl hover:bg-pdd-bg transition-colors group">
-                <X size={18} className="text-pdd-text-secondary group-hover:text-pdd-text" />
+              <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors">
+                <X size={16} className="text-gray-400" />
               </button>
             </div>
 
-            {/* Scrollable Content */}
-            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
-              {/* Core KPI Cards - 2行3列 */}
-              <section>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                  {[
-                    { label: 'GMV', value: `¥${fmtInt(product.gmv)}`, color: 'var(--pdd-primary)', icon: DollarSign },
-                    { label: '实收金额', value: `¥${fmtInt(product.revenue)}`, color: 'var(--pdd-success)', icon: TrendingUp },
-                    { label: '净利润', value: `¥${fmtInt(product.netProfit)}`, color: product.netProfit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)', icon: product.netProfit >= 0 ? TrendingUp : TrendingDown },
-                    { label: '利润率', value: `${fmt(product.profitRate)}%`, color: product.profitRate >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)', icon: Target },
-                    { label: 'ROI', value: `${product.roi.toFixed(2)}x`, color: product.roi >= 1 ? 'var(--pdd-success)' : 'var(--pdd-danger)', icon: BarChart3 },
-                    { label: '退款率', value: `${fmt(product.refundRate)}%`, color: product.refundRate > 10 ? 'var(--pdd-danger)' : 'var(--pdd-success)', icon: RotateCcw },
-                  ].map((kpi) => (
-                    <div key={kpi.label} className="bg-pdd-bg rounded-xl p-3 hover:bg-pdd-bg transition-colors">
-                      <div className="flex items-center gap-1.5 mb-1.5">
-                        <kpi.icon size={12} color={kpi.color} />
-                        <span className="text-[11px] text-pdd-text-secondary font-medium">{kpi.label}</span>
-                      </div>
-                      <div className="text-base font-bold tracking-tight" style={{ color: kpi.color }}>{kpi.value}</div>
-                    </div>
-                  ))}
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3">
+
+              {/* 基本信息 */}
+              <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50">
+                  <Package size={13} className="text-blue-500" />
+                  <span className="text-[12px] font-bold text-gray-700">基本信息</span>
                 </div>
-              </section>
+                <div className="grid grid-cols-2 gap-y-3 gap-x-6 p-4 text-xs">
+                  <InfoRow label="商品ID" value={
+                    <span className="flex items-center gap-1">
+                      <span className="font-mono text-gray-800">{product.productId}</span>
+                      <span className="inline-flex items-center gap-0.5 px-1 py-0.5 rounded text-[9px] font-medium bg-gray-100 text-gray-500 hover:bg-gray-200 transition-colors cursor-pointer"
+                        onClick={() => { navigator.clipboard.writeText(product.productId).then(() => { setCopiedId(true); setTimeout(() => setCopiedId(false), 1500); }); }}>
+                        {copiedId ? <Check size={9} className="text-green-500" /> : <Copy size={9} />}
+                      </span>
+                    </span>
+                  } />
+                  <InfoRow label="商品编码" value={product.productCode || '-'} />
+                  <InfoRow label="首单日期" value={product.firstOrderDate || '-'} />
+                  <InfoRow label="最近出单" value={product.lastOrderDate || '-'} />
+                  <InfoRow label="活跃天数" value={product.activeDays !== undefined ? `${product.activeDays}天` : '-'} />
+                  <InfoRow label="总销量" value={<span className="font-semibold text-gray-800">{fmtNum(product.sales)}件</span>} />
+                  <InfoRow label="总收入" value={<span className="font-semibold text-gray-800">{fmtMoney(product.revenue)}</span>} />
+                  <InfoRow label="总订单" value={<span className="font-semibold text-gray-800">{fmtNum(product.orders)}单</span>} />
+                  <InfoRow label="退款率" value={
+                    <span className={`font-semibold ${product.refundRate > 10 ? 'text-red-500' : 'text-green-600'}`}>
+                      {product.refundRate.toFixed(1)}%
+                    </span>
+                  } />
+                  <InfoRow label="售后单" value={`${fmtNum(product.afterSaleCount)}单`} />
+                </div>
+              </div>
 
-              {/* Sales Trend Chart */}
-              {product.dailySales.length > 1 && (
-                <section className="bg-pdd-card border border-pdd-border rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-sm">
-                  <h3 className="text-sm font-bold text-pdd-text mb-4 flex items-center gap-2">
-                    <TrendingUp size={15} color="var(--pdd-danger)" />销售趋势
-                  </h3>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <LineChart data={product.dailySales}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" vertical={false} />
-                      <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }} tickFormatter={(v) => v.slice(5)} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="left" tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }} axisLine={false} tickLine={false} />
-                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.08)', fontSize: '11px' }} formatter={(v: number, name: string) => [name === 'gmv' ? `¥${fmt(v)}` : fmtInt(v), name === 'gmv' ? 'GMV' : '销量']} />
-                      <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '11px', paddingTop: '8px' }} />
-                      <Line yAxisId="left" type="monotone" dataKey="sales" name="销量" stroke="var(--pdd-primary)" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-                      <Line yAxisId="right" type="monotone" dataKey="gmv" name="GMV" stroke="var(--pdd-success)" strokeWidth={2.5} dot={false} activeDot={{ r: 4 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </section>
-              )}
-
-              {/* Price Distribution */}
-              {product.priceDistribution.length > 0 && (
-                <section className="bg-pdd-card border border-pdd-border rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-sm">
-                  <h3 className="text-sm font-bold text-pdd-text mb-4 flex items-center gap-2">
-                    <BarChart3 size={15} color="var(--pdd-danger)" />价格带分布
-                  </h3>
-                  <ResponsiveContainer width="100%" height={180}>
-                    <BarChart data={product.priceDistribution}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" vertical={false} />
-                      <XAxis dataKey="range" tick={{ fontSize: 9, fill: 'var(--pdd-text-secondary)' }} angle={-20} textAnchor="end" height={40} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }} axisLine={false} tickLine={false} />
-                      <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.08)', fontSize: '11px' }} formatter={(v: number) => [`${v}单`, '订单数']} cursor={{ fill: 'var(--pdd-bg)' }} />
-                      <Bar dataKey="count" fill="var(--pdd-primary)" radius={[6, 6, 0, 0]} barSize={24} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </section>
-              )}
-
-              {/* After Sale Breakdown */}
-              {afterSalePieData.length > 0 && (
-                <section className="bg-pdd-card border border-pdd-border rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-sm">
-                  <h3 className="text-sm font-bold text-pdd-text mb-4 flex items-center gap-2">
-                    <AlertTriangle size={15} color="var(--pdd-danger)" />售后原因拆解
-                  </h3>
-                  <ResponsiveContainer width="100%" height={200}>
-                    <PieChart>
-                      <Pie data={afterSalePieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={3} dataKey="value" strokeWidth={0}>
-                        {afterSalePieData.map((_, i) => (
-                          <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ borderRadius: '10px', border: 'none', boxShadow: '0 4px 16px rgba(0,0,0,0.08)', fontSize: '11px' }} formatter={(v: number) => [`${v}单`, '数量']} />
-                      <Legend iconType="circle" iconSize={8} wrapperStyle={{ fontSize: '11px' }} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </section>
-              )}
-
-              {/* Related Products */}
-              {product.relatedProducts.length > 0 && (
-                <section className="bg-pdd-card border border-pdd-border rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-sm">
-                  <h3 className="text-sm font-bold text-pdd-text mb-4 flex items-center gap-2">
-                    <Link2 size={15} color="var(--pdd-danger)" />关联购买 TOP5
-                  </h3>
-                  <div className="space-y-2">
-                    {product.relatedProducts.map((rp, i) => (
-                      <div key={rp.productId} className="flex items-center justify-between p-3 rounded-xl bg-pdd-bg hover:bg-pdd-bg transition-colors group">
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
-                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-[11px] font-bold shrink-0 ${i === 0 ? 'bg-pdd-danger/100 text-white' : i === 1 ? 'bg-orange-400 text-white' : i === 2 ? 'bg-yellow-400 text-white' : 'bg-pdd-bg text-pdd-text'}`}>{i + 1}</span>
-                          <span className="truncate text-xs font-medium text-pdd-text group-hover:text-pdd-danger transition-colors">{rp.productName}</span>
-                        </div>
-                        <span className="text-[11px] text-pdd-text-secondary font-mono shrink-0 ml-3">{rp.coOccurrenceCount}次同购</span>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-              )}
-
-              {/* Promo Funnel */}
-              {product.hasPromoData && (
-                <section className="bg-pdd-card border border-pdd-border rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-sm">
-                  <h3 className="text-sm font-bold text-pdd-text mb-4 flex items-center gap-2">
-                    <Zap size={15} color="var(--pdd-danger)" />推广效果汇总
-                  </h3>
-                  <div className="space-y-3">
-                    {[
-                      { label: '曝光', value: product.promoImpressions, color: 'var(--pdd-primary)' },
-                      { label: '点击', value: product.promoClicks, rate: product.ctr, color: 'var(--pdd-warning)' },
-                      { label: '成交', value: product.promoOrders, rate: product.cvr, color: 'var(--pdd-success)' },
-                    ].map((step, i) => (
-                      <div key={step.label} className="relative">
-                        <div className="flex items-center justify-between text-xs mb-1.5">
-                          <span className="font-semibold text-pdd-text">{step.label}</span>
-                          <div className="flex items-center gap-2">
-                            <span className="font-mono font-bold text-pdd-text">{step.value.toLocaleString()}</span>
-                            {step.rate !== undefined && <span className="text-[11px] text-pdd-text-secondary font-mono">({fmt(step.rate)}%)</span>}
-                          </div>
-                        </div>
-                        <div className="h-2.5 bg-pdd-bg rounded-full overflow-hidden">
-                          <div
-                            className="h-full rounded-full transition-all duration-700 ease-out"
-                            style={{
-                              width: `${Math.min(100, (step.value / Math.max(product.promoImpressions, 1)) * 100)}%`,
-                              backgroundColor: step.color
-                            }}
-                          />
-                        </div>
-                        {i < 2 && <ArrowRight size={12} className="absolute left-1/2 -translate-x-1/2 -bottom-3.5 text-pdd-border rotate-90" />}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-4 pt-4 border-t border-pdd-border grid grid-cols-2 gap-3">
-                    <div className="bg-pdd-primary/10/50 rounded-xl p-3">
-                      <span className="text-[11px] text-pdd-text-secondary block mb-1">推广花费</span>
-                      <span className="font-mono font-bold text-sm text-purple-700">¥{fmt(product.promoCost)}</span>
+              {/* SKU规格与价格 */}
+              {skuList.length > 0 && (
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100 bg-gray-50/50 cursor-pointer select-none"
+                    onClick={() => setSkuOpen(o => !o)}>
+                    <div className="flex items-center gap-1.5">
+                      <Tag size={13} className="text-blue-500" />
+                      <span className="text-[12px] font-bold text-gray-700">SKU规格与价格</span>
+                      <span className="text-[10px] text-gray-400 ml-1">({skuList.length})</span>
                     </div>
-                    <div className="bg-pdd-bg rounded-xl p-3">
-                      <span className="text-[11px] text-pdd-text-secondary block mb-1">推广ROI</span>
-                      <span className="font-mono font-bold text-sm" style={{ color: product.roi >= 0 ? 'var(--pdd-success)' : 'var(--pdd-primary-light)' }}>{product.roi.toFixed(2)}x</span>
-                    </div>
+                    <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${skuOpen ? 'rotate-180' : ''}`} />
                   </div>
-
-                  {/* 推广来源明细 */}
-                  {product.promoSourceDetails && product.promoSourceDetails.length > 0 && (
-                    <div className="mt-4 pt-4 border-t border-pdd-border">
-                      <h4 className="text-xs font-bold text-pdd-text mb-3 flex items-center gap-1.5">
-                        <Layers size={13} color="var(--pdd-purple)" />推广数据来源明细
-                        <span className="text-pdd-text-secondary font-normal">({product.promoSourceDetails.length}条)</span>
-                      </h4>
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs">
-                          <thead>
-                            <tr className="text-pdd-text-secondary border-b border-pdd-border">
-                              <th className="py-2 text-left font-medium">来源</th>
-                              <th className="py-2 text-left font-medium">日期</th>
-                              <th className="py-2 text-right font-medium">花费</th>
-                              <th className="py-2 text-right font-medium">点击</th>
-                              <th className="py-2 text-right font-medium">曝光</th>
-                              <th className="py-2 text-right font-medium">成交</th>
-                              <th className="py-2 text-right font-medium">交易额</th>
-                              <th className="py-2 text-right font-medium">CTR</th>
-                              <th className="py-2 text-right font-medium">CVR</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {product.promoSourceDetails.map((d, i) => (
-                              <tr key={i} className="border-b border-pdd-gray-50 hover:bg-pdd-bg transition-colors">
-                                <td className="py-2">
-                                  <span className={`px-1.5 py-0.5 rounded font-medium ${
-                                    d.source === '商品推广' ? 'bg-pdd-danger/10 text-pdd-danger' :
-                                    d.source === '商品推广汇总' ? 'bg-pink-50 text-pink-600' :
-                                    d.source === '明星店铺' ? 'bg-pdd-warning/10 text-orange-600' :
-                                    d.source === '直播推广' ? 'bg-pdd-primary/10 text-pdd-primary-dark' :
-                                    'bg-pdd-bg text-pdd-text'
-                                  }`}>{d.source}</span>
+                  {skuOpen && (
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="bg-gray-50 text-gray-500 border-b border-gray-100">
+                            <th className="py-2.5 px-3 text-left font-medium w-1/2">规格名称</th>
+                            <th className="py-2.5 px-3 text-right font-medium">售价</th>
+                            <th className="py-2.5 px-3 text-right font-medium">价格变动</th>
+                            <th className="py-2.5 px-3 text-right font-medium">销量</th>
+                            <th className="py-2.5 px-3 text-right font-medium">收入</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-50">
+                          {skuList.map((sku) => {
+                            const priceRange = sku.prices.length > 0
+                              ? { min: Math.min(...sku.prices), max: Math.max(...sku.prices) }
+                              : null;
+                            const hasVariation = priceRange && priceRange.max - priceRange.min > 0.01;
+                            const avgPrice = sku.prices.length > 0
+                              ? sku.prices.reduce((a, b) => a + b, 0) / sku.prices.length
+                              : 0;
+                            return (
+                              <tr key={sku.skuId} className="hover:bg-gray-50/50 transition-colors">
+                                <td className="py-2.5 px-3 text-gray-700 max-w-[200px]">
+                                  <div className="truncate font-medium">{sku.skuName}</div>
+                                  <div className="text-[10px] text-gray-400 font-mono mt-0.5">{sku.skuId}</div>
                                 </td>
-                                <td className="py-2 text-pdd-text font-mono">{d.date || '--'}</td>
-                                <td className="py-2 text-right font-mono text-purple-700">¥{d.cost.toFixed(2)}</td>
-                                <td className="py-2 text-right font-mono">{d.clicks.toLocaleString()}</td>
-                                <td className="py-2 text-right font-mono">{d.impressions.toLocaleString()}</td>
-                                <td className="py-2 text-right font-mono">{d.orders}</td>
-                                <td className="py-2 text-right font-mono">¥{d.transaction.toFixed(2)}</td>
-                                <td className="py-2 text-right font-mono text-pdd-text">{d.ctr.toFixed(2)}%</td>
-                                <td className="py-2 text-right font-mono text-pdd-text">{d.cvr.toFixed(2)}%</td>
+                                <td className="py-2.5 px-3 text-right font-mono font-semibold text-gray-800">
+                                  ¥{avgPrice.toFixed(2)}
+                                </td>
+                                <td className="py-2.5 px-3 text-right">
+                                  {hasVariation ? (
+                                    <span className="text-[11px] font-mono text-amber-600">
+                                      ¥{priceRange!.min.toFixed(2)} ~ ¥{priceRange!.max.toFixed(2)}
+                                    </span>
+                                  ) : (
+                                    <span className="text-gray-300">-</span>
+                                  )}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono text-gray-700">
+                                  {fmtNum(sku.sales)}
+                                </td>
+                                <td className="py-2.5 px-3 text-right font-mono text-gray-700">
+                                  {fmtMoney(sku.revenue)}
+                                </td>
                               </tr>
-                            ))}
-                          </tbody>
-                          <tfoot>
-                            <tr className="border-t border-pdd-border font-bold text-pdd-text bg-pdd-bg/50">
-                              <td className="py-2">合计</td>
-                              <td className="py-2">--</td>
-                              <td className="py-2 text-right font-mono text-purple-700">¥{product.promoSourceDetails.reduce((s, d) => s + d.cost, 0).toFixed(2)}</td>
-                              <td className="py-2 text-right font-mono">{product.promoSourceDetails.reduce((s, d) => s + d.clicks, 0).toLocaleString()}</td>
-                              <td className="py-2 text-right font-mono">{product.promoSourceDetails.reduce((s, d) => s + d.impressions, 0).toLocaleString()}</td>
-                              <td className="py-2 text-right font-mono">{product.promoSourceDetails.reduce((s, d) => s + d.orders, 0)}</td>
-                              <td className="py-2 text-right font-mono">¥{product.promoSourceDetails.reduce((s, d) => s + d.transaction, 0).toFixed(2)}</td>
-                              <td className="py-2 text-right font-mono">
-                                {(() => { const imp = product.promoSourceDetails.reduce((s, d) => s + d.impressions, 0); const clk = product.promoSourceDetails.reduce((s, d) => s + d.clicks, 0); return imp > 0 ? ((clk / imp) * 100).toFixed(2) : '0.00'; })()}%
-                              </td>
-                              <td className="py-2 text-right font-mono">
-                                {(() => { const clk = product.promoSourceDetails.reduce((s, d) => s + d.clicks, 0); const ord = product.promoSourceDetails.reduce((s, d) => s + d.orders, 0); return clk > 0 ? ((ord / clk) * 100).toFixed(2) : '0.00'; })()}%
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
-                      </div>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     </div>
                   )}
-                </section>
+                </div>
               )}
 
-              {/* Profit Waterfall — 扣费明细表 */}
-              <section className="bg-pdd-card border border-pdd-border rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-sm">
-                <h3 className="text-sm font-bold text-pdd-text mb-3 flex items-center gap-2">
-                  <DollarSign size={15} color="var(--pdd-danger)" />费用明细 · 扣费分解
-                </h3>
-                <div className="text-[11px] text-pdd-text-secondary mb-2 px-1">每项费用去向清楚，运营必看</div>
-                <div className="overflow-hidden rounded-lg border border-pdd-border">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-pdd-bg text-pdd-text-secondary">
-                        <th className="py-2 px-3 text-left font-medium">项目</th>
-                        <th className="py-2 px-3 text-right font-medium w-28">金额</th>
-                        <th className="py-2 px-3 text-right font-medium w-16">占GMV</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-pdd-border">
-                      {waterfallData.map((item) => {
-                        const gmv = product?.gmv || 1;
-                        const pct = gmv > 0 ? (Math.abs(item.value) / gmv * 100) : 0;
-                        const isRevenue = item.value > 0;
-                        const isNetProfit = item.name === '净利润';
-                        return (
-                          <tr key={item.name}
-                            className={`hover:bg-pdd-bg transition-colors ${isNetProfit ? 'font-bold bg-green-50/30' : ''} ${item.name === 'GMV' ? 'bg-blue-50/20' : ''}`}>
-                            <td className={`py-2.5 px-3 ${isNetProfit ? 'text-green-700' : isRevenue ? 'text-pdd-text font-semibold' : 'text-pdd-text-secondary'}`}>
-                              {item.name}
-                              {item.name === '净利润' && <span className="ml-1.5 px-1 py-0.5 bg-green-100 text-green-700 rounded text-[10px]">最终利润</span>}
-                            </td>
-                            <td className={`py-2.5 px-3 text-right font-mono font-semibold ${isRevenue ? 'text-green-600' : 'text-red-500'}`}>
-                              {item.value >= 0 ? '+' : ''}¥{fmt(Math.abs(item.value))}
-                            </td>
-                            <td className={`py-2.5 px-3 text-right font-mono ${isRevenue ? 'text-green-600' : 'text-red-400'}`}>
-                              {pct.toFixed(1)}%
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-                {/* 提示 */}
-                {product?.costSource && product.costSource.productCost !== 'real' && (
-                  <div className="mt-2 text-[10px] text-pdd-warning flex items-center gap-1 bg-orange-50/50 px-2 py-1 rounded">
-                    <AlertTriangle size={11} />
-                    商品成本为估算值，建议在"成本管理"页面配置精确SKU成本以获得准确利润
+              {/* 改价趋势折线图 */}
+              {skuList.filter(s => s.prices.length >= 2).length > 0 && (() => {
+                // 取价格记录最多的前5个SKU
+                const topSku = [...skuList].filter(s => s.prices.length >= 2).sort((a, b) => b.sales - a.sales).slice(0, 5);
+                const maxLen = Math.max(...topSku.map(s => s.prices.length));
+                const chartData = Array.from({ length: maxLen }, (_, i) => {
+                  const point: Record<string, any> = { index: `#${i + 1}` };
+                  topSku.forEach(s => {
+                    if (i < s.prices.length) point[s.skuName] = s.prices[i];
+                  });
+                  return point;
+                });
+                const colors = ['#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'];
+                return (
+                  <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                    <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50">
+                      <TrendingUp size={13} className="text-blue-500" />
+                      <span className="text-[12px] font-bold text-gray-700">SKU改价趋势</span>
+                    </div>
+                    <div className="p-3">
+                      <ResponsiveContainer width="100%" height={200}>
+                        <LineChart data={chartData} margin={{ top: 5, right: 8, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
+                          <XAxis dataKey="index" tick={{ fontSize: 10, fill: '#999' }} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 10, fill: '#999' }} axisLine={false} tickLine={false} tickFormatter={(v: number) => `¥${v.toFixed(0)}`} />
+                          <Tooltip
+                            contentStyle={{ borderRadius: '8px', border: '1px solid #e5e7eb', boxShadow: '0 4px 12px rgba(0,0,0,0.06)', fontSize: '11px' }}
+                            formatter={(v: number, name: string) => [`¥${v.toFixed(2)}`, name]}
+                          />
+                          {topSku.map((s, i) => (
+                            <Line key={s.skuId} type="monotone" dataKey={s.skuName} stroke={colors[i % colors.length]} strokeWidth={2} dot={false} activeDot={{ r: 3 }} />
+                          ))}
+                        </LineChart>
+                      </ResponsiveContainer>
+                      <div className="flex flex-wrap gap-3 mt-1 justify-center">
+                        {topSku.map((s, i) => (
+                          <div key={s.skuId} className="flex items-center gap-1 text-[10px] text-gray-500">
+                            <span className="w-2 h-2 rounded-full inline-block" style={{ backgroundColor: colors[i % colors.length] }} />
+                            <span className="max-w-[80px] truncate">{s.skuName}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   </div>
-                )}
-              </section>
+                );
+              })()}
 
-              {/* Inventory & Turnover */}
-              <section className="bg-pdd-card border border-pdd-border rounded-xl sm:rounded-2xl p-4 sm:p-5 shadow-sm">
-                <h3 className="text-sm font-bold text-pdd-text mb-4 flex items-center gap-2">
-                  <Layers size={15} color="var(--pdd-danger)" />库存与周转
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-pdd-bg rounded-xl p-3.5">
-                    <span className="text-[11px] text-pdd-text-secondary block mb-1.5">预估库存</span>
-                    <span className="font-mono font-bold text-lg text-pdd-text">{product.inventoryEstimate}</span>
+              {/* 价格统计分析 */}
+              {skuStats && (
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50">
+                    <DollarSign size={13} className="text-blue-500" />
+                    <span className="text-[12px] font-bold text-gray-700">价格统计分析</span>
                   </div>
-                  <div className="bg-pdd-bg rounded-xl p-3.5">
-                    <span className="text-[11px] text-pdd-text-secondary block mb-1.5">周转天数</span>
-                    <span className="font-mono font-bold text-lg" style={{ color: product.turnoverDays > 30 ? 'var(--pdd-primary-light)' : product.turnoverDays > 14 ? 'var(--pdd-warning)' : 'var(--pdd-success)' }}>
-                      {product.turnoverDays}天
-                    </span>
-                  </div>
-                  <div className="bg-pdd-bg rounded-xl p-3.5">
-                    <span className="text-[11px] text-pdd-text-secondary block mb-1.5">日均销量</span>
-                    <span className="font-mono font-bold text-lg text-pdd-text">{fmt(product.avgDailySales)}</span>
-                  </div>
-                  <div className="bg-pdd-bg rounded-xl p-3.5">
-                    <span className="text-[11px] text-pdd-text-secondary block mb-1.5">售罄率</span>
-                    <span className="font-mono font-bold text-lg text-pdd-text">{fmt(product.sellThroughRate)}%</span>
+                  <div className="grid grid-cols-3 gap-0">
+                    <StatTile label="平均售价" value={`¥${skuStats.avgPrice.toFixed(2)}`} sub={skuList.flatMap(s => s.prices).length > 0 ? `${skuList.flatMap(s => s.prices).length}个价格样本` : undefined} />
+                    <StatTile label="最低售价" value={`¥${skuStats.minPrice.toFixed(2)}`} borderLeft />
+                    <StatTile label="最高售价" value={`¥${skuStats.maxPrice.toFixed(2)}`} borderLeft />
                   </div>
                 </div>
-              </section>
+              )}
+
+              {/* 销售汇总 */}
+              {skuStats && (
+                <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="flex items-center gap-1.5 px-4 py-2.5 border-b border-gray-100 bg-gray-50/50">
+                    <Activity size={13} className="text-blue-500" />
+                    <span className="text-[12px] font-bold text-gray-700">销售汇总</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-0">
+                    <StatTile label="总销量" value={`${fmtNum(skuStats.totalSales)}`} sub="件" />
+                    <StatTile label="总订单" value={`${fmtNum(skuStats.totalOrders)}`} sub="单" borderLeft />
+                    <StatTile label="总收入" value={fmtMoney(skuStats.totalRevenue)} borderLeft />
+                  </div>
+                </div>
+              )}
+
             </div>
           </motion.div>
         </>
       )}
     </AnimatePresence>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex items-center justify-between min-w-0">
+      <span className="text-gray-400 shrink-0">{label}</span>
+      <span className="text-gray-700 text-right ml-2">{value}</span>
+    </div>
+  );
+}
+
+function StatTile({ label, value, sub, borderLeft }: { label: string; value: string; sub?: string; borderLeft?: boolean }) {
+  return (
+    <div className={`py-4 px-4 text-center ${borderLeft ? 'border-l border-gray-100' : ''}`}>
+      <div className="text-[11px] text-gray-400 mb-1">{label}</div>
+      <div className="text-base font-bold text-gray-800">{value}</div>
+      {sub && <div className="text-[10px] text-gray-400 mt-0.5">{sub}</div>}
+    </div>
   );
 }

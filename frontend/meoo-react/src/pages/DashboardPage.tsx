@@ -1,9 +1,10 @@
 import React, { useMemo, useState, useEffect } from 'react';
-import { TrendingUp, ShoppingCart, DollarSign, AlertTriangle, RotateCcw, Package, Users, Clock, Truck, Tag, BarChart3, Search, Download, FileSpreadsheet, RefreshCw, Target, Megaphone, Percent, Mail, Database, X, Settings } from 'lucide-react';
+import { TrendingUp, ShoppingCart, DollarSign, AlertTriangle, RotateCcw, Package, Users, Clock, Truck, Tag, BarChart3, Download, FileSpreadsheet, RefreshCw, Target, Megaphone, Percent, Mail, Database, X, Shield, Eye, MousePointerClick, MessageCircle, Heart, UserPlus } from 'lucide-react';
 import { useData } from '../App';
 import { findField, safeField } from '../utils/fieldAccess';
 import { getBestPlatformFee, getBestInsuranceFee, getPenaltyFees, getMarketingFees } from '../utils/financialActuals';
 import TimeFilter, { useTimeFilter, TimeRange, TimeGranularity, safeFloat, filterByTimeRange, filterPromoByTimeRange, getCompareOrders } from '../components/TimeFilter';
+import { UnifiedFilterBar } from '../components/FilterToolbar';
 import { evaluateFormula, FormulaContext } from '../utils/formulaEngine';
 import { buildTrendData, buildCompareTrendData } from '../utils/trendData';
 import DashboardKpiPanel from './dashboard/DashboardKpiPanel';
@@ -38,7 +39,7 @@ export default function DashboardPage() {
       const saved = localStorage.getItem('dianfx_selected_trend_kpis');
       if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr) && arr.length > 0) return new Set(arr); }
     } catch {}
-    return new Set(['gmv', 'orderCount']);
+    return new Set(['merchantReceived', 'orderCount', 'promoCost', 'profit']);
   });
   const [hiddenCols, setHiddenCols] = useState<Set<string>>(() => {
     try {
@@ -55,17 +56,9 @@ export default function DashboardPage() {
     return new Set();
   });
   const [colWidths, setColWidths] = useState<Record<string, number>>({});
-  const [draggedPanel, setDraggedPanel] = useState<string | null>(null);
   const [orderDetail, setOrderDetail] = useState<any>(null);
   const [orderCustomCosts, setOrderCustomCosts] = useState<Record<string, { name: string; amount: number }[]>>(() => {
     try { const s = localStorage.getItem('dianfx_order_custom_costs'); return s ? JSON.parse(s) : {}; } catch { return {}; }
-  });
-  const [panelOrder, setPanelOrder] = useState<string[]>(() => {
-    try {
-      const saved = localStorage.getItem('dianfx_dashboard_panel_order');
-      if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr) && arr.length > 0) return arr; }
-    } catch {}
-    return ['kpi', 'trend', 'status', 'table'];
   });
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -74,11 +67,22 @@ export default function DashboardPage() {
       const saved = localStorage.getItem('dianfx_visible_kpis');
       if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr) && arr.length > 0) return new Set(arr); }
     } catch {}
-    return new Set(['GMV（商品总价）', '有效订单量', '自然单', '自然销售额', '客单价', '售后率', '退款率', '买家数', '商品数', '罚款金额', '退款金额', '优惠总额', '利润金额', '平均发货时长', '用户实付', '推广花费', '推广GMV', '推广ROI', '点击率', '转化率', '平均点击成本', '平均获客成本', '推广占比', '全店投产']);
+    // 默认 12 个核心指标，其他在"指标"面板里选
+    return new Set([
+      '商家实收', '客单价', '有效订单量', '退款金额',
+      '退款单数', '转化率', '推广花费', 'GMV（商品总价）',
+      '推广ROI', '推广订单量', '平均获客成本', '利润金额'
+    ]);
   });
   const [kpiCardOrder, setKpiCardOrder] = useState<string[]>(() => {
     const saved = localStorage.getItem('dianfx_kpi_card_order');
-    return saved ? JSON.parse(saved) : [];
+    if (saved) {
+      try { const parsed = JSON.parse(saved); if (Array.isArray(parsed) && parsed.length > 0) return parsed; } catch {}
+    }
+    // 首次访问：与默认 visibleKpis 顺序一致
+    return ['商家实收', '客单价', '有效订单量', '退款金额',
+      '退款单数', '转化率', '推广花费', 'GMV（商品总价）',
+      '推广ROI', '推广订单量', '平均获客成本', '利润金额'];
   });
   const [showKpiSelector, setShowKpiSelector] = useState(false);
 
@@ -102,11 +106,6 @@ export default function DashboardPage() {
   useEffect(() => {
     localStorage.setItem('dianfx_pinned_cols', JSON.stringify([...pinnedCols]));
   }, [pinnedCols]);
-  // 持久化面板排序
-  useEffect(() => {
-    localStorage.setItem('dianfx_dashboard_panel_order', JSON.stringify(panelOrder));
-  }, [panelOrder]);
-
   // ★ 确保有数据：如果全局状态为空，直接拉取
   useEffect(() => {
     if (dashData || !dataFilter) return;
@@ -223,7 +222,7 @@ export default function DashboardPage() {
         const shipT = new Date(String(findField(o, '发货时间') || ''));
         return s + (shipT.getTime() - payT.getTime()) / 3600000;
       }, 0) / shipped : 0;
-      return { gmv, cnt, avg, paid, asRate, rfRate, rfAmount, postage, discount, conversionRate, avgShipHours };
+      return { gmv, cnt, avg, paid, asRate, rfRate, rfAmount, postage, discount, conversionRate, avgShipHours, rfCnt };
     }
     // 兜底：订单为空时尝试服务端数据
     if (dashData?.kpi) {
@@ -235,7 +234,7 @@ export default function DashboardPage() {
         gmv: sk.gmv, cnt: sk.orders, avg: sk.avgOrder, paid: sk.paid,
         asRate: sk.afterSaleRate, rfRate: sk.refundRate, rfAmount: refundAmount,
         postage: sk.postage ?? 0, discount: sk.discount,
-        conversionRate: sk.conversionRate ?? 0, avgShipHours: sk.avgShipHours ?? 0,
+        conversionRate: sk.conversionRate ?? 0, avgShipHours: sk.avgShipHours ?? 0, rfCnt: sk.refundOrders ?? 0,
       };
     }
     return null;
@@ -343,21 +342,6 @@ export default function DashboardPage() {
     if (next.has(col)) next.delete(col); else next.add(col);
     setPinnedCols(next);
   };
-
-  const handleDragStart = (panel: string) => setDraggedPanel(panel);
-  const handleDragOver = (e: React.DragEvent, targetPanel: string) => {
-    e.preventDefault();
-    if (draggedPanel && draggedPanel !== targetPanel) {
-      const newOrder = [...panelOrder];
-      const fromIdx = newOrder.indexOf(draggedPanel);
-      const toIdx = newOrder.indexOf(targetPanel);
-      newOrder.splice(fromIdx, 1);
-      newOrder.splice(toIdx, 0, draggedPanel);
-      setPanelOrder(newOrder);
-      setDraggedPanel(targetPanel);
-    }
-  };
-  const handleDragEnd = () => setDraggedPanel(null);
 
   const filteredPromoSummary = useMemo(() => {
     const records = currentDisplayData?.promotionSummary || [];
@@ -578,30 +562,43 @@ export default function DashboardPage() {
   }, [filteredPromoProducts]);
 
   const allKpiCards = [
-    { label: 'GMV（商品总价）', value: kpi?.gmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: 'var(--pdd-primary)', change: compareEnabled ? changePct(kpi?.gmv || 0, compareKpi?.gmv || 0) : null, source: '订单·商品总价(元) SUM' },
-    { label: '有效订单量', value: kpi?.cnt, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, color: 'var(--pdd-info)', change: compareEnabled ? changePct(kpi?.cnt || 0, compareKpi?.cnt || 0) : null, source: '订单·COUNT 排除已取消' },
-    { label: '自然单', value: organicAndProfit.organicOrders, fmt: (v: number) => v.toFixed(0), icon: TrendingUp, color: 'var(--pdd-success)', change: null, source: '总订单 − 推广订单' },
-    { label: '自然销售额', value: organicAndProfit.organicGmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, color: '#73d13d', change: null, source: '总GMV − 推广GMV' },
-    { label: '客单价', value: kpi?.avg, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: TrendingUp, color: 'var(--pdd-success)', change: compareEnabled ? changePct(kpi?.avg || 0, compareKpi?.avg || 0) : null, source: '用户实付 ÷ 订单数' },
-    { label: '售后率', value: kpi?.asRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: AlertTriangle, color: 'var(--pdd-warning)', change: null, source: '售后记录 ÷ 订单数' },
-    { label: '退款率', value: kpi?.rfRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: RotateCcw, color: 'var(--pdd-danger)', change: null, source: '订单·售后状态含退款 / 订单数' },
-    { label: '买家数', value: (dashData?.kpi?.buyers != null) ? dashData!.kpi!.buyers : (new Set(filteredOrders.map(o => { const no = String(findField(o, '订单号') || '').trim(); return no;}).filter(Boolean)).size || (filteredOrders.length > 0 ? 1 : 0)), fmt: (v: number) => v.toFixed(0), icon: Users, color: '#722ed1', change: null, source: '订单·订单号 DISTINCT COUNT' },
-    { label: '商品数', value: (dashData?.kpi?.productCount != null) ? dashData!.kpi!.productCount : new Set(filteredOrders.map(o => String(findField(o, '商品id', '商品ID') || '').trim()).filter(id => id && id !== '-' && id !== '')).size, fmt: (v: number) => v.toFixed(0), icon: Package, color: '#eb2f96', change: null, source: '订单·商品ID DISTINCT COUNT' },
-    { label: '罚款金额', value: (dashData?.kpi?.penalties != null) ? dashData!.kpi!.penalties : penaltySummary.penaltyAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: AlertTriangle, color: 'var(--pdd-danger)', change: null, source: '货款明细·004开头账务 SUM' },
-    { label: '退款金额', value: kpi?.rfAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: RotateCcw, color: '#ff7875', change: null, source: '订单·退款金额(元) SUM' },
-    { label: '优惠总额', value: kpi?.discount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, color: '#ffc53d', change: null, source: '订单·店铺+平台+立减+优惠券 SUM' },
-    { label: '利润金额', value: organicAndProfit.profit, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: organicAndProfit.profit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)', change: null, source: '实收−退款−推广−运费险−罚款' },
-    { label: '平均发货时长', value: kpi?.avgShipHours, fmt: (v: number) => `${v.toFixed(1)}h`, icon: Clock, color: '#597ef7', change: null, source: '订单·发货时间−支付时间 AVG' },
-    { label: '用户实付', value: kpi?.paid, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: '#73d13d', change: null, source: '订单·用户实付金额(元) SUM' },
-    { label: '推广花费', value: promoKpi?.totalCost, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: BarChart3, color: 'var(--pdd-primary)', change: null, source: '推广·成交花费(元) SUM' },
-    { label: '推广GMV', value: promoKpi?.promoGMV, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, color: '#722ed1', change: null, source: '推广·交易额(元) SUM' },
-    { label: '推广ROI', value: promoKpi?.roi, fmt: (v: number) => v.toFixed(2), icon: Target, color: 'var(--pdd-success)', change: null, source: '推广GMV ÷ 推广花费' },
-    { label: '点击率', value: promoKpi?.ctr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Target, color: 'var(--pdd-warning)', change: null, source: '推广·点击量÷曝光量' },
-    { label: '转化率', value: promoKpi?.cvr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Percent, color: '#13c2c2', change: null, source: '推广·成交笔数÷点击量' },
-    { label: '平均点击成本', value: promoKpi?.cpc, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, color: '#eb2f96', change: null, source: '推广花费 ÷ 点击量' },
-    { label: '平均获客成本', value: promoKpi?.cpa, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Users, color: '#722ed1', change: null, source: '推广花费 ÷ 成交笔数' },
-    { label: '推广占比', value: (kpi?.gmv || 0) > 0 && (promoKpi?.totalCost || 0) > 0 ? ((promoKpi!.totalCost / kpi!.gmv) * 100) : 0, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Target, color: '#fa541c', change: null, source: '推广花费 ÷ 总GMV' },
-    { label: '全店投产', value: (promoKpi?.totalCost || 0) > 0 && (kpi?.gmv || 0) > 0 ? (kpi!.gmv / promoKpi!.totalCost) : 0, fmt: (v: number) => v.toFixed(2), icon: TrendingUp, color: 'var(--pdd-success)', change: null, source: '总GMV ÷ 推广花费' },
+    { label: 'GMV（商品总价）', value: kpi?.gmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: compareEnabled ? changePct(kpi?.gmv || 0, compareKpi?.gmv || 0) : null, source: '订单·商品总价(元) SUM' },
+    { label: '有效订单量', value: kpi?.cnt, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, change: compareEnabled ? changePct(kpi?.cnt || 0, compareKpi?.cnt || 0) : null, source: '订单·COUNT 排除已取消' },
+    { label: '商家实收', value: organicAndProfit.totalMerchantReceived, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: null, source: '订单·商家实收金额(元) SUM' },
+    { label: '用户实付', value: kpi?.paid, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: null, source: '订单·用户实付金额(元) SUM' },
+    { label: '客单价', value: kpi?.avg, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: TrendingUp, change: compareEnabled ? changePct(kpi?.avg || 0, compareKpi?.avg || 0) : null, source: '用户实付 ÷ 订单数' },
+    { label: '利润金额', value: organicAndProfit.profit, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: null, source: '实收−退款−推广−运费险−罚款' },
+    { label: '退款金额', value: kpi?.rfAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: RotateCcw, change: null, source: '订单·退款金额(元) SUM' },
+    { label: '退款单数', value: kpi?.rfCnt, fmt: (v: number) => v.toFixed(0), icon: RotateCcw, change: null, source: '订单·售后状态含退款 COUNT' },
+    { label: '退款率', value: kpi?.rfRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: RotateCcw, change: null, source: '订单·售后状态含退款 / 订单数' },
+    { label: '售后率', value: kpi?.asRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: AlertTriangle, change: null, source: '售后记录 ÷ 订单数' },
+    { label: '自然单', value: organicAndProfit.organicOrders, fmt: (v: number) => v.toFixed(0), icon: TrendingUp, change: null, source: '总订单 − 推广订单' },
+    { label: '自然销售额', value: organicAndProfit.organicGmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, change: null, source: '总GMV − 推广GMV' },
+    { label: '买家数', value: (dashData?.kpi?.buyers != null) ? dashData!.kpi!.buyers : (new Set(filteredOrders.map(o => { const no = String(findField(o, '订单号') || '').trim(); return no;}).filter(Boolean)).size || (filteredOrders.length > 0 ? 1 : 0)), fmt: (v: number) => v.toFixed(0), icon: Users, change: null, source: '订单·订单号 DISTINCT COUNT' },
+    { label: '商品数', value: (dashData?.kpi?.productCount != null) ? dashData!.kpi!.productCount : new Set(filteredOrders.map(o => String(findField(o, '商品id', '商品ID') || '').trim()).filter(id => id && id !== '-' && id !== '')).size, fmt: (v: number) => v.toFixed(0), icon: Package, change: null, source: '订单·商品ID DISTINCT COUNT' },
+    { label: '罚款金额', value: (dashData?.kpi?.penalties != null) ? dashData!.kpi!.penalties : penaltySummary.penaltyAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: AlertTriangle, change: null, source: '货款明细·004开头账务 SUM' },
+    { label: '罚款次数', value: penaltySummary.penaltyCount, fmt: (v: number) => v.toFixed(0), icon: AlertTriangle, change: null, source: '货款明细·004开头 COUNT' },
+    { label: '优惠总额', value: kpi?.discount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, change: null, source: '订单·店铺+平台+立减+优惠券 SUM' },
+    { label: '平均发货时长', value: kpi?.avgShipHours, fmt: (v: number) => `${v.toFixed(1)}h`, icon: Clock, change: null, source: '订单·发货时间−支付时间 AVG' },
+    { label: '发货率', value: kpi?.conversionRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Truck, change: null, source: '已发货 ÷ 总订单' },
+    { label: '平台服务费', value: organicAndProfit.totalPlatformFee, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, change: null, source: '订单·平台技术服务费 SUM' },
+    { label: '快递成本', value: kpi?.postage, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Truck, change: null, source: '订单·邮费(元) SUM' },
+    { label: '运费险', value: insuranceSummary, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Shield, change: null, source: '运费险·服务费用 SUM' },
+    { label: '推广花费', value: promoKpi?.totalCost, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: BarChart3, change: null, source: '推广·成交花费(元) SUM' },
+    { label: '推广GMV', value: promoKpi?.promoGMV, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, change: null, source: '推广·交易额(元) SUM' },
+    { label: '推广ROI', value: promoKpi?.roi, fmt: (v: number) => v.toFixed(2), icon: Target, change: null, source: '推广GMV ÷ 推广花费' },
+    { label: '推广订单量', value: promoKpi?.promoOrders, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, change: null, source: '推广·成交笔数 SUM' },
+    { label: '点击率', value: promoKpi?.ctr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Target, change: null, source: '推广·点击量÷曝光量' },
+    { label: '转化率', value: promoKpi?.cvr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Percent, change: null, source: '推广·成交笔数÷点击量' },
+    { label: '平均点击成本', value: promoKpi?.cpc, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, change: null, source: '推广花费 ÷ 点击量' },
+    { label: '平均获客成本', value: promoKpi?.cpa, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Users, change: null, source: '推广花费 ÷ 成交笔数' },
+    { label: '曝光量', value: promoKpi?.totalImpressions, fmt: (v: number) => v.toFixed(0), icon: Eye, change: null, source: '推广·曝光量 SUM' },
+    { label: '点击量', value: promoKpi?.totalClicks, fmt: (v: number) => v.toFixed(0), icon: MousePointerClick, change: null, source: '推广·点击量 SUM' },
+    { label: '推广占比', value: (kpi?.gmv || 0) > 0 && (promoKpi?.totalCost || 0) > 0 ? ((promoKpi!.totalCost / kpi!.gmv) * 100) : 0, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Target, change: null, source: '推广花费 ÷ 总GMV' },
+    { label: '全店投产', value: (promoKpi?.totalCost || 0) > 0 && (kpi?.gmv || 0) > 0 ? (kpi!.gmv / promoKpi!.totalCost) : 0, fmt: (v: number) => v.toFixed(2), icon: TrendingUp, change: null, source: '总GMV ÷ 推广花费' },
+    { label: '询单成本', value: promoKpi?.avgInquiryCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: MessageCircle, change: null, source: '推广·询单花费÷询单量' },
+    { label: '收藏成本', value: promoKpi?.avgFavoriteCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Heart, change: null, source: '推广·收藏花费÷收藏量' },
+    { label: '关注成本', value: promoKpi?.avgFollowCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: UserPlus, change: null, source: '推广·关注花费÷关注量' },
   ];
   const kpiCards = useMemo(() => {
     const filtered = allKpiCards.filter(c => visibleKpis.has(c.label));
@@ -632,7 +629,7 @@ export default function DashboardPage() {
   const unpinnedColumns = columns.filter(c => !pinnedCols.has(c.key) && !hiddenCols.has(c.key));
 
   const handleKpiClick = (label: string) => {
-    // 退款类KPI：同时切换趋势图折线（详情弹窗通过卡片上的"详情"按钮打开）
+    // 趋势图切换
     setKpiActiveFilter(null);
     const kpiKeyMap: Record<string, string> = {
       'GMV（商品总价）': 'gmv', '有效订单量': 'orderCount', '自然单': 'orderCount', '自然销售额': 'gmv',
@@ -652,6 +649,14 @@ export default function DashboardPage() {
         return next;
       });
     }
+  };
+
+  /** 指标选择面板中勾选时添加到末尾 */
+  const handleKpiSelect = (label: string) => {
+    setKpiCardOrder(prev => {
+      const filtered = prev.filter(l => l !== label);
+      return [...filtered, label];
+    });
   };
 
   const handleKpiDetailClick = (label: string) => {
@@ -692,28 +697,28 @@ export default function DashboardPage() {
   const renderPanel = (panelId: string) => {
     switch (panelId) {
       case 'kpi':
-        return <DashboardKpiPanel key="kpi" kpiCards={kpiCards} allKpiCards={allKpiCards} visibleKpis={visibleKpis} setVisibleKpis={setVisibleKpis} showKpiSelector={showKpiSelector} setShowKpiSelector={setShowKpiSelector} filteredOrders={orders} noData={noData} draggedPanel={draggedPanel} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onCardClick={(label) => { handleKpiClick(label); }} onDetailClick={(label) => { handleKpiDetailClick(label); }} onCardReorder={(newOrder) => setKpiCardOrder(newOrder.map(c => c.label))} dailyKpiData={dailyKpiData} compareData={compareDailyKpiData} selectedTrendKpis={selectedTrendKpis} rangeLabel={rangeLabel} compareEnabled={compareEnabled} />;
+        return <DashboardKpiPanel key="kpi" kpiCards={kpiCards} allKpiCards={allKpiCards} visibleKpis={visibleKpis} setVisibleKpis={setVisibleKpis} showKpiSelector={showKpiSelector} setShowKpiSelector={setShowKpiSelector} filteredOrders={orders} noData={noData} onCardClick={(label) => { handleKpiClick(label); }} onDetailClick={(label) => { handleKpiDetailClick(label); }} onCardReorder={(newOrder) => setKpiCardOrder(newOrder.map(c => c.label))} onKpiSelect={handleKpiSelect} dailyKpiData={dailyKpiData} compareData={compareDailyKpiData} selectedTrendKpis={selectedTrendKpis} rangeLabel={rangeLabel} compareEnabled={compareEnabled} onClearLines={() => setSelectedTrendKpis(new Set())} />;
       case 'trend':
-        return <DashboardTrendPanel key="trend" revenueTrend={revenueTrend} noData={noData} rangeLabel={rangeLabel} draggedPanel={draggedPanel} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />;
+        return <DashboardTrendPanel key="trend" revenueTrend={revenueTrend} noData={noData} rangeLabel={rangeLabel} />;
       case 'status':
-        return <DashboardStatusPanel key="status" statusDist={statusDist} noData={noData} draggedPanel={draggedPanel} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />;
+        return <DashboardStatusPanel key="status" statusDist={statusDist} noData={noData} totalOrders={kpi?.cnt} />;
       case 'table':
         return <React.Fragment key="table">
           {kpiActiveFilter && (
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-pdd-primary/10 border border-pdd-primary/20 rounded-lg text-xs">
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-pdd-primary/10 border border-pdd-primary/20 rounded-lg text-xs mb-2">
               <span className="text-pdd-text-secondary">筛选：</span>
               <span className="font-medium text-pdd-primary">{kpiActiveFilter}</span>
               <button onClick={() => setKpiActiveFilter(null)} className="text-pdd-text-secondary hover:text-pdd-danger"><X size={12} /></button>
             </div>
           )}
-          <DashboardTablePanel key="table" tableData={tableData} paginatedData={paginatedData} columns={columns} visibleColumns={visibleColumns} pinnedColumns={pinnedColumns} unpinnedColumns={unpinnedColumns} hiddenCols={hiddenCols} pinnedCols={pinnedCols} sortField={sortField} sortDesc={sortDesc} currentPage={currentPage} totalPages={totalPages} setCurrentPage={setCurrentPage} toggleCol={toggleCol} togglePin={togglePin} setSortField={setSortField} setSortDesc={setSortDesc} draggedPanel={draggedPanel} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} onRowClick={(row) => setOrderDetail(row._raw)} searchQuery={searchQuery} onSearchChange={setSearchQuery} />
+          <DashboardTablePanel key="table" tableData={tableData} paginatedData={paginatedData} columns={columns} visibleColumns={visibleColumns} sortField={sortField} sortDesc={sortDesc} currentPage={currentPage} totalPages={totalPages} setCurrentPage={setCurrentPage} setSortField={setSortField} setSortDesc={setSortDesc} onRowClick={(row) => setOrderDetail(row._raw)} searchQuery={searchQuery} onSearchChange={setSearchQuery} />
         </React.Fragment>;
       default: return null;
     }
   };
 
   return (
-    <div className="p-3 space-y-3 min-h-screen">
+    <div className="p-4 lg:p-6 space-y-4 min-h-screen">
       {/* 数据状态指示 */}
       {!dashData && !analyticsLoading && (
         <div className="px-4 py-3 bg-yellow-500/10 border border-yellow-500/20 rounded-xl text-sm text-yellow-300">
@@ -732,55 +737,29 @@ export default function DashboardPage() {
           </button>
         </div>
       )}
-      <div className="flex items-center gap-2 flex-wrap bg-pdd-card rounded-xl border border-pdd-border px-3 py-2">
-        <div className="flex items-center gap-1 bg-pdd-bg rounded-lg px-2.5 py-1.5 border border-pdd-border w-[280px]">
-          <Search size={14} className="text-pdd-text-secondary shrink-0" />
-          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="搜索订单号/商品/编码..." className="flex-1 text-xs outline-none bg-transparent text-pdd-text placeholder-pdd-text-secondary" />
-          {searchQuery && (
-            <button onClick={() => setSearchQuery('')} className="text-xs text-pdd-text-secondary hover:text-pdd-danger bg-[var(--pdd-gray-200)] hover:bg-[var(--pdd-gray-300)] px-1.5 py-0.5 rounded transition-colors">清除</button>
-          )}
-        </div>
-        <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="px-2 py-1 rounded-lg text-xs border border-pdd-border bg-pdd-bg text-pdd-text">
-          <option value="all">全部类目</option>
-          {categories.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-        <select value={selectedProvince} onChange={e => setSelectedProvince(e.target.value)} className="px-2 py-1 rounded-lg text-xs border border-pdd-border bg-pdd-bg text-pdd-text">
-          <option value="all">全部省份</option>
-          {provinces.map(p => <option key={p} value={p}>{p}</option>)}
-        </select>
-        <TimeFilter state={tf} compact />
-        <span className="flex-1" />
-        <button onClick={handleRefresh} className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs border border-pdd-border text-pdd-text-secondary hover:border-pdd-primary/30 hover:text-pdd-text transition-all ${isRefreshing ? 'animate-spin' : ''}`}><RefreshCw size={12} /></button>
-        <button onClick={exportCSV} className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs bg-pdd-success/20 text-pdd-success border border-pdd-success/20 hover:bg-pdd-success/30 transition-all"><FileSpreadsheet size={12} />CSV</button>
-        <button onClick={exportJSON} className="flex items-center gap-1 px-2 py-1 rounded-lg text-xs bg-pdd-info/20 text-pdd-info border border-pdd-info/20 hover:bg-pdd-info/30 transition-all"><Download size={12} />JSON</button>
-        <button onClick={() => setShowKpiSelector(!showKpiSelector)} className={`flex items-center gap-1 px-2 py-1 rounded-lg text-xs border transition-all ${showKpiSelector ? 'bg-pdd-primary/20 text-pdd-primary border-pdd-primary/30' : 'border-pdd-border text-pdd-text-secondary hover:border-pdd-primary/30'}`}><Settings size={12} />筛选</button>
-        <span className="text-xs text-pdd-text-secondary whitespace-nowrap">更新于 {lastRefresh.toLocaleTimeString()}</span>
-      </div>
+      <UnifiedFilterBar
+        timeFilter={tf}
+        dropdowns={[
+          { value: selectedCategory, onChange: setSelectedCategory, options: categories.map(c => ({ value: c, label: c })), placeholder: '全部类目' },
+          { value: selectedProvince, onChange: setSelectedProvince, options: provinces.map(p => ({ value: p, label: p })), placeholder: '全部省份' },
+        ]}
+        actions={[
+          { label: '指标', onClick: () => setShowKpiSelector(!showKpiSelector), active: showKpiSelector },
+          { label: 'JSON', onClick: exportJSON },
+        ]}
+        onExportCSV={exportCSV}
+        onRefresh={handleRefresh}
+        refreshing={isRefreshing}
+        lastRefresh={lastRefresh}
+      />
 
-      <div className="space-y-3">
-        {(() => {
-          const elements: React.ReactNode[] = [];
-          let i = 0;
-          while (i < panelOrder.length) {
-            const pid = panelOrder[i];
-            if (pid === 'trend' && panelOrder[i + 1] === 'status') {
-              elements.push(
-                <div key="trend-status-row" className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {renderPanel('trend')}
-                  {renderPanel('status')}
-                </div>
-              );
-              i += 2;
-            } else if (pid === 'kpi') {
-              elements.push(<div key={pid}>{renderPanel(pid)}</div>);
-              i++;
-            } else {
-              elements.push(<div key={pid}>{renderPanel(pid)}</div>);
-              i++;
-            }
-          }
-          return elements;
-        })()}
+      <div className="space-y-4">
+        {renderPanel('kpi')}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {renderPanel('trend')}
+          {renderPanel('status')}
+        </div>
+        {renderPanel('table')}
       </div>
 
       {/* KPI 明细弹窗 */}
@@ -1149,7 +1128,7 @@ export default function DashboardPage() {
               <div className="overflow-y-auto px-4 py-3 space-y-3 flex-1">
                 {sections.map((sec, si) => (
                   <div key={si}>
-                    <h3 className="text-[11px] font-semibold text-pdd-primary-light mb-1.5 border-b border-pdd-border pb-0.5">{sec.title}</h3>
+                    <h3 className="text-xs font-bold text-gray-700 mb-1.5 border-b border-pdd-border pb-0.5">{sec.title}</h3>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0">
                       {sec.rows.map(([label, value], ri) => (
                         <div key={ri} className="flex justify-between text-[11px] py-0.5 border-b border-[var(--pdd-gray-100)]">
@@ -1162,7 +1141,7 @@ export default function DashboardPage() {
                 ))}
                 {/* 自定义费用编辑区 */}
                 <div>
-                  <h3 className="text-[11px] font-semibold text-pdd-primary-light mb-1.5 border-b border-pdd-border pb-0.5 flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-gray-700 mb-1.5 border-b border-pdd-border pb-0.5 flex items-center justify-between">
                     自定义费用
                     <button onClick={addCustomCost} className="text-[10px] px-1.5 py-0.5 rounded bg-pdd-primary/10 text-pdd-primary-light hover:bg-pdd-primary/20">+添加</button>
                   </h3>

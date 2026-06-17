@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { adminApi, type SystemSettings } from '../../../api/adminApi';
 import {
   Brain, Key, Hash, Cpu, Shield, Bell, Users, Clock,
   Trash2, Eye, EyeOff, Save,
 } from 'lucide-react';
+import { useSystemSettings, useUpdateSystemSettings } from '../../hooks/useAdminData';
+import type { SystemSettings } from '../../../api/adminApi';
 
 const DEFAULT_SETTINGS: SystemSettings = {
   registrationOpen: true,
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS: SystemSettings = {
   tokenExpiresMinutes: 15,
   wecomWebhook: '',
   dingtalkWebhook: '',
+  copyEnabled: true,
   aiEnabled: false,
   aiApiKey: '',
   aiDailyLimit: 10,
@@ -25,21 +27,18 @@ const DEFAULT_SETTINGS: SystemSettings = {
 };
 
 export default function AdminSettings() {
-  const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [showApiKey, setShowApiKey] = useState(false);
 
+  const { data: loadedSettings, isLoading } = useSystemSettings();
+  const updateMutation = useUpdateSystemSettings();
+
+  const [settings, setSettings] = useState<SystemSettings>(DEFAULT_SETTINGS);
+
+  // sync loaded settings into local form state once
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await adminApi.getSettings();
-        if (res) setSettings(res);
-      } catch { /* ignore */ }
-      setLoading(false);
-    })();
-  }, []);
+    if (loadedSettings) setSettings(loadedSettings);
+  }, [loadedSettings]);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMsg({ type, text });
@@ -47,21 +46,19 @@ export default function AdminSettings() {
   };
 
   const handleSave = async () => {
-    setSaving(true);
     try {
-      const res = await adminApi.updateSettings(settings);
+      const res = await updateMutation.mutateAsync(settings);
       showMsg(res.success ? 'success' : 'error', res.success ? '设置保存成功' : (res.error || '保存失败'));
     } catch {
       showMsg('error', '保存设置失败，请检查网络连接');
     }
-    setSaving(false);
   };
 
   const update = <K extends keyof SystemSettings>(key: K, value: SystemSettings[K]) => {
     setSettings(s => ({ ...s, [key]: value }));
   };
 
-  if (loading) return <div className="text-pdd-text-secondary py-8 text-center">加载设置中...</div>;
+  if (isLoading) return <div className="text-pdd-text-secondary py-8 text-center">加载设置中...</div>;
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -143,6 +140,12 @@ export default function AdminSettings() {
 
       {/* 安全设置 */}
       <SectionCard icon={<Shield size={16} className="text-purple-400" />} title="安全设置">
+        <ToggleRow
+          label="允许复制内容"
+          hint="开启后用户可以选中和复制页面内容，关闭则禁止复制"
+          checked={settings.copyEnabled}
+          onChange={v => update('copyEnabled', v)}
+        />
         <NumberRow
           label="登录尝试次数限制" hint="连续失败超过此次数将临时锁定"
           value={settings.maxLoginAttempts}
@@ -256,12 +259,12 @@ export default function AdminSettings() {
       <div className="flex items-center gap-3 pt-2">
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={updateMutation.isPending}
           className="px-6 py-2.5 bg-pdd-primary text-white rounded-lg text-sm font-medium
             disabled:opacity-50 hover:bg-pdd-primary/90 transition-colors flex items-center gap-2"
         >
           <Save size={14} />
-          {saving ? '保存中...' : '保存设置'}
+          {updateMutation.isPending ? '保存中...' : '保存设置'}
         </button>
       </div>
     </div>
@@ -298,7 +301,7 @@ function ToggleRow({ label, hint, checked, onChange, activeColor }: {
         onClick={() => onChange(!checked)}
         className={'w-11 h-6 rounded-full transition-colors ' + (checked ? color : 'bg-pdd-border')}
       >
-        <div className={'w-5 h-5 bg-white rounded-full shadow transition-transform ' +
+        <div className={'w-5 h-5 bg-pdd-card rounded-full shadow transition-transform ' +
           (checked ? 'translate-x-6' : 'translate-x-0.5')}
         />
       </button>

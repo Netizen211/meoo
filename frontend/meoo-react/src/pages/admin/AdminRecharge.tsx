@@ -1,10 +1,15 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Check, X, RefreshCw, AlertCircle, ChevronLeft, ChevronRight,
   Download, Filter, Eye, CheckSquare, Shield, CreditCard, Clock, Search,
 } from 'lucide-react';
 import { adminApi } from '../../../api/adminApi';
+import {
+  useRechargeList,
+  useReviewRecharge,
+  useBatchReviewRecharge,
+} from '../../hooks/useAdminData';
 
 interface RechargeItem {
   id: number;
@@ -36,11 +41,9 @@ const TABS: { key: TabKey; label: string; color: string }[] = [
 ];
 
 export default function AdminRecharge() {
-  const [items, setItems] = useState<RechargeItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<TabKey>('pending');
   const [page, setPage] = useState(1);
-  const [total, setTotal] = useState(0);
+  const [search, setSearch] = useState('');
   const [actionMsg, setActionMsg] = useState('');
 
   // Review modal
@@ -49,7 +52,6 @@ export default function AdminRecharge() {
     action: 'approve' | 'reject';
   } | null>(null);
   const [reviewNote, setReviewNote] = useState('');
-  const [processing, setProcessing] = useState(false);
 
   // Batch review
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -57,7 +59,6 @@ export default function AdminRecharge() {
     action: 'approve' | 'reject';
     note: string;
   } | null>(null);
-  const [batchProcessing, setBatchProcessing] = useState(false);
 
   // Detail modal
   const [detailItem, setDetailItem] = useState<RechargeItem | null>(null);
@@ -65,42 +66,36 @@ export default function AdminRecharge() {
   // Exporting
   const [exporting, setExporting] = useState(false);
 
-  // Search
-  const [search, setSearch] = useState('');
+  // ---- react-query ----
+  const { data: listRes, isLoading, refetch } = useRechargeList(tab, page, PAGE_SIZE, search || undefined);
+  const reviewMutation = useReviewRecharge();
+  const batchMutation = useBatchReviewRecharge();
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    const res = await adminApi.getRechargeList(tab, page, PAGE_SIZE, search || undefined);
-    if (res.success) {
-      setItems(res.data || []);
-      setTotal((res as any).total ?? 0);
-      setSelectedIds(new Set());
-    }
-    setLoading(false);
-  }, [tab, page, search]);
+  const items = (listRes?.items ?? []) as RechargeItem[];
+  const total = listRes?.total ?? 0;
 
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
-
-  const handleReview = async () => {
-    if (!reviewModal) return;
-    setProcessing(true);
-    const res = await adminApi.reviewRecharge(
-      reviewModal.item.id,
-      reviewModal.action,
-      reviewNote || undefined
-    );
-    setProcessing(false);
-    if (res.success) {
-      setActionMsg(reviewModal.action === 'approve' ? '审核通过' : '已拒绝');
-      setReviewModal(null);
-      setReviewNote('');
-      loadData();
-    } else {
-      setActionMsg('操作失败');
-    }
+  const showMsg = (text: string) => {
+    setActionMsg(text);
     setTimeout(() => setActionMsg(''), 2000);
+  };
+
+  const handleReview = () => {
+    if (!reviewModal) return;
+    reviewMutation.mutate(
+      { orderId: reviewModal.item.id, action: reviewModal.action, note: reviewNote || undefined },
+      {
+        onSuccess: (res: any) => {
+          if (res.success) {
+            showMsg(reviewModal.action === 'approve' ? '审核通过' : '已拒绝');
+            setReviewModal(null);
+            setReviewNote('');
+          } else {
+            showMsg('操作失败');
+          }
+        },
+        onError: () => showMsg('操作失败'),
+      }
+    );
   };
 
   const openReviewModal = (item: RechargeItem, action: 'approve' | 'reject') => {
@@ -127,29 +122,28 @@ export default function AdminRecharge() {
   };
 
   // Batch review
-  const handleBatchReview = async () => {
+  const handleBatchReview = () => {
     if (!batchConfirm) return;
-    setBatchProcessing(true);
     const ids = Array.from(selectedIds);
-    const res = await adminApi.batchReviewRecharge(
-      ids,
-      batchConfirm.action,
-      batchConfirm.note || undefined
+    batchMutation.mutate(
+      { ids, action: batchConfirm.action, note: batchConfirm.note || undefined },
+      {
+        onSuccess: (res: any) => {
+          if (res.success) {
+            showMsg(
+              batchConfirm.action === 'approve'
+                ? `已通过 ${ids.length} 条申请`
+                : `已拒绝 ${ids.length} 条申请`
+            );
+            setSelectedIds(new Set());
+            setBatchConfirm(null);
+          } else {
+            showMsg('批量操作失败');
+          }
+        },
+        onError: () => showMsg('批量操作失败'),
+      }
     );
-    setBatchProcessing(false);
-    if (res.success) {
-      setActionMsg(
-        batchConfirm.action === 'approve'
-          ? `已通过 ${ids.length} 条申请`
-          : `已拒绝 ${ids.length} 条申请`
-      );
-      setSelectedIds(new Set());
-      setBatchConfirm(null);
-      loadData();
-    } else {
-      setActionMsg('批量操作失败');
-    }
-    setTimeout(() => setActionMsg(''), 2000);
   };
 
   // Export
@@ -207,8 +201,8 @@ export default function AdminRecharge() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-pdd-text-primary">充值审核</h2>
-          <p className="text-xs text-pdd-text-secondary mt-0.5">
+          <h2 className="text-lg font-semibold" style={{ color: 'var(--pdd-text)' }}>充值审核</h2>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--pdd-text-secondary)' }}>
             共 {total} 条记录
             {selectedIds.size > 0 && `，已选择 ${selectedIds.size} 条`}
           </p>
@@ -217,14 +211,16 @@ export default function AdminRecharge() {
           <button
             onClick={handleExport}
             disabled={exporting}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-pdd-border text-xs text-pdd-text-secondary hover:text-pdd-primary hover:border-pdd-primary/50 transition-colors disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-colors disabled:opacity-50 hover:bg-pdd-gray-100"
+            style={{ borderColor: 'var(--pdd-border)', color: 'var(--pdd-text-secondary)' }}
           >
             <Download size={13} />
             {exporting ? '导出中...' : '导出'}
           </button>
           <button
-            onClick={loadData}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-pdd-border text-xs text-pdd-text-secondary hover:text-pdd-primary hover:border-pdd-primary/50 transition-colors"
+            onClick={() => refetch()}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs transition-colors hover:bg-pdd-gray-100"
+            style={{ borderColor: 'var(--pdd-border)', color: 'var(--pdd-text-secondary)' }}
           >
             <RefreshCw size={13} />
             刷新
@@ -239,7 +235,8 @@ export default function AdminRecharge() {
             initial={{ opacity: 0, y: -4 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            className="text-sm text-pdd-success bg-pdd-success/10 px-3 py-2 rounded border border-pdd-success/20"
+            className="text-sm px-3 py-2 rounded border"
+            style={{ color: 'var(--pdd-success)', background: 'rgba(16, 185, 129, 0.1)', borderColor: 'rgba(16, 185, 129, 0.2)' }}
           >
             {actionMsg}
           </motion.div>
@@ -247,7 +244,7 @@ export default function AdminRecharge() {
       </AnimatePresence>
 
       {/* Tabs & Search */}
-      <div className="flex items-center gap-3 border-b border-pdd-border">
+      <div className="flex items-center gap-3 border-b" style={{ borderColor: 'var(--pdd-border)' }}>
         <div className="flex items-center gap-0">
         {TABS.map(t => (
           <button
@@ -256,8 +253,9 @@ export default function AdminRecharge() {
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors -mb-[1px] ${
               tab === t.key
                 ? `${t.color} border-current`
-                : 'border-transparent text-pdd-text-secondary hover:text-pdd-text-primary'
+                : 'border-transparent hover:text-pdd-text'
             }`}
+            style={tab !== t.key ? { color: 'var(--pdd-text-secondary)' } : {}}
           >
             {t.label}
           </button>
@@ -267,12 +265,13 @@ export default function AdminRecharge() {
         {/* Search */}
         <div className="ml-auto flex items-center gap-2 pb-1">
           <div className="relative">
-            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-pdd-text-secondary" />
+            <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--pdd-text-secondary)' }} />
             <input
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
               placeholder="搜索用户名..."
-              className="pl-8 pr-3 py-1.5 text-xs bg-pdd-bg border border-pdd-border rounded-lg outline-none focus:border-pdd-primary/50 w-40 text-pdd-text-primary"
+              className="pl-8 pr-3 py-1.5 text-xs rounded-lg outline-none w-40"
+              style={{ background: 'var(--pdd-bg)', border: '1px solid #E3EAF5', color: 'var(--pdd-text)' }}
             />
           </div>
         </div>
@@ -299,37 +298,38 @@ export default function AdminRecharge() {
       </div>
 
       {/* Table */}
-      <div className="bg-pdd-card rounded-xl border border-pdd-border overflow-hidden">
+      <div className="bg-pdd-card rounded-xl border overflow-hidden" style={{ borderColor: 'var(--pdd-border)' }}>
         <div className="overflow-x-auto">
-          {loading ? (
-            <div className="text-center py-16 text-pdd-text-secondary">加载中...</div>
+          {isLoading ? (
+            <div className="text-center py-16" style={{ color: 'var(--pdd-text-secondary)' }}>加载中...</div>
           ) : items.length === 0 ? (
-            <div className="text-center py-16 text-pdd-text-secondary">
+            <div className="text-center py-16" style={{ color: 'var(--pdd-text-secondary)' }}>
               <CreditCard size={32} className="mx-auto mb-2 opacity-30" />
               <p className="text-sm">暂无充值记录</p>
             </div>
           ) : (
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-pdd-border bg-pdd-bg/50">
+                <tr className="border-b" style={{ borderColor: 'var(--pdd-border)', background: 'var(--pdd-gray-50)' }}>
                   {tab === 'pending' && (
                     <th className="py-3 px-3 w-10">
                       <input
                         type="checkbox"
                         checked={selectedIds.size === pendingItems.length && pendingItems.length > 0}
                         onChange={toggleSelectAll}
-                        className="rounded border-pdd-border"
+                        className="rounded"
+                        style={{ borderColor: 'var(--pdd-border)' }}
                       />
                     </th>
                   )}
-                  <th className="text-left py-3 px-4 font-medium text-pdd-text-secondary">ID</th>
-                  <th className="text-left py-3 px-4 font-medium text-pdd-text-secondary">申请人</th>
-                  <th className="text-left py-3 px-4 font-medium text-pdd-text-secondary">套餐</th>
-                  <th className="text-left py-3 px-4 font-medium text-pdd-text-secondary">金额</th>
-                  <th className="text-left py-3 px-4 font-medium text-pdd-text-secondary">微信昵称</th>
-                  <th className="text-left py-3 px-4 font-medium text-pdd-text-secondary">申请时间</th>
-                  <th className="text-left py-3 px-4 font-medium text-pdd-text-secondary">状态</th>
-                  <th className="text-left py-3 px-4 font-medium text-pdd-text-secondary">操作</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--pdd-text-secondary)' }}>ID</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--pdd-text-secondary)' }}>申请人</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--pdd-text-secondary)' }}>套餐</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--pdd-text-secondary)' }}>金额</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--pdd-text-secondary)' }}>微信昵称</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--pdd-text-secondary)' }}>申请时间</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--pdd-text-secondary)' }}>状态</th>
+                  <th className="text-left py-3 px-4 font-medium" style={{ color: 'var(--pdd-text-secondary)' }}>操作</th>
                 </tr>
               </thead>
               <tbody>
@@ -339,9 +339,8 @@ export default function AdminRecharge() {
                   return (
                     <tr
                       key={item.id}
-                      className={`border-b border-pdd-border/30 hover:bg-pdd-bg/30 transition-colors ${
-                        isSelected ? 'bg-pdd-info/5' : ''
-                      }`}
+                      className="border-b transition-colors hover:bg-pdd-gray-100/50"
+                      style={{ borderColor: 'var(--pdd-border)', background: isSelected ? 'rgba(31, 107, 255, 0.04)' : undefined }}
                     >
                       {tab === 'pending' && (
                         <td className="py-3 px-3" onClick={e => e.stopPropagation()}>
@@ -349,32 +348,33 @@ export default function AdminRecharge() {
                             type="checkbox"
                             checked={isSelected}
                             onChange={() => toggleSelect(item.id)}
-                            className="rounded border-pdd-border"
+                            className="rounded"
+                            style={{ borderColor: 'var(--pdd-border)' }}
                           />
                         </td>
                       )}
-                      <td className="py-3 px-4 text-pdd-text-secondary tabular-nums">
+                      <td className="py-3 px-4 tabular-nums" style={{ color: 'var(--pdd-text-secondary)' }}>
                         #{item.id}
                       </td>
                       <td className="py-3 px-4">
-                        <div className="font-medium text-pdd-text-primary">{item.username}</div>
-                        <div className="text-xs text-pdd-text-secondary">{item.userId}</div>
+                        <div className="font-medium" style={{ color: 'var(--pdd-text)' }}>{item.username}</div>
+                        <div className="text-xs" style={{ color: 'var(--pdd-text-secondary)' }}>{item.userId}</div>
                       </td>
                       <td className="py-3 px-4">
-                        <div className="text-pdd-text-primary font-medium text-xs">
+                        <div className="font-medium text-xs" style={{ color: 'var(--pdd-text)' }}>
                           {PLAN_LABELS[item.plan] || item.plan}
                         </div>
-                        <span className="text-[10px] text-pdd-text-secondary">
+                        <span className="text-[10px]" style={{ color: 'var(--pdd-text-secondary)' }}>
                           {DURATION_LABELS[item.duration] || item.duration}
                         </span>
                       </td>
-                      <td className="py-3 px-4 font-medium text-pdd-text-primary tabular-nums">
+                      <td className="py-3 px-4 font-medium tabular-nums" style={{ color: 'var(--pdd-text)' }}>
                         ¥{item.amount}
                       </td>
-                      <td className="py-3 px-4 text-pdd-text-secondary text-xs">
+                      <td className="py-3 px-4 text-xs" style={{ color: 'var(--pdd-text-secondary)' }}>
                         {item.wechatNickname || '-'}
                       </td>
-                      <td className="py-3 px-4 text-pdd-text-secondary text-xs">
+                      <td className="py-3 px-4 text-xs" style={{ color: 'var(--pdd-text-secondary)' }}>
                         {new Date(item.createdAt).toLocaleString('zh-CN')}
                       </td>
                       <td className="py-3 px-4">{getStatusBadge(item.status)}</td>
@@ -382,7 +382,8 @@ export default function AdminRecharge() {
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => setDetailItem(item)}
-                            className="p-1.5 rounded text-pdd-text-secondary hover:text-pdd-info hover:bg-pdd-info/10 transition-colors"
+                            className="p-1.5 rounded transition-colors hover:bg-pdd-gray-100"
+                            style={{ color: 'var(--pdd-text-secondary)' }}
                             title="查看详情"
                           >
                             <Eye size={15} />
@@ -391,14 +392,16 @@ export default function AdminRecharge() {
                             <>
                               <button
                                 onClick={() => openReviewModal(item, 'approve')}
-                                className="p-1.5 rounded text-green-600 hover:bg-green-50 transition-colors"
+                                className="p-1.5 rounded transition-colors hover:bg-green-50"
+                                style={{ color: 'var(--pdd-success)' }}
                                 title="通过"
                               >
                                 <Check size={15} />
                               </button>
                               <button
                                 onClick={() => openReviewModal(item, 'reject')}
-                                className="p-1.5 rounded text-red-600 hover:bg-red-50 transition-colors"
+                                className="p-1.5 rounded transition-colors hover:bg-red-50"
+                                style={{ color: 'var(--pdd-danger)' }}
                                 title="拒绝"
                               >
                                 <X size={15} />
@@ -406,7 +409,7 @@ export default function AdminRecharge() {
                             </>
                           )}
                           {!isPending && item.reviewedAt && (
-                            <span className="text-xs text-pdd-text-secondary">
+                            <span className="text-xs" style={{ color: 'var(--pdd-text-secondary)' }}>
                               {new Date(item.reviewedAt).toLocaleDateString('zh-CN')}
                             </span>
                           )}
@@ -423,24 +426,26 @@ export default function AdminRecharge() {
 
       {/* Pagination */}
       {total > 0 && (
-        <div className="flex items-center justify-between text-sm text-pdd-text-secondary">
+        <div className="flex items-center justify-between text-sm" style={{ color: 'var(--pdd-text-secondary)' }}>
           <span>共 {total} 条记录</span>
           {totalPages > 1 && (
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page <= 1}
-                className="p-1.5 rounded border border-pdd-border disabled:opacity-30 hover:bg-pdd-bg transition-colors"
+                className="p-1.5 rounded border disabled:opacity-30 transition-colors hover:bg-pdd-gray-100"
+                style={{ borderColor: 'var(--pdd-border)' }}
               >
                 <ChevronLeft size={14} />
               </button>
-              <span className="px-2 text-xs text-pdd-text-primary tabular-nums">
+              <span className="px-2 text-xs tabular-nums" style={{ color: 'var(--pdd-text)' }}>
                 {page} / {totalPages}
               </span>
               <button
                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
-                className="p-1.5 rounded border border-pdd-border disabled:opacity-30 hover:bg-pdd-bg transition-colors"
+                className="p-1.5 rounded border disabled:opacity-30 transition-colors hover:bg-pdd-gray-100"
+                style={{ borderColor: 'var(--pdd-border)' }}
               >
                 <ChevronRight size={14} />
               </button>
@@ -463,24 +468,26 @@ export default function AdminRecharge() {
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
-              className="bg-pdd-card rounded-xl p-6 max-w-md w-full shadow-xl border border-pdd-border"
+              className="bg-pdd-card rounded-xl p-6 max-w-md w-full shadow-xl border"
+              style={{ borderColor: 'var(--pdd-border)' }}
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center">
-                    <Eye size={20} className="text-blue-600" />
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: 'var(--pdd-gray-100)' }}>
+                    <Eye size={20} style={{ color: 'var(--pdd-primary)' }} />
                   </div>
                   <div>
-                    <h3 className="text-sm font-bold text-pdd-text-primary">申请详情 #{detailItem.id}</h3>
-                    <p className="text-xs text-pdd-text-secondary mt-0.5">
+                    <h3 className="text-sm font-bold" style={{ color: 'var(--pdd-text)' }}>申请详情 #{detailItem.id}</h3>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--pdd-text-secondary)' }}>
                       {new Date(detailItem.createdAt).toLocaleString('zh-CN')}
                     </p>
                   </div>
                 </div>
                 <button
                   onClick={() => setDetailItem(null)}
-                  className="p-1.5 rounded-lg hover:bg-pdd-bg transition-colors text-pdd-text-secondary"
+                  className="p-1.5 rounded-lg transition-colors hover:bg-pdd-gray-100"
+                  style={{ color: 'var(--pdd-text-secondary)' }}
                 >
                   <X size={16} />
                 </button>
@@ -488,55 +495,55 @@ export default function AdminRecharge() {
 
               <div className="space-y-3 mb-5">
                 <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary">申请人</span>
-                  <span className="text-pdd-text-primary font-medium">{detailItem.username}</span>
+                  <span style={{ color: 'var(--pdd-text-secondary)' }}>申请人</span>
+                  <span className="font-medium" style={{ color: 'var(--pdd-text)' }}>{detailItem.username}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary">用户ID</span>
-                  <span className="text-pdd-text-primary text-xs">{detailItem.userId}</span>
+                  <span style={{ color: 'var(--pdd-text-secondary)' }}>用户ID</span>
+                  <span className="text-xs" style={{ color: 'var(--pdd-text)' }}>{detailItem.userId}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary">套餐</span>
-                  <span className="text-pdd-text-primary font-medium">
+                  <span style={{ color: 'var(--pdd-text-secondary)' }}>套餐</span>
+                  <span className="font-medium" style={{ color: 'var(--pdd-text)' }}>
                     {PLAN_LABELS[detailItem.plan] || detailItem.plan} ({DURATION_LABELS[detailItem.duration] || detailItem.duration})
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary">金额</span>
-                  <span className="text-pdd-text-primary font-medium">¥{detailItem.amount}</span>
+                  <span style={{ color: 'var(--pdd-text-secondary)' }}>金额</span>
+                  <span className="font-medium" style={{ color: 'var(--pdd-text)' }}>¥{detailItem.amount}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary">微信昵称</span>
-                  <span className="text-pdd-text-primary">{detailItem.wechatNickname || '-'}</span>
+                  <span style={{ color: 'var(--pdd-text-secondary)' }}>微信昵称</span>
+                  <span style={{ color: 'var(--pdd-text)' }}>{detailItem.wechatNickname || '-'}</span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary">备注</span>
-                  <span className="text-pdd-text-primary text-xs max-w-[200px] truncate">
+                  <span style={{ color: 'var(--pdd-text-secondary)' }}>备注</span>
+                  <span className="text-xs max-w-[200px] truncate" style={{ color: 'var(--pdd-text)' }}>
                     {detailItem.remark || '-'}
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-pdd-text-secondary">状态</span>
+                  <span style={{ color: 'var(--pdd-text-secondary)' }}>状态</span>
                   <span>{getStatusBadge(detailItem.status)}</span>
                 </div>
                 {detailItem.reviewedBy && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-pdd-text-secondary">审核人</span>
-                    <span className="text-pdd-text-primary">{detailItem.reviewedBy}</span>
+                    <span style={{ color: 'var(--pdd-text-secondary)' }}>审核人</span>
+                    <span style={{ color: 'var(--pdd-text)' }}>{detailItem.reviewedBy}</span>
                   </div>
                 )}
                 {detailItem.reviewedAt && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-pdd-text-secondary">审核时间</span>
-                    <span className="text-pdd-text-primary text-xs">
+                    <span style={{ color: 'var(--pdd-text-secondary)' }}>审核时间</span>
+                    <span className="text-xs" style={{ color: 'var(--pdd-text)' }}>
                       {new Date(detailItem.reviewedAt).toLocaleString('zh-CN')}
                     </span>
                   </div>
                 )}
                 {detailItem.reviewNote && (
                   <div className="flex justify-between text-sm">
-                    <span className="text-pdd-text-secondary">审核备注</span>
-                    <span className="text-pdd-text-primary text-xs max-w-[200px] text-right">
+                    <span style={{ color: 'var(--pdd-text-secondary)' }}>审核备注</span>
+                    <span className="text-xs max-w-[200px] text-right" style={{ color: 'var(--pdd-text)' }}>
                       {detailItem.reviewNote}
                     </span>
                   </div>
@@ -545,7 +552,8 @@ export default function AdminRecharge() {
 
               <button
                 onClick={() => setDetailItem(null)}
-                className="w-full py-2.5 rounded-lg border border-pdd-border text-sm text-pdd-text-secondary hover:bg-pdd-bg transition-colors"
+                className="w-full py-2.5 rounded-lg border text-sm transition-colors hover:bg-pdd-gray-100"
+                style={{ borderColor: 'var(--pdd-border)', color: 'var(--pdd-text-secondary)' }}
               >
                 关闭
               </button>
@@ -568,7 +576,8 @@ export default function AdminRecharge() {
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
-              className="bg-pdd-card rounded-xl p-6 max-w-md w-full shadow-xl border border-pdd-border"
+              className="bg-pdd-card rounded-xl p-6 max-w-md w-full shadow-xl border"
+              style={{ borderColor: 'var(--pdd-border)' }}
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center gap-3 mb-4">
@@ -582,48 +591,48 @@ export default function AdminRecharge() {
                   )}
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-pdd-text-primary">
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--pdd-text)' }}>
                     {reviewModal.action === 'approve' ? '确认通过充值申请' : '确认拒绝充值申请'}
                   </h3>
-                  <p className="text-xs text-pdd-text-secondary mt-0.5">
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--pdd-text-secondary)' }}>
                     申请人：{reviewModal.item.username} | #{reviewModal.item.id}
                   </p>
                 </div>
               </div>
 
               {/* Application summary */}
-              <div className="bg-pdd-bg rounded-lg p-3 mb-4 space-y-2 text-sm">
+              <div className="rounded-lg p-3 mb-4 space-y-2 text-sm" style={{ background: 'var(--pdd-bg)' }}>
                 <div className="flex justify-between">
-                  <span className="text-pdd-text-secondary">套餐</span>
-                  <span className="text-pdd-text-primary font-medium">
+                  <span style={{ color: 'var(--pdd-text-secondary)' }}>套餐</span>
+                  <span className="font-medium" style={{ color: 'var(--pdd-text)' }}>
                     {PLAN_LABELS[reviewModal.item.plan] || reviewModal.item.plan}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-pdd-text-secondary">时长</span>
-                  <span className="text-pdd-text-primary font-medium">
+                  <span style={{ color: 'var(--pdd-text-secondary)' }}>时长</span>
+                  <span className="font-medium" style={{ color: 'var(--pdd-text)' }}>
                     {DURATION_LABELS[reviewModal.item.duration] || reviewModal.item.duration}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-pdd-text-secondary">金额</span>
-                  <span className="text-pdd-text-primary font-medium">¥{reviewModal.item.amount}</span>
+                  <span style={{ color: 'var(--pdd-text-secondary)' }}>金额</span>
+                  <span className="font-medium" style={{ color: 'var(--pdd-text)' }}>¥{reviewModal.item.amount}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-pdd-text-secondary">微信昵称</span>
-                  <span className="text-pdd-text-primary">{reviewModal.item.wechatNickname || '-'}</span>
+                  <span style={{ color: 'var(--pdd-text-secondary)' }}>微信昵称</span>
+                  <span style={{ color: 'var(--pdd-text)' }}>{reviewModal.item.wechatNickname || '-'}</span>
                 </div>
                 {reviewModal.item.remark && (
                   <div className="flex justify-between">
-                    <span className="text-pdd-text-secondary">备注</span>
-                    <span className="text-pdd-text-primary text-xs max-w-[180px] truncate">
+                    <span style={{ color: 'var(--pdd-text-secondary)' }}>备注</span>
+                    <span className="text-xs max-w-[180px] truncate" style={{ color: 'var(--pdd-text)' }}>
                       {reviewModal.item.remark}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between">
-                  <span className="text-pdd-text-secondary">申请时间</span>
-                  <span className="text-pdd-text-primary text-xs">
+                  <span style={{ color: 'var(--pdd-text-secondary)' }}>申请时间</span>
+                  <span className="text-xs" style={{ color: 'var(--pdd-text)' }}>
                     {new Date(reviewModal.item.createdAt).toLocaleString('zh-CN')}
                   </span>
                 </div>
@@ -660,7 +669,7 @@ export default function AdminRecharge() {
               )}
 
               <div className="mb-4">
-                <label className="text-sm font-medium text-pdd-text-primary mb-1 block">
+                <label className="text-sm font-medium mb-1 block" style={{ color: 'var(--pdd-text)' }}>
                   {reviewModal.action === 'approve' ? '审核备注（选填）' : '拒绝原因'}
                 </label>
                 <textarea
@@ -672,27 +681,29 @@ export default function AdminRecharge() {
                       : '请填写拒绝原因（如：未收到转账、信息不符等）...'
                   }
                   rows={3}
-                  className="w-full px-3 py-2 rounded-lg border border-pdd-border bg-pdd-bg text-sm text-pdd-text-primary focus:border-pdd-primary/50 outline-none resize-none"
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none"
+                  style={{ border: '1px solid #E3EAF5', background: 'var(--pdd-bg)', color: 'var(--pdd-text)' }}
                 />
               </div>
 
               <div className="flex gap-3">
                 <button
                   onClick={() => setReviewModal(null)}
-                  className="flex-1 py-2.5 rounded-lg border border-pdd-border text-sm text-pdd-text-secondary hover:bg-pdd-bg transition-colors"
+                  className="flex-1 py-2.5 rounded-lg border text-sm transition-colors hover:bg-pdd-gray-100"
+                  style={{ borderColor: 'var(--pdd-border)', color: 'var(--pdd-text-secondary)' }}
                 >
                   取消
                 </button>
                 <button
                   onClick={handleReview}
-                  disabled={processing}
+                  disabled={reviewMutation.isPending}
                   className={`flex-1 py-2.5 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50 ${
                     reviewModal.action === 'approve'
                       ? 'bg-green-600 hover:bg-green-700'
                       : 'bg-red-600 hover:bg-red-700'
                   }`}
                 >
-                  {processing ? '处理中...' : reviewModal.action === 'approve' ? '确认通过' : '确认拒绝'}
+                  {reviewMutation.isPending ? '处理中...' : reviewModal.action === 'approve' ? '确认通过' : '确认拒绝'}
                 </button>
               </div>
             </motion.div>
@@ -714,7 +725,8 @@ export default function AdminRecharge() {
               initial={{ scale: 0.9 }}
               animate={{ scale: 1 }}
               exit={{ scale: 0.9 }}
-              className="bg-pdd-card rounded-xl p-6 max-w-md w-full shadow-xl border border-pdd-border"
+              className="bg-pdd-card rounded-xl p-6 max-w-md w-full shadow-xl border"
+              style={{ borderColor: 'var(--pdd-border)' }}
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center gap-3 mb-4">
@@ -728,12 +740,12 @@ export default function AdminRecharge() {
                   )}
                 </div>
                 <div>
-                  <h3 className="text-sm font-bold text-pdd-text-primary">
+                  <h3 className="text-sm font-bold" style={{ color: 'var(--pdd-text)' }}>
                     {batchConfirm.action === 'approve'
                       ? `批量通过 ${selectedIds.size} 条申请`
                       : `批量拒绝 ${selectedIds.size} 条申请`}
                   </h3>
-                  <p className="text-xs text-pdd-text-secondary mt-0.5">
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--pdd-text-secondary)' }}>
                     {batchConfirm.action === 'approve'
                       ? '通过后将为这些用户开通对应会员'
                       : '拒绝后这些用户需重新提交申请'}
@@ -751,7 +763,7 @@ export default function AdminRecharge() {
               )}
 
               <div className="mb-4">
-                <label className="text-sm font-medium text-pdd-text-primary mb-1 block">
+                <label className="text-sm font-medium mb-1 block" style={{ color: 'var(--pdd-text)' }}>
                   统一备注（选填）
                 </label>
                 <textarea
@@ -759,27 +771,29 @@ export default function AdminRecharge() {
                   onChange={e => setBatchConfirm({ ...batchConfirm, note: e.target.value })}
                   placeholder="将作为所有审核的备注..."
                   rows={2}
-                  className="w-full px-3 py-2 rounded-lg border border-pdd-border bg-pdd-bg text-sm text-pdd-text-primary focus:border-pdd-primary/50 outline-none resize-none"
+                  className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none"
+                  style={{ border: '1px solid #E3EAF5', background: 'var(--pdd-bg)', color: 'var(--pdd-text)' }}
                 />
               </div>
 
               <div className="flex gap-3">
                 <button
                   onClick={() => setBatchConfirm(null)}
-                  className="flex-1 py-2.5 rounded-lg border border-pdd-border text-sm text-pdd-text-secondary hover:bg-pdd-bg transition-colors"
+                  className="flex-1 py-2.5 rounded-lg border text-sm transition-colors hover:bg-pdd-gray-100"
+                  style={{ borderColor: 'var(--pdd-border)', color: 'var(--pdd-text-secondary)' }}
                 >
                   取消
                 </button>
                 <button
                   onClick={handleBatchReview}
-                  disabled={batchProcessing}
+                  disabled={batchMutation.isPending}
                   className={`flex-1 py-2.5 rounded-lg text-white text-sm font-medium transition-colors disabled:opacity-50 ${
                     batchConfirm.action === 'approve'
                       ? 'bg-green-600 hover:bg-green-700'
                       : 'bg-red-600 hover:bg-red-700'
                   }`}
                 >
-                  {batchProcessing ? '处理中...' : '确认'}
+                  {batchMutation.isPending ? '处理中...' : '确认'}
                 </button>
               </div>
             </motion.div>

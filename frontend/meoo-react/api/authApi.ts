@@ -1,5 +1,32 @@
 import { apiClient, setTokens, clearTokens } from './client';
-import type { User, AuthResponse } from '../../shared/types';
+
+// apiClient.post<T> 的 data 字段类型是 T
+// 所以 AuthResponse 是 backend 返回 data 的结构
+export interface User {
+  id: string;
+  username: string;
+  role: 'normal' | 'test' | 'admin';
+  membershipLevel: 'free' | 'pro' | 'enterprise';
+  membershipExpiresAt?: string | null;
+  email?: string;
+  is_test?: boolean;
+  is_expired?: boolean;
+  invite_count?: number;
+  created_at?: string;
+  updated_at?: string;
+  isSubAccount?: boolean;
+  isBanned?: boolean;
+  bannedReason?: string;
+  parentUserId?: string;
+  phone?: string;
+}
+
+export interface AuthResponse {
+  accessToken: string;
+  refreshToken: string;
+  user: User;
+  message?: string;
+}
 
 export interface LoginResult {
   success: boolean;

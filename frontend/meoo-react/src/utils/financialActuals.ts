@@ -1,42 +1,62 @@
 import { sf } from './index';
 
+/**
+ * 每笔订单的实际财务数据（来自货款明细CSV）
+ *
+ * 货款明细包含以下业务编码：
+ *   0010002  交易收入-订单收入          → netRevenue
+ *   0010005  交易收入-优惠券结算        → couponIncome
+ *   0020002  交易退款-订单退款          → refundAmount（退款正数）
+ *   0020005  交易退款-优惠券结算        → refundCoupon（退款正数）
+ *   0030002  技术服务费-基础技术服务费   → baseTechFee（扣费正数）
+ *   0030003  技术服务费-百亿补贴技服费   → subTechFee（扣费正数）
+ *   0040002  售后费用-售后补偿消费者     → penalties（扣费正数）
+ *   0040004  售后费用-延迟发货           → penalties
+ *   0040005  售后费用-虚假发货           → penalties
+ *   0050002  服务支出-消费者体验提升计划  → experiencePlan（扣费正数）
+ *   0060002  营销费用-跨店满返           → marketingFees（扣费正数）
+ *   0070004  转账-广告账户              → 无订单号时归入 unlinked.adTransfer
+ */
 export interface OrderFinancialActual {
   orderNo: string;
-  baseTechFee: number;
-  subTechFee: number;
-  shippingInsurance: number;
-  penalties: number;
-  marketingFees: number;
-  netRevenue: number;
-  couponIncome: number;
+  baseTechFee: number;         // 0030002 基础技术服务费
+  subTechFee: number;          // 0030003 百亿补贴技术服务费
+  experiencePlan: number;      // 0050002 消费者体验提升计划（原错标为 shippingInsurance）
+  shippingInsurance: number;   // 保留字段，货款明细中恒为0（运费险来自独立文件）
+  adTransfer: number;          // 0070004 转账到推广账户
+  penalties: number;           // 004xxxx 售后罚款总额（含理赔）
+  insuranceClaims: number;     // 0040002 售后补偿消费者（运费险理赔，罚款中的理赔部分）
+  penaltyRecords: { time: string; amount: number; type: string; desc: string }[];  // 罚款明细
+  marketingFees: number;       // 006xxxx 营销费用
+  netRevenue: number;          // 0010002 订单收入（正）
+  couponIncome: number;        // 0010005 优惠券结算（正）
+  refundAmount: number;        // 0020002 退款金额（正）
+  refundCoupon: number;        // 0020005 退款优惠券（正）
   hasData: boolean;
 }
 
 /** 无法关联到订单号的费用汇总 */
 export interface UnlinkedFinancials {
-  penalties: number;
-  marketingFees: number;
-  shippingInsurance: number;
+  penalties: number;           // 004xxxx 无订单号
+  marketingFees: number;       // 006xxxx 无订单号
+  experiencePlan: number;      // 0050002 无订单号
+  adTransfer: number;          // 0070004 转账到广告
+  lateShipment: number;        // 延迟发货扣款总额
   records: { time: string; desc: string; amount: number; type: string }[];
 }
 
 const EMPTY_ACTUAL: OrderFinancialActual = {
   orderNo: '',
-  baseTechFee: 0,
-  subTechFee: 0,
-  shippingInsurance: 0,
-  penalties: 0,
-  marketingFees: 0,
-  netRevenue: 0,
-  couponIncome: 0,
-  hasData: false,
+  baseTechFee: 0, subTechFee: 0, experiencePlan: 0,
+  shippingInsurance: 0, adTransfer: 0, penalties: 0, insuranceClaims: 0,
+  penaltyRecords: [],
+  marketingFees: 0, netRevenue: 0, couponIncome: 0,
+  refundAmount: 0, refundCoupon: 0, hasData: false,
 };
 
 const EMPTY_UNLINKED: UnlinkedFinancials = {
-  penalties: 0,
-  marketingFees: 0,
-  shippingInsurance: 0,
-  records: [],
+  penalties: 0, marketingFees: 0, experiencePlan: 0,
+  adTransfer: 0, lateShipment: 0, records: [],
 };
 
 /** 从货款明细构建按订单号索引的实际财务数据，同时收集无订单号的未关联费用 */
@@ -49,56 +69,93 @@ export function buildFinancialIndex(records: any[]): {
   if (!records || !records.length) return { index: map, unlinked };
 
   records.forEach((r: any) => {
-    const desc = String(r['业务描述'] || '');
-    const inc = sf(r['收入金额（+元）'] || r['收入金额(元)'] || r['收入金额'] || 0);
-    const exp = sf(r['支出金额（-元）'] || r['支出金额(元)'] || r['支出金额'] || 0);
-    const no = String(r['商户订单号'] || '').trim();
+    const desc = String(r['业务描述'] || r['账务类型'] || '');
+    const code = desc.split('|')[0] || '';
+    const inc = sf(r['收入金额（+元）'] || r['收入金额(+元)'] || r['收入金额(元)'] || r['收入金额'] || r['收入（+元）'] || r['收入(+元)'] || 0);
+    const exp = sf(r['支出金额（-元）'] || r['支出金额(-元)'] || r['支出金额(元)'] || r['支出金额'] || r['支出（-元）'] || r['支出(-元)'] || 0);
+    const no = String(r['商户订单号'] || r['商家订单号'] || '').trim();
+    const amount = Math.abs(inc + exp);
+    const time = r['发生时间'] || '';
 
+    // ---- 无订单号记录 ----
     if (!no) {
-      // 无订单号的费用归入未关联汇总
-      const amount = Math.abs(inc + exp);
-      if (desc.startsWith('004')) {
+      if (code === '0040004') {
+        // 延迟发货（此类记录无订单号）
+        unlinked.lateShipment += amount;
         unlinked.penalties += amount;
-        unlinked.records.push({ time: r['发生时间'] || '', desc: desc.split('|').slice(1).join(' / ') || desc, amount, type: '罚款' });
-      } else if (desc.startsWith('0050002')) {
-        unlinked.shippingInsurance += amount;
-        unlinked.records.push({ time: r['发生时间'] || '', desc, amount, type: '运费险' });
-      } else if (desc.startsWith('006')) {
+        unlinked.records.push({ time, desc: desc.split('|').slice(1).join(' / ') || desc, amount, type: '延迟发货' });
+      } else if (code === '0040005') {
+        unlinked.penalties += amount;
+        unlinked.records.push({ time, desc: desc.split('|').slice(1).join(' / ') || desc, amount, type: '虚假发货' });
+      } else if (code.startsWith('004')) {
+        unlinked.penalties += amount;
+        unlinked.records.push({ time, desc: desc.split('|').slice(1).join(' / ') || desc, amount, type: '售后扣款' });
+      } else if (code === '0050002') {
+        unlinked.experiencePlan += amount;
+        unlinked.records.push({ time, desc: desc.split('|').slice(1).join(' / ') || desc, amount, type: '体验提升计划' });
+      } else if (code.startsWith('006')) {
         unlinked.marketingFees += amount;
-        unlinked.records.push({ time: r['发生时间'] || '', desc: desc.split('|').slice(1).join(' / ') || desc, amount, type: '营销费' });
+        unlinked.records.push({ time, desc: desc.split('|').slice(1).join(' / ') || desc, amount, type: '营销费' });
+      } else if (code === '0070004') {
+        unlinked.adTransfer += amount;
+        unlinked.records.push({ time, desc: desc.split('|').slice(1).join(' / ') || desc, amount, type: '转账广告' });
+      } else {
+        // 兜底：其他未识别类型
+        unlinked.records.push({ time, desc: desc.split('|').slice(1).join(' / ') || desc, amount, type: '其他' });
       }
       return;
     }
 
+    // ---- 有订单号记录 ----
     if (!map[no]) map[no] = { ...EMPTY_ACTUAL, orderNo: no, hasData: true };
-
     const entry = map[no];
 
-    if (desc.startsWith('0010002')) {
+    if (code === '0010002') {
       entry.netRevenue += inc;
-    } else if (desc.startsWith('0010005')) {
+    } else if (code === '0010005') {
       entry.couponIncome += inc;
-    } else if (desc.startsWith('0030002')) {
-      entry.baseTechFee += inc + exp; // 通常 exp 为负（扣费），inc 为正（返还）
-    } else if (desc.startsWith('0030003')) {
+    } else if (code === '0020002') {
+      entry.refundAmount += Math.abs(exp);
+    } else if (code === '0020005') {
+      entry.refundCoupon += Math.abs(exp);
+    } else if (code === '0030002') {
+      entry.baseTechFee += inc + exp;    // 通常 exp<0（扣费），inc>0（返还）
+    } else if (code === '0030003') {
       entry.subTechFee += inc + exp;
-    } else if (desc.startsWith('004')) {
+    } else if (code.startsWith('004')) {
       entry.penalties += inc + exp;
-    } else if (desc.startsWith('0050002')) {
-      entry.shippingInsurance += inc + exp;
-    } else if (desc.startsWith('006')) {
+      if (code === '0040002') {
+        // ★ 0040002 = 售后补偿消费者 = 运费险理赔（罚款中的理赔部分）
+        entry.insuranceClaims += inc + exp;
+      }
+      // ★ 保留罚款明细：时间、金额、类型、描述
+      entry.penaltyRecords.push({
+        time,
+        amount: Math.abs(inc + exp),
+        type: code === '0040004' ? '延迟发货' : code === '0040005' ? '虚假发货' : '售后扣款',
+        desc: desc.split('|').slice(1).join(' / ') || desc,
+      });
+    } else if (code === '0050002') {
+      entry.experiencePlan += inc + exp;
+    } else if (code.startsWith('006')) {
       entry.marketingFees += inc + exp;
+    } else if (code === '0070004') {
+      entry.adTransfer += inc + exp;
     }
-    // 002xxxx（退款相关）不计入，因为退款已经体现在 netRevenue 中
   });
 
   // 将所有费用转为正数（支出）存储
   Object.values(map).forEach(v => {
     v.baseTechFee = Math.abs(v.baseTechFee);
     v.subTechFee = Math.abs(v.subTechFee);
-    v.shippingInsurance = Math.abs(v.shippingInsurance);
+    v.experiencePlan = Math.abs(v.experiencePlan);
+    v.shippingInsurance = 0;     // 货款明细不含运费险
+    v.adTransfer = Math.abs(v.adTransfer);
     v.penalties = Math.abs(v.penalties);
+    v.insuranceClaims = Math.abs(v.insuranceClaims);
     v.marketingFees = Math.abs(v.marketingFees);
+    v.refundAmount = Math.abs(v.refundAmount);
+    v.refundCoupon = Math.abs(v.refundCoupon);
   });
 
   return { index: map, unlinked };
@@ -261,11 +318,10 @@ export function matchLateShipmentPenalties(
     lateOrders.push({ orderNo, orderAmount });
   });
 
-  // 2. 建立无订单号扣款池（按金额分组）
+  // 2. 建立无订单号扣款池（只取延迟发货/虚假发货）
   const unlinkedPool: number[] = [];
   unlinkedFinancials.records.forEach(r => {
-    // 只取延迟发货/虚假发货的罚款记录
-    if (r.type === '罚款') {
+    if (r.type === '延迟发货' || r.type === '虚假发货') {
       unlinkedPool.push(r.amount);
     }
   });

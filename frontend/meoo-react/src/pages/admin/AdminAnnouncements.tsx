@@ -1,19 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Plus, Trash2, Megaphone, Clock, CheckCircle, XCircle, Edit3, X } from 'lucide-react';
-import { apiClient } from '../../../api/client';
-
-interface Announcement {
-  id: number;
-  title: string;
-  content: string;
-  isActive: boolean;
-  priority: 'low' | 'normal' | 'high' | 'urgent';
-  targetRoles: string | null;
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import {
+  useAnnouncements, useSaveAnnouncement,
+  useDeleteAnnouncement, useToggleAnnouncement,
+} from '../../hooks/useAdminData';
+import type { Announcement } from '../../hooks/useAdminData';
 
 const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
   urgent: { label: '紧急', color: 'bg-red-500/10 text-red-400 border-red-500/20' },
@@ -23,24 +15,22 @@ const PRIORITY_CONFIG: Record<string, { label: string; color: string }> = {
 };
 
 export default function AdminAnnouncements() {
-  const [announcements, setAnnouncements] = useState<Announcement[]>([]);
-  const [loading, setLoading] = useState(true);
   const [actionMsg, setActionMsg] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState({
     title: '', content: '', priority: 'normal' as string, targetRoles: '', isActive: true,
   });
-  const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState('');
 
-  useEffect(() => { load(); }, []);
+  const { data: announcements = [], isLoading } = useAnnouncements();
+  const saveMutation = useSaveAnnouncement();
+  const deleteMutation = useDeleteAnnouncement();
+  const toggleMutation = useToggleAnnouncement();
 
-  const load = async () => {
-    setLoading(true);
-    const res = await apiClient.get('/admin/announcements');
-    if (res.success) setAnnouncements(res.data || []);
-    setLoading(false);
+  const showMsg = (msg: string) => {
+    setActionMsg(msg);
+    setTimeout(() => setActionMsg(''), 2000);
   };
 
   const openCreate = () => {
@@ -66,28 +56,18 @@ export default function AdminAnnouncements() {
     if (!form.title.trim()) { setFormError('请输入标题'); return; }
     if (!form.content.trim()) { setFormError('请输入内容'); return; }
 
-    setSaving(true);
-    const body: any = {
+    const res = await saveMutation.mutateAsync({
+      id: editingId ?? undefined,
       title: form.title.trim(),
       content: form.content.trim(),
       priority: form.priority,
       targetRoles: form.targetRoles || null,
       isActive: form.isActive,
-    };
+    });
 
-    let res;
-    if (editingId) {
-      res = await apiClient.put('/admin/announcements/' + editingId, body);
-    } else {
-      res = await apiClient.post('/admin/announcements', body);
-    }
-
-    setSaving(false);
     if (res.success) {
       setShowCreate(false);
-      setActionMsg(editingId ? '公告已更新' : '公告已发布');
-      setTimeout(() => setActionMsg(''), 2000);
-      load();
+      showMsg(editingId ? '公告已更新' : '公告已发布');
     } else {
       setFormError(res.error || '保存失败');
     }
@@ -95,18 +75,15 @@ export default function AdminAnnouncements() {
 
   const handleDelete = async (id: number) => {
     if (!confirm('确认删除此公告？')) return;
-    await apiClient.delete('/admin/announcements/' + id);
-    setActionMsg('公告已删除');
-    setTimeout(() => setActionMsg(''), 2000);
-    load();
+    await deleteMutation.mutateAsync(id);
+    showMsg('公告已删除');
   };
 
   const handleToggleActive = async (a: Announcement) => {
-    await apiClient.put('/admin/announcements/' + a.id, { isActive: !a.isActive });
-    setAnnouncements(prev => prev.map(x => x.id === a.id ? { ...x, isActive: !a.isActive } : x));
+    toggleMutation.mutate({ id: a.id, isActive: !a.isActive });
   };
 
-  if (loading) return <div className="p-4 text-pdd-text-secondary">加载中...</div>;
+  if (isLoading) return <div className="p-4 text-pdd-text-secondary">加载中...</div>;
 
   return (
     <div className="space-y-4">
@@ -253,9 +230,9 @@ export default function AdminAnnouncements() {
 
               <div className="flex gap-3">
                 <button onClick={() => setShowCreate(false)} className="flex-1 py-2.5 rounded-lg border border-pdd-border text-sm text-pdd-text-secondary hover:bg-pdd-bg">取消</button>
-                <button onClick={handleSave} disabled={saving}
+                <button onClick={handleSave} disabled={saveMutation.isPending}
                   className="flex-1 py-2.5 rounded-lg bg-pdd-primary hover:bg-pdd-primary-dark text-white text-sm font-medium disabled:opacity-50">
-                  {saving ? '保存中...' : editingId ? '更新公告' : '发布公告'}
+                  {saveMutation.isPending ? '保存中...' : editingId ? '更新公告' : '发布公告'}
                 </button>
               </div>
             </motion.div>

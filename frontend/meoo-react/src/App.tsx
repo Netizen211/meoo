@@ -1,31 +1,38 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from 'react';
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import MainLayout from './components/MainLayout';
+import { PermissionProvider } from './context/PermissionContext';
+import { LayoutProvider } from './context/LayoutContext';
 import { Database, BarChart3, Loader2 } from 'lucide-react';
+import { Toaster } from './components/ui/toast';
+import ProtectionProvider from './protection/ProtectionProvider';
+import { initTracker, trackPageView } from './services/tracker';
+import { useDarkMode } from './hooks/useDarkMode';
+import { useAutoReload } from './utils/useAutoReload';
 
 // ★ 代码分割：按路由懒加载（首屏只加载当前页面代码，其余按需加载）
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const RegisterPage = lazy(() => import('./pages/RegisterPage'));
-const StoresPage = lazy(() => import('./pages/StoresPage'));
-const UploadPage = lazy(() => import('./pages/UploadPage'));
-const DashboardPage = lazy(() => import('./pages/DashboardPage'));
-const CostManagementPage = lazy(() => import('./pages/CostManagementPage'));
-const ProductPage = lazy(() => import('./pages/ProductPage'));
-const UserPage = lazy(() => import('./pages/UserPage'));
-const TrendPage = lazy(() => import('./pages/TrendPage'));
-const RegionPage = lazy(() => import('./pages/RegionPage'));
-const LogisticsPage = lazy(() => import('./pages/LogisticsPage'));
-const CostPage = lazy(() => import('./pages/CostPage'));
-const AfterSalePage = lazy(() => import('./pages/AfterSalePage'));
-const InsurancePage = lazy(() => import('./pages/InsurancePage'));
-const PromotionPage = lazy(() => import('./pages/PromotionPage'));
-const RiskPage = lazy(() => import('./pages/RiskPage'));
-const MembershipPage = lazy(() => import('./pages/MembershipPage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-const SubAccountsPage = lazy(() => import('./pages/SubAccountsPage'));
-const ProductLinksPage = lazy(() => import('./pages/ProductLinksPage'));
-const FinancePage = lazy(() => import('./pages/FinancePage'));
+const AuthPage = lazy(() => import(/* webpackChunkName: "AuthPage" */ './pages/AuthPage'));
+const StoresPage = lazy(() => import(/* webpackChunkName: "StoresPage" */ './pages/StoresPage'));
+const UploadPage = lazy(() => import(/* webpackChunkName: "UploadPage" */ './pages/UploadPage'));
+const DashboardPage = lazy(() => import(/* webpackChunkName: "DashboardPage" */ './pages/DashboardPage'));
+const CostManagementPage = lazy(() => import(/* webpackChunkName: "CostManagementPage" */ './pages/CostManagementPage'));
+const ProductPage = lazy(() => import(/* webpackChunkName: "ProductPage" */ './pages/ProductPage'));
+const UserPage = lazy(() => import(/* webpackChunkName: "UserPage" */ './pages/UserPage'));
+const TrendPage = lazy(() => import(/* webpackChunkName: "TrendPage" */ './pages/TrendPage'));
+const RegionPage = lazy(() => import(/* webpackChunkName: "RegionPage" */ './pages/RegionPage'));
+const LogisticsPage = lazy(() => import(/* webpackChunkName: "LogisticsPage" */ './pages/LogisticsPage'));
+const CostPage = lazy(() => import(/* webpackChunkName: "CostPage" */ './pages/CostPage'));
+const AfterSalePage = lazy(() => import(/* webpackChunkName: "AfterSalePage" */ './pages/AfterSalePage'));
+const InsurancePage = lazy(() => import(/* webpackChunkName: "InsurancePage" */ './pages/InsurancePage'));
+const PromotionPage = lazy(() => import(/* webpackChunkName: "PromotionPage" */ './pages/PromotionPage'));
+const RiskPage = lazy(() => import(/* webpackChunkName: "RiskPage" */ './pages/RiskPage'));
+const TimeWindowPage = lazy(() => import(/* webpackChunkName: "TimeWindowPage" */ './pages/TimeWindowPage'));
+const MembershipPage = lazy(() => import(/* webpackChunkName: "MembershipPage" */ './pages/MembershipPage'));
+const SettingsPage = lazy(() => import(/* webpackChunkName: "SettingsPage" */ './pages/SettingsPage'));
+const SubAccountsPage = lazy(() => import(/* webpackChunkName: "SubAccountsPage" */ './pages/SubAccountsPage'));
+const ProductLinksPage = lazy(() => import(/* webpackChunkName: "ProductLinksPage" */ './pages/ProductLinksPage'));
+const ReconciliationPage = lazy(() => import(/* webpackChunkName: "ReconciliationPage" */ './pages/ReconciliationPage'));
 
 // Legal 页面仍直接导入（体积小，且 Terms/Privacy 需快速渲染）
 import { TermsPage, PrivacyPage } from './pages/LegalPage';
@@ -42,7 +49,7 @@ const PageLoader: React.FC = () => (
       </div>
     </div>
     <p className="text-base font-medium text-white mb-1">正在加载数据</p>
-    <p className="text-sm text-pdd-text-secondary">服务器计算中，请稍候...</p>
+    <p className="text-sm text-pdd-text-secondary">数据统计中，请稍候...</p>
     <div className="mt-6 flex gap-1.5">
       {[0, 1, 2].map(i => (
         <div key={i} className="w-2 h-2 rounded-full bg-indigo-500/60 animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />
@@ -69,11 +76,10 @@ const isAllStores = (s: string) => s === ALL_STORES_ID;
 import { addLog } from './utils/operationLog';
 import { OrderFinancialActual, UnlinkedFinancials, buildFinancialIndex } from './utils/financialActuals';
 import { pullStoreData, syncStoreData, syncStoreConfig } from '../api/dataApi';
-import { loadAllFromLocal, pullAndMerge, writeData, getLocalData, deleteStoreData as dsDelete } from './data/dataStore';
-import type { DataStoreItem, Snapshot } from './data/dataStore';
+import { useDataStore } from './store/dataStore';
 import { analyticsApi, type BulkAnalytics, type DashboardResponse, type ProductKpi, type PromotionResponse, type AfterSaleResponse,
   type DailyTrend, type RegionItem, type LogisticsSummary, type PromoByDateItem, type CostSummary, type PeriodCompare, type FinancialSummary } from '../api/analyticsApi';
-import { apiClient, hasTokens, clearTokens, getAccessToken } from '../api/client';
+import { apiClient, hasTokens, clearTokens, getAccessToken, refreshAccessToken } from '../api/client';
 
 interface User {
   id: string;
@@ -87,6 +93,7 @@ interface AuthContextType {
   user: User | null;
   setUser: (user: User | null) => void;
   logout: () => void;
+  permissions: any;
   isPaid: boolean;
 }
 
@@ -129,12 +136,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('dianfx:auth-expired', handler);
   }, []);
 
-  const logout = useCallback(() => { setUser(null); clearTokens(); }, []);
+  const [permissions, setPermissions] = useState<any>(null);
+
+  const logout = useCallback(() => { setUser(null); setPermissions(null); clearTokens(); }, []);
+
+  // ★ 登录时注入权限
+  const setUserWithPerms = useCallback((u: User | null) => {
+    setUser(u);
+    if (u && (u as any).permissions) setPermissions((u as any).permissions);
+    else setPermissions(null);
+  }, []);
 
   return (
     <AuthContext.Provider value={{
-      user, setUser, logout,
+      user, setUser: setUserWithPerms, logout,
       isPaid: isFullMember(user),
+      permissions,
     }}>
       {children}
     </AuthContext.Provider>
@@ -150,7 +167,7 @@ interface Store {
 interface StoreContextType {
   stores: Store[];
   currentStore: Store | null;
-  addStore: (name: string) => Store;
+  addStore: (name: string) => Promise<Store>;
   renameStore: (id: string, newName: string) => void;
   switchStore: (id: string) => void;
   deleteStore: (id: string) => void;
@@ -161,6 +178,7 @@ const StoreContext = createContext<StoreContextType>(null!);
 export const useStore = () => useContext(StoreContext);
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth(); // ★ 用于检测登录状态变化
   const [stores, setStores] = useState<Store[]>([]);
   const [currentStore, setCurrentStore] = useState<Store | null>(null);
   const [storesLoaded, setStoresLoaded] = useState(false);
@@ -200,8 +218,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return null;
   }, []);
 
-  // 登录后首次拉取店铺列表
-  useEffect(() => { fetchStores(); }, [fetchStores]);
+  // ★ 修复：登录后自动拉取店铺列表（原仅 mount 时触发，登录后不会重试）
+  useEffect(() => { fetchStores(); }, [fetchStores, user]);
 
   const addStore = useCallback(async (name: string): Promise<Store> => {
     // ★ 先调服务器创建，确认成功再更新本地
@@ -276,9 +294,11 @@ interface StoreDataItem {
   shippingInsurance: any[];
   afterSaleRecords: any[];
   financialRecords: any[];
-  availableFields: { csv: Set<string>; promotion: Set<string>; insurance: Set<string>; afterSale: Set<string> };
+  // ★ 统一为 string[]：Set 无法 JSON 序列化，localStorage/服务器恢复后会变成空对象
+  availableFields: { csv: string[]; promotion: string[]; insurance: string[]; afterSale: string[]; financial: string[] };
 }
 
+// ★ 与 Zustand store 的 UploadRecord 保持一致
 interface UploadRecord {
   id: string;
   fileName: string;
@@ -287,7 +307,8 @@ interface UploadRecord {
   storeName: string;
   uploadedAt: string;
   rowCount: number;
-  fieldCount: number;
+  fieldCount?: number;
+  categories?: string[];
 }
 
 interface CostConfig {
@@ -322,7 +343,7 @@ interface DataContextType {
   dataFilter: string;
   setDataFilter: (filter: string) => void;
   getStoreData: (storeId: string) => StoreDataItem | null;
-  setStoreData: (storeId: string, dataOrUpdater: any) => void;
+  setStoreData: (storeId: string, dataOrUpdater: any, categories?: string[]) => void;
   /** ★ 仅更新本地状态，不同步服务端（UploadPage 用此做本地合并，再调 syncStoreDelta） */
   setStoreDataLocal: (storeId: string, dataOrUpdater: any) => void;
   currentDisplayData: StoreDataItem;
@@ -335,6 +356,8 @@ interface DataContextType {
   setPackagingFeePerOrder: (fee: number) => void;
   pricingPresets: any[];
   addPricingPreset: (preset: any) => void;
+  updatePricingPreset: (presetId: string, updated: any) => void;
+  removePricingPreset: (presetId: string) => void;
   uploadRecords: UploadRecord[];
   allUploadRecords: UploadRecord[];
   addUploadRecord: (record: Omit<UploadRecord, 'id' | 'uploadedAt'>) => void;
@@ -363,6 +386,8 @@ interface DataContextType {
   setInsuranceFeePerOrder: (fee: number) => void;
   promotionFeePerOrder: number;
   setPromotionFeePerOrder: (fee: number) => void;
+  subsidyCommissionRate: number;
+  setSubsidyCommissionRate: (rate: number) => void;
   orderFinancialActuals: Record<string, OrderFinancialActual>;
   unlinkedFinancials: UnlinkedFinancials;
   abnormalOrders: Record<string, AbnormalOrderRecord>;
@@ -379,7 +404,7 @@ interface DataContextType {
   clearStoreList: () => void;
   syncStatus: 'idle' | 'syncing' | 'done' | 'error';
   dataLoading: boolean;
-  refreshStoreData: (storeId: string) => Promise<void>; // ★ 按需加载原始数据
+  refreshStoreData: (storeId: string, force?: boolean) => Promise<void>; // force=true 跳过空覆盖保护
   /** 服务端MySQL直接聚合的KPI — Dashboard使用 */
   serverDashboard: DashboardResponse | null;
   serverProducts: ProductKpi[] | null;
@@ -394,7 +419,6 @@ interface DataContextType {
   serverFinancial: FinancialSummary | null;
   /** 数据加载状态 */
   analyticsLoading: boolean;
-  analyticsError: string | null;
   /** ★ 手动刷新分析数据（5层保险第1层：同步后立即调用） */
   refreshAnalytics: (storeId?: string) => Promise<void>;
 }
@@ -411,7 +435,7 @@ const EMPTY_STORE_DATA: StoreDataItem = {
   shippingInsurance: [],
   afterSaleRecords: [],
   financialRecords: [],
-  availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() }
+  availableFields: { csv: [], promotion: [], insurance: [], afterSale: [], financial: [] }
 };
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
@@ -421,9 +445,23 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const setDataFilter = useCallback((f: string) => {
     if (f) switchStore(f);
   }, [switchStore]);
-  const [storeDataMap, setStoreDataMap] = useState<Record<string, StoreDataItem>>({});
-  const [dataLoading, setDataLoading] = useState(false);
-  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'done' | 'error'>('idle');
+  // ★ Zustand: 自动 localStorage 持久化，刷新不丢
+  const storeDataMap = useDataStore(s => s.storeDataMap);
+  const dataLoading = useDataStore(s => s.dataLoading);
+  const syncStatus = useDataStore(s => s.syncStatus);
+  const zSetLocal = useDataStore(s => s.setLocalData);
+  const zSyncServer = useDataStore(s => s.syncToServer);
+  const zBulkSet = useDataStore(s => s.bulkSetStoreData);
+  const zReplaceStore = useDataStore(s => s.replaceStoreForId);
+  const zSetDataLoading = useDataStore(s => s.setDataLoadingState);
+  // ★ uploadRecords 改为 Zustand 管理
+  const uploadRecords = useDataStore(s => s.uploadRecords);
+  const zSetUploadRecords = useDataStore(s => s.setUploadRecords);
+  const zAddUploadRecord = useDataStore(s => s.addUploadRecord);
+  const zRemoveUploadRecord = useDataStore(s => s.removeUploadRecord);
+  const zClearStoreUploads = useDataStore(s => s.clearStoreUploads);
+  const zClearAllUploads = useDataStore(s => s.clearAllUploads);
+  const zResetAll = useDataStore(s => s.resetAll);
 
   // ★ 登录/刷新后恢复数据：localStorage秒开 → 服务器确认
   useEffect(() => {
@@ -432,6 +470,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!realStores.length) return;
 
     // Step 1: localStorage 立即恢复 (毫秒级, 刷新不丢)
+    // Zustand persist 中间件已自动从 localStorage 恢复 storeDataMap + uploadRecords
+    // 此处补充从旧格式 'meoo_ds_' 恢复（向后兼容）
     const fromLocal: Record<string, StoreDataItem> = {};
     for (const store of realStores) {
       try {
@@ -442,17 +482,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             orders: d.o || [], promotionSummary: d.ps || [], promotionProducts: d.pp || [],
             starStoreSummary: d.ss || [], liveStreamSummary: d.ls || [],
             shippingInsurance: d.si || [], afterSaleRecords: d.as || [], financialRecords: d.fr || [],
-            availableFields: { csv: new Set(d.af?.csv||[]), promotion: new Set(d.af?.promotion||[]), insurance: new Set(d.af?.insurance||[]), afterSale: new Set(d.af?.afterSale||[]) },
+            availableFields: { csv: Array.isArray(d.af?.csv) ? d.af.csv : [], promotion: Array.isArray(d.af?.promotion) ? d.af.promotion : [], insurance: Array.isArray(d.af?.insurance) ? d.af.insurance : [], afterSale: Array.isArray(d.af?.afterSale) ? d.af.afterSale : [], financial: Array.isArray(d.af?.financial) ? d.af.financial : [] },
           };
         }
       } catch {}
     }
     if (Object.keys(fromLocal).length > 0) {
-      setStoreDataMap(prev => ({ ...fromLocal, ...prev })); // local first, prev wins if newer
+      zBulkSet(fromLocal); // ★ Zustand: existing state wins over local restore
     }
 
     // Step 2: 服务器确认 (后台, 版本比对后覆盖)
-    setDataLoading(true);
+    zSetDataLoading(true);
     Promise.all(realStores.map(store =>
       pullStoreData(store.id).then(serverData => ({ storeId: store.id, serverData }))
     )).then(results => {
@@ -462,180 +502,179 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         // 恢复原始数据到 storeDataMap
         if (serverData.data) {
           const sd = serverData.data;
-          setStoreDataMap(prev => ({
-            ...prev,
-            [storeId]: {
-              orders: sd.orders || [],
-              promotionSummary: sd.promotionSummary || [],
-              promotionProducts: sd.promotionProducts || [],
-              starStoreSummary: sd.starStoreSummary || [],
-              liveStreamSummary: sd.liveStreamSummary || [],
-              shippingInsurance: sd.shippingInsurance || [],
-              afterSaleRecords: sd.afterSaleRecords || [],
-              financialRecords: sd.financialRecords || [],
-              availableFields: {
-                csv: new Set(Array.isArray(sd.availableFields?.csv) ? sd.availableFields.csv : []),
-                promotion: new Set(Array.isArray(sd.availableFields?.promotion) ? sd.availableFields.promotion : []),
-                insurance: new Set(Array.isArray(sd.availableFields?.insurance) ? sd.availableFields.insurance : []),
-                afterSale: new Set(Array.isArray(sd.availableFields?.afterSale) ? sd.availableFields.afterSale : []),
-              }
+          const storeData: StoreDataItem = {
+            orders: sd.orders || [],
+            promotionSummary: sd.promotionSummary || [],
+            promotionProducts: sd.promotionProducts || [],
+            starStoreSummary: sd.starStoreSummary || [],
+            liveStreamSummary: sd.liveStreamSummary || [],
+            shippingInsurance: sd.shippingInsurance || [],
+            afterSaleRecords: sd.afterSaleRecords || [],
+            financialRecords: sd.financialRecords || [],
+            availableFields: {
+              csv: Array.isArray(sd.availableFields?.csv) ? sd.availableFields.csv : [],
+              promotion: Array.isArray(sd.availableFields?.promotion) ? sd.availableFields.promotion : [],
+              insurance: Array.isArray(sd.availableFields?.insurance) ? sd.availableFields.insurance : [],
+              afterSale: Array.isArray(sd.availableFields?.afterSale) ? sd.availableFields.afterSale : [], financial: Array.isArray(sd.availableFields?.financial) ? sd.availableFields.financial : [],
             }
-          }));
+          };
+          // ★ 防止空/旧服务端数据覆盖本地（同步失败时服务端为空，保留本地）
+          // 检查全部数据分类，不只是 orders
+          const localSnap = useDataStore.getState().storeDataMap[storeId];
+          const localTotal = localSnap
+            ? (localSnap.orders?.length||0) + (localSnap.promotionSummary?.length||0) + (localSnap.promotionProducts?.length||0)
+              + (localSnap.starStoreSummary?.length||0) + (localSnap.liveStreamSummary?.length||0)
+              + (localSnap.shippingInsurance?.length||0) + (localSnap.afterSaleRecords?.length||0) + (localSnap.financialRecords?.length||0)
+            : 0;
+          const serverTotal = (storeData.orders?.length||0) + (storeData.promotionSummary?.length||0) + (storeData.promotionProducts?.length||0)
+            + (storeData.starStoreSummary?.length||0) + (storeData.liveStreamSummary?.length||0)
+            + (storeData.shippingInsurance?.length||0) + (storeData.afterSaleRecords?.length||0) + (storeData.financialRecords?.length||0);
+          if (serverTotal > 0 || localTotal === 0) {
+            zReplaceStore(storeId, storeData);
+          }
         }
 
-        // 恢复上传记录
+        // ★ 恢复上传记录：合并多店铺，避免后一个覆盖前一个
         if (serverData.uploadRecords?.length) {
-          setUploadRecords(prev => {
-            const existing = new Set(prev.map(r => r.id));
-            const newRecords = serverData.uploadRecords.filter((r: any) => !existing.has(r.id));
-            return [...prev, ...newRecords];
-          });
+          const existing = useDataStore.getState().uploadRecords;
+          const existingIds = new Set(existing.map(r => r.id));
+          const newOnes = serverData.uploadRecords.filter((r: any) => !existingIds.has(r.id));
+          if (newOnes.length > 0) {
+            zSetUploadRecords([...existing, ...newOnes]);
+          }
         }
 
-        // 恢复配置
+        // 恢复配置（持久化到 Zustand）
         if (serverData.configs) {
+          const z = useDataStore.getState();
           for (const [key, value] of Object.entries(serverData.configs)) {
             const val = typeof value === 'string' ? value : JSON.stringify(value);
-            if (key.startsWith('dianfx_product_costs_')) setProductCostsByStore(prev => ({ ...prev, [storeId]: typeof value === 'string' ? JSON.parse(value) : value }));
-            else if (key.startsWith('dianfx_cost_configs_')) setCostConfigsByStore(prev => ({ ...prev, [storeId]: typeof value === 'string' ? JSON.parse(value) : value }));
-            else if (key.startsWith('dianfx_packaging_fee_')) setPackagingFeeByStore(prev => ({ ...prev, [storeId]: parseFloat(val) || 0 }));
-            else if (key.startsWith('dianfx_shipping_fee_')) setShippingFeeByStore(prev => ({ ...prev, [storeId]: parseFloat(val) || 0 }));
-            else if (key.startsWith('dianfx_platform_commission_')) setPlatformCommissionByStore(prev => ({ ...prev, [storeId]: parseFloat(val) || 0 }));
-            else if (key.startsWith('dianfx_insurance_fee_')) setInsuranceFeeByStore(prev => ({ ...prev, [storeId]: parseFloat(val) || 0 }));
-            else if (key.startsWith('dianfx_default_cost_ratio_')) setDefaultCostRatioByStore(prev => ({ ...prev, [storeId]: parseFloat(val) || 0 }));
-            else if (key.startsWith('dianfx_tax_configs_')) setTaxConfigsByStore(prev => ({ ...prev, [storeId]: typeof value === 'string' ? JSON.parse(value) : value }));
-            else if (key.startsWith('dianfx_custom_deductions_')) setCustomDeductionsByStore(prev => ({ ...prev, [storeId]: typeof value === 'string' ? JSON.parse(value) : value }));
-            else if (key.startsWith('dianfx_abnormal_orders_')) setAbnormalOrdersByStore(prev => ({ ...prev, [storeId]: typeof value === 'string' ? JSON.parse(value) : value }));
-            else if (key.startsWith('dianfx_cost_history_')) setCostHistoryByStore(prev => ({ ...prev, [storeId]: typeof value === 'string' ? JSON.parse(value) : value }));
-            else if (key.startsWith('dianfx_pricing_presets_')) setPricingPresetsByStore(prev => ({ ...prev, [storeId]: typeof value === 'string' ? JSON.parse(value) : value }));
-            else if (key.startsWith('dianfx_labor_fee_')) setLaborFeeByStore(prev => ({ ...prev, [storeId]: parseFloat(val) || 0 }));
-            else if (key.startsWith('dianfx_promotion_fee_')) setPromotionFeeByStore(prev => ({ ...prev, [storeId]: parseFloat(val) || 0 }));
+            if (key.startsWith('dianfx_product_costs_')) z.setProductCosts(storeId, typeof value === 'string' ? JSON.parse(value) : value);
+            else if (key.startsWith('dianfx_cost_configs_')) z.setCostConfigs(storeId, typeof value === 'string' ? JSON.parse(value) : value);
+            else if (key.startsWith('dianfx_packaging_fee_')) z.setPackagingFee(storeId, parseFloat(val) || 0);
+            else if (key.startsWith('dianfx_shipping_fee_')) z.setShippingFee(storeId, parseFloat(val) || 0);
+            else if (key.startsWith('dianfx_platform_commission_')) z.setPlatformCommission(storeId, parseFloat(val) || 0);
+            else if (key.startsWith('dianfx_insurance_fee_')) z.setInsuranceFee(storeId, parseFloat(val) || 0);
+            else if (key.startsWith('dianfx_default_cost_ratio_')) z.setDefaultCostRatio(storeId, parseFloat(val) || 0);
+            else if (key.startsWith('dianfx_tax_configs_')) z.setTaxConfigs(storeId, typeof value === 'string' ? JSON.parse(value) : value);
+            else if (key.startsWith('dianfx_custom_deductions_')) z.setCustomDeductions(storeId, typeof value === 'string' ? JSON.parse(value) : value);
+            else if (key.startsWith('dianfx_abnormal_orders_')) z.setAbnormalOrders(storeId, typeof value === 'string' ? JSON.parse(value) : value);
+            else if (key.startsWith('dianfx_cost_history_')) z.setCostHistory(storeId, typeof value === 'string' ? JSON.parse(value) : value);
+            else if (key.startsWith('dianfx_pricing_presets_')) z.setPricingPresets(storeId, typeof value === 'string' ? JSON.parse(value) : value);
+            else if (key.startsWith('dianfx_labor_fee_')) z.setLaborFee(storeId, parseFloat(val) || 0);
+            else if (key.startsWith('dianfx_promotion_fee_')) z.setPromotionFee(storeId, parseFloat(val) || 0);
+            else if (key.startsWith('dianfx_subsidy_commission_')) z.setSubsidyCommission(storeId, parseFloat(val) || 0);
           }
         }
       }
     }).catch((e: any) => {
       console.error('[data] Load failed:', e?.message || e);
-      // ★ 毫秒级重试：1秒后立即重试，最多3次
       let retries = 0;
       const retryLoad = () => {
         if (retries >= 3) return;
         retries++;
-        const delay = Math.min(1000 * Math.pow(2, retries - 1), 8000); // 1s→2s→4s→8s
+        const delay = Math.min(1000 * Math.pow(2, retries - 1), 8000);
         setTimeout(() => {
-          const realStores = stores.filter(s => s.id !== ALL_STORES_ID);
-          if (realStores.length) {
-            Promise.all(realStores.map(s => pullStoreData(s.id))).then(results => {
+          const rs = stores.filter(s => s.id !== ALL_STORES_ID);
+          if (rs.length) {
+            Promise.all(rs.map(s => pullStoreData(s.id))).then(results => {
               results.forEach((sd, i) => {
-                if (sd?.data) setStoreDataMap(prev => ({...prev, [realStores[i].id]: {...prev[realStores[i].id], ...sd.data}}));
+                if (!sd?.data) return;
+                const sid = rs[i].id;
+                const newData = { ...sd.data, availableFields: {
+                  csv: Array.isArray(sd.data.availableFields?.csv) ? sd.data.availableFields.csv : [],
+                  promotion: Array.isArray(sd.data.availableFields?.promotion) ? sd.data.availableFields.promotion : [],
+                  insurance: Array.isArray(sd.data.availableFields?.insurance) ? sd.data.availableFields.insurance : [],
+                  afterSale: Array.isArray(sd.data.availableFields?.afterSale) ? sd.data.availableFields.afterSale : [], financial: Array.isArray(sd.data.availableFields?.financial) ? sd.data.availableFields.financial : [],
+                }};
+                // ★ retry 分支也用同样的非空保护
+                const localSnap = useDataStore.getState().storeDataMap[sid];
+                const localTotal = localSnap
+                  ? (localSnap.orders?.length||0)+(localSnap.promotionSummary?.length||0)+(localSnap.promotionProducts?.length||0)
+                    +(localSnap.starStoreSummary?.length||0)+(localSnap.liveStreamSummary?.length||0)
+                    +(localSnap.shippingInsurance?.length||0)+(localSnap.afterSaleRecords?.length||0)+(localSnap.financialRecords?.length||0)
+                  : 0;
+                const serverTotal = (newData.orders?.length||0)+(newData.promotionSummary?.length||0)+(newData.promotionProducts?.length||0)
+                  +(newData.starStoreSummary?.length||0)+(newData.liveStreamSummary?.length||0)
+                  +(newData.shippingInsurance?.length||0)+(newData.afterSaleRecords?.length||0)+(newData.financialRecords?.length||0);
+                if (serverTotal > 0 || localTotal === 0) {
+                  zReplaceStore(sid, newData);
+                }
               });
             }).catch(() => retryLoad());
           }
         }, delay);
       };
       retryLoad();
-    }).finally(() => setDataLoading(false));
+    }).finally(() => zSetDataLoading(false));
   }, [user, stores]);
 
   // ★ 按需加载原始数据（页面需要时调用）
-  const refreshStoreData = useCallback(async (storeId: string) => {
+  const refreshStoreData = useCallback(async (storeId: string, force?: boolean) => {
     if (!storeId || isAllStores(storeId)) return;
     const serverData = await pullStoreData(storeId);
-    if (!serverData?.data) return;
-    const sd = serverData.data;
-    setStoreDataMap(prev => ({
-      ...prev,
-      [storeId]: {
-        orders: sd.orders || [], promotionSummary: sd.promotionSummary || [],
-        promotionProducts: sd.promotionProducts || [], starStoreSummary: sd.starStoreSummary || [],
-        liveStreamSummary: sd.liveStreamSummary || [], shippingInsurance: sd.shippingInsurance || [],
-        afterSaleRecords: sd.afterSaleRecords || [], financialRecords: sd.financialRecords || [],
-        availableFields: {
-          csv: new Set(Array.isArray(sd.availableFields?.csv) ? sd.availableFields.csv : []),
-          promotion: new Set(Array.isArray(sd.availableFields?.promotion) ? sd.availableFields.promotion : []),
-          insurance: new Set(Array.isArray(sd.availableFields?.insurance) ? sd.availableFields.insurance : []),
-          afterSale: new Set(Array.isArray(sd.availableFields?.afterSale) ? sd.availableFields.afterSale : []),
-        }
+    // ★ force=true（data:deleted）：服务端已删空，清空本地
+    if (!serverData?.data) {
+      if (force) {
+        zReplaceStore(storeId, { ...EMPTY_STORE_DATA });
       }
-    }));
+      return;
+    }
+    const sd = serverData.data;
+    const newData: StoreDataItem = {
+      orders: sd.orders || [], promotionSummary: sd.promotionSummary || [],
+      promotionProducts: sd.promotionProducts || [], starStoreSummary: sd.starStoreSummary || [],
+      liveStreamSummary: sd.liveStreamSummary || [], shippingInsurance: sd.shippingInsurance || [],
+      afterSaleRecords: sd.afterSaleRecords || [], financialRecords: sd.financialRecords || [],
+      availableFields: {
+        csv: Array.isArray(sd.availableFields?.csv) ? sd.availableFields.csv : [],
+        promotion: Array.isArray(sd.availableFields?.promotion) ? sd.availableFields.promotion : [],
+        insurance: Array.isArray(sd.availableFields?.insurance) ? sd.availableFields.insurance : [],
+        afterSale: Array.isArray(sd.availableFields?.afterSale) ? sd.availableFields.afterSale : [], financial: Array.isArray(sd.availableFields?.financial) ? sd.availableFields.financial : [],
+      }
+    };
+    // ★ force=true（SSE data:deleted 等远端真实删除）时跳过保护，允许覆盖
+    if (force) {
+      zReplaceStore(storeId, newData);
+      return;
+    }
+    // ★ 非空保护：服务端为空时不覆盖本地
+    const localSnap = useDataStore.getState().storeDataMap[storeId];
+    const localTotal = localSnap
+      ? (localSnap.orders?.length||0)+(localSnap.promotionSummary?.length||0)+(localSnap.promotionProducts?.length||0)
+        +(localSnap.starStoreSummary?.length||0)+(localSnap.liveStreamSummary?.length||0)
+        +(localSnap.shippingInsurance?.length||0)+(localSnap.afterSaleRecords?.length||0)+(localSnap.financialRecords?.length||0)
+      : 0;
+    const serverTotal = (newData.orders?.length||0)+(newData.promotionSummary?.length||0)+(newData.promotionProducts?.length||0)
+      +(newData.starStoreSummary?.length||0)+(newData.liveStreamSummary?.length||0)
+      +(newData.shippingInsurance?.length||0)+(newData.afterSaleRecords?.length||0)+(newData.financialRecords?.length||0);
+    if (serverTotal > 0 || localTotal === 0) {
+      zReplaceStore(storeId, newData);
+    }
   }, []);
 
-  // ★ 配置状态（全部从服务器加载，不存浏览器）
-  const [productCostsByStore, setProductCostsByStore] = useState<Record<string, Record<string, number>>>({});
-  const [costConfigsByStore, setCostConfigsByStore] = useState<Record<string, Record<string, CostConfig>>>({});
-  const [packagingFeeByStore, setPackagingFeeByStore] = useState<Record<string, number>>({});
-  const [pricingPresetsByStore, setPricingPresetsByStore] = useState<Record<string, any[]>>({});
-  const [uploadRecords, setUploadRecords] = useState<UploadRecord[]>([]);
-  const [taxConfigsByStore, setTaxConfigsByStore] = useState<Record<string, TaxConfig[]>>({});
-  const [customDeductionsByStore, setCustomDeductionsByStore] = useState<Record<string, CustomDeduction[]>>({});
-  const [defaultCostRatioByStore, setDefaultCostRatioByStore] = useState<Record<string, number>>({});
-  const [shippingFeeByStore, setShippingFeeByStore] = useState<Record<string, number>>({});
-  const [platformCommissionByStore, setPlatformCommissionByStore] = useState<Record<string, number>>({});
-  const [laborFeeByStore, setLaborFeeByStore] = useState<Record<string, number>>({});
-  const [insuranceFeeByStore, setInsuranceFeeByStore] = useState<Record<string, number>>({});
-  const [promotionFeeByStore, setPromotionFeeByStore] = useState<Record<string, number>>({});
-  const [abnormalOrdersByStore, setAbnormalOrdersByStore] = useState<Record<string, Record<string, AbnormalOrderRecord>>>({});
-  const [costHistoryByStore, setCostHistoryByStore] = useState<Record<string, CostHistoryEntry[]>>({});
+  // ★ 配置状态已全部迁移到 useDataStore（Zustand persist 自动 localStorage 持久化）
 
   // ---- 计算当前店铺的值（根据 dataFilter 自动选择） ----
 
   // 当前店铺 ID（__all__ 模式返回空字符串）
   const currentStoreId = useMemo(() => isAllStores(dataFilter) ? '' : dataFilter, [dataFilter]);
 
-  const productCosts = useMemo((): Record<string, number> => {
-    return productCostsByStore[dataFilter] || {};
-  }, [dataFilter, productCostsByStore]);
-
-  const costConfigs = useMemo((): Record<string, CostConfig> => {
-    return costConfigsByStore[dataFilter] || {};
-  }, [dataFilter, costConfigsByStore]);
-
-  const packagingFeePerOrder = useMemo((): number => {
-    return packagingFeeByStore[dataFilter] ?? 0;
-  }, [dataFilter, packagingFeeByStore]);
-
-  const pricingPresets = useMemo((): any[] => {
-    return pricingPresetsByStore[dataFilter] || [];
-  }, [dataFilter, pricingPresetsByStore]);
-
-  const taxConfigs = useMemo((): TaxConfig[] => {
-    return taxConfigsByStore[dataFilter] || [];
-  }, [dataFilter, taxConfigsByStore]);
-
-  const customDeductions = useMemo((): CustomDeduction[] => {
-    return customDeductionsByStore[dataFilter] || [];
-  }, [dataFilter, customDeductionsByStore]);
-
-  const defaultCostRatio = useMemo((): number => {
-    return defaultCostRatioByStore[dataFilter] ?? 0;
-  }, [dataFilter, defaultCostRatioByStore]);
-
-  const shippingFeePerOrder = useMemo((): number => {
-    return shippingFeeByStore[dataFilter] ?? 0;
-  }, [dataFilter, shippingFeeByStore]);
-
-  const platformCommissionRate = useMemo((): number => {
-    return platformCommissionByStore[dataFilter] ?? 0;
-  }, [dataFilter, platformCommissionByStore]);
-
-  const laborFeePerOrder = useMemo((): number => {
-    return laborFeeByStore[dataFilter] ?? 0;
-  }, [dataFilter, laborFeeByStore]);
-
-  const insuranceFeePerOrder = useMemo((): number => {
-    return insuranceFeeByStore[dataFilter] ?? 0;
-  }, [dataFilter, insuranceFeeByStore]);
-
-  const promotionFeePerOrder = useMemo((): number => {
-    return promotionFeeByStore[dataFilter] ?? 0;
-  }, [dataFilter, promotionFeeByStore]);
-
-  const abnormalOrders = useMemo((): Record<string, AbnormalOrderRecord> => {
-    return abnormalOrdersByStore[dataFilter] || {};
-  }, [dataFilter, abnormalOrdersByStore]);
-
-  const costHistory = useMemo((): CostHistoryEntry[] => {
-    return costHistoryByStore[dataFilter] || [];
-  }, [dataFilter, costHistoryByStore]);
+  const productCosts: Record<string, number> = useDataStore(s => s.productCostsByStore[dataFilter]) || {};
+  const costConfigs: Record<string, CostConfig> = useDataStore(s => s.costConfigsByStore[dataFilter]) || {};
+  const packagingFeePerOrder: number = useDataStore(s => s.packagingFeeByStore[dataFilter]) ?? 0;
+  const pricingPresets: any[] = useDataStore(s => s.pricingPresetsByStore[dataFilter]) || [];
+  const taxConfigs: TaxConfig[] = useDataStore(s => s.taxConfigsByStore[dataFilter]) || [];
+  const customDeductions: CustomDeduction[] = useDataStore(s => s.customDeductionsByStore[dataFilter]) || [];
+  const defaultCostRatio: number = useDataStore(s => s.defaultCostRatioByStore[dataFilter]) ?? 0;
+  const shippingFeePerOrder: number = useDataStore(s => s.shippingFeeByStore[dataFilter]) ?? 0;
+  const platformCommissionRate: number = useDataStore(s => s.platformCommissionByStore[dataFilter]) ?? 0;
+  const laborFeePerOrder: number = useDataStore(s => s.laborFeeByStore[dataFilter]) ?? 0;
+  const insuranceFeePerOrder: number = useDataStore(s => s.insuranceFeeByStore[dataFilter]) ?? 0;
+  const promotionFeePerOrder: number = useDataStore(s => s.promotionFeeByStore[dataFilter]) ?? 0;
+  const subsidyCommissionRate: number = useDataStore(s => s.subsidyCommissionByStore[dataFilter]) ?? 1.5;
+  const abnormalOrders: Record<string, AbnormalOrderRecord> = useDataStore(s => s.abnormalOrdersByStore[dataFilter]) || {};
+  const costHistory: CostHistoryEntry[] = useDataStore(s => s.costHistoryByStore[dataFilter]) || [];
 
   const filteredUploadRecords = useMemo((): UploadRecord[] => {
     return uploadRecords.filter(r => r.storeId === dataFilter);
@@ -657,11 +696,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [serverCompare, setServerCompare] = useState<PeriodCompare | null>(null);
   const [serverFinancial, setServerFinancial] = useState<FinancialSummary | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
-  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
   const analyticsFetchIdRef = useRef(0);
   const lastRefreshTimeRef = useRef<number>(0);
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
   const sseConnectedRef = useRef(false);
+  const consecutiveFailuresRef = useRef(0); // ★ 连续失败计数（仅内部使用，不暴露给UI）
 
   // ★ 核心刷新函数：统一的数据加载入口（5层保险的第1层）
   const applyBulkData = useCallback((bulk: BulkAnalytics) => {
@@ -680,27 +719,30 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // ★ 公开的刷新函数（UploadPage 等可在同步后直接调用）
+  // ★ 公开的刷新函数 — 大厂设计：失败完全静默，不暴露任何状态给UI
+  //   成功就更新数据，失败就保持旧数据，用户无感知
   const refreshAnalytics = useCallback(async (storeId?: string) => {
     const sid = storeId || dataFilter;
-    if (!sid || !hasTokens()) return;
+    if (!sid || !hasTokens()) {
+      return;
+    }
 
     const fetchId = ++analyticsFetchIdRef.current;
     setAnalyticsLoading(true);
-    setAnalyticsError(null);
 
     try {
       const bulk = await analyticsApi.getBulk(sid);
-      if (fetchId !== analyticsFetchIdRef.current) return; // 防竞态
+      if (fetchId !== analyticsFetchIdRef.current) return;
       if (bulk) {
+        consecutiveFailuresRef.current = 0;
         applyBulkData(bulk);
-        setAnalyticsLoading(false);
       } else {
-        setAnalyticsError('数据加载失败，请检查网络后重试');
-        setAnalyticsLoading(false);
+        consecutiveFailuresRef.current++;
       }
+      setAnalyticsLoading(false);
     } catch {
       if (fetchId !== analyticsFetchIdRef.current) return;
-      setAnalyticsError('数据加载失败，请检查网络后重试');
+      consecutiveFailuresRef.current++;
       setAnalyticsLoading(false);
     }
   }, [dataFilter, applyBulkData]);
@@ -716,31 +758,47 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user || !hasTokens()) return;
 
-    const tokensStr = localStorage.getItem('dianfx_jwt_tokens');
-    if (!tokensStr) return;
-    let token = '';
-    try { token = JSON.parse(tokensStr).accessToken || ''; } catch { return; }
-    if (!token) return;
-
-    const sseUrl = `${apiClient.getBaseUrl()}/sse?token=${encodeURIComponent(token)}`;
     let aborted = false;
     let reconnectTimer: NodeJS.Timeout | null = null;
     const abortController = new AbortController();
 
+    function getFreshToken(): string {
+      try {
+        const tokensStr = localStorage.getItem('dianfx_jwt_tokens');
+        if (!tokensStr) return '';
+        return JSON.parse(tokensStr).accessToken || '';
+      } catch { return ''; }
+    }
+
     function connectSSE() {
       if (aborted) return;
+      // ★ 每次连接/重连重新读取 token（防止 15 分钟过期）
+      const freshToken = getAccessToken() || getFreshToken();
+      if (!freshToken) { scheduleReconnect(); return; }
+      const url = `${apiClient.getBaseUrl()}/sse?token=${encodeURIComponent(freshToken)}`;
+
       (async () => {
         try {
-          const res = await fetch(sseUrl, {
-            headers: { 'Authorization': `Bearer ${token}` },
+          const res = await fetch(url, {
+            headers: { 'Authorization': `Bearer ${freshToken}` },
             signal: abortController.signal,
           });
+          // ★ 修复：401 时 token 可能过期，主动刷新后再重连
+          if (res.status === 401) {
+            sseConnectedRef.current = false;
+            const refreshed = await refreshAccessToken();
+            if (refreshed) {
+              scheduleReconnect(); // 会用 getAccessToken() 拿到新 token 重连
+            }
+            return;
+          }
           if (!res.ok || !res.body) {
             sseConnectedRef.current = false;
             scheduleReconnect();
             return;
           }
           sseConnectedRef.current = true;
+          reconnectAttempts = 0; // ★ 连接成功后重置重试计数
 
           const reader = res.body.getReader();
           const decoder = new TextDecoder();
@@ -748,7 +806,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
           while (!aborted) {
             const { done, value } = await reader.read();
-            if (done) { sseConnectedRef.current = false; break; }
+            if (done) {
+              sseConnectedRef.current = false;
+              scheduleReconnect(); // ★ 修复：流正常结束后也重连
+              return;
+            }
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split('\n');
             buffer = lines.pop() || '';
@@ -761,14 +823,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                   try {
                     const payload = JSON.parse(dataLine.slice(6));
                     if (eventType === 'sync:completed' && payload.storeId) {
-                      // SSE推送到达 → 毫秒级刷新原始数据+分析
+                      lastRefreshTimeRef.current = Date.now();
                       refreshStoreData(payload.storeId);
                       refreshAnalytics(payload.storeId);
                     } else if (eventType === 'config:updated' && payload.storeId) {
+                      lastRefreshTimeRef.current = Date.now();
                       refreshStoreData(payload.storeId);
                       refreshAnalytics(payload.storeId);
                     } else if (eventType === 'data:deleted' && payload.storeId) {
-                      refreshStoreData(payload.storeId);
+                      lastRefreshTimeRef.current = Date.now();
+                      refreshStoreData(payload.storeId, true);
                       refreshAnalytics(payload.storeId);
                     }
                   } catch {}
@@ -778,6 +842,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
           }
         } catch {
           sseConnectedRef.current = false;
+          scheduleReconnect(); // ★ 修复：网络异常也要重连
         }
       })();
     }
@@ -786,7 +851,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     function scheduleReconnect() {
       if (aborted) return;
       reconnectAttempts++;
-      // ★ 毫秒级重连：1s→2s→4s→8s，最大30s
       const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 30000);
       reconnectTimer = setTimeout(() => {
         connectSSE();
@@ -806,7 +870,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!user || !dataFilter) return;
     const pollTimer = setInterval(() => {
-      if (!sseConnectedRef.current) {
+      if (!sseConnectedRef.current && Date.now() - lastRefreshTimeRef.current > 1000) {
+        lastRefreshTimeRef.current = Date.now();
         refreshAnalytics(dataFilter);
       }
     }, 5000); // 5秒兜底，SSE连接时不触发
@@ -835,70 +900,24 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   /** ★ 仅更新本地状态，不同步到服务端 */
   const setStoreDataLocal = useCallback((storeId: string, dataOrUpdater: any) => {
-    setStoreDataMap(prev => {
-      const prevStoreData = prev[storeId] || null;
-      const newData = typeof dataOrUpdater === 'function'
-        ? (dataOrUpdater as (prev: StoreDataItem | null) => StoreDataItem)(prevStoreData)
-        : dataOrUpdater;
-      // ★ localStorage 持久化：写入即保存，刷新不丢失
-      try { localStorage.setItem('meoo_ds_' + storeId, JSON.stringify({
-        o: newData.orders || [], ps: newData.promotionSummary || [], pp: newData.promotionProducts || [],
-        ss: newData.starStoreSummary || [], ls: newData.liveStreamSummary || [],
-        si: newData.shippingInsurance || [], as: newData.afterSaleRecords || [], fr: newData.financialRecords || [],
-        af: { csv: Array.from(newData.availableFields?.csv||[]), promotion: Array.from(newData.availableFields?.promotion||[]), insurance: Array.from(newData.availableFields?.insurance||[]), afterSale: Array.from(newData.availableFields?.afterSale||[]) },
-        v: Date.now()
-      })); } catch {}
-      return { ...prev, [storeId]: newData };
-    });
-  }, []);
+    zSetLocal(storeId, dataOrUpdater);
+  }, [zSetLocal]);
 
-  const setStoreData = useCallback((storeId: string, dataOrUpdater: any) => {
-    setStoreDataMap(prev => {
-      const prevStoreData = prev[storeId] || null;
-      const newData = typeof dataOrUpdater === 'function'
-        ? (dataOrUpdater as (prev: StoreDataItem | null) => StoreDataItem)(prevStoreData)
-        : dataOrUpdater;
-      setSyncStatus('syncing');
-      const storeName = stores.find(s => s.id === storeId)?.name || '';
-      const slimData: Record<string, any[]> = {};
-      const categories = ['orders', 'promotionSummary', 'promotionProducts', 'starStoreSummary', 'liveStreamSummary', 'shippingInsurance', 'afterSaleRecords', 'financialRecords'];
-      for (const cat of categories) {
-        if (Array.isArray((newData as any)[cat]) && (newData as any)[cat].length > 0) {
-          slimData[cat] = (newData as any)[cat];
-        }
+  const setStoreData = useCallback((storeId: string, dataOrUpdater: any, categories?: string[]) => {
+    // 本地立即更新 (Zustand 自动持久化到 localStorage)
+    zSetLocal(storeId, dataOrUpdater);
+    // 后台同步服务器
+    const storeName = stores.find(s => s.id === storeId)?.name || '';
+    // ★ 直接从 Zustand 读最新 uploadRecords，避免 React 闭包旧值
+    const latestUploads = useDataStore.getState().uploadRecords.filter(r => r.storeId === storeId);
+    // ★ 增量同步：只发送变更的 categories
+    zSyncServer(storeId, storeName, latestUploads, categories).then((ok) => {
+      // ★ 同步成功才刷新分析，失败时 syncStatus 已设为 'error'
+      if (ok) {
+        refreshAnalytics(storeId);
       }
-      slimData.availableFields = {
-        csv: Array.from(newData.availableFields?.csv || []),
-        promotion: Array.from(newData.availableFields?.promotion || []),
-        insurance: Array.from(newData.availableFields?.insurance || []),
-        afterSale: Array.from(newData.availableFields?.afterSale || []),
-      };
-      const sid = storeId;
-      // ★ 零时差策略：本地数据立即更新（Dashboard 从 currentDisplayData 计算，不等服务器）
-      //    服务器同步完成后才刷新 serverDashboard（保证数据权威性）
-      syncStoreData(sid, storeName, slimData as any, {}, [])
-        .then(() => {
-          setSyncStatus('done');
-          // 服务器确认已存储 → 此时刷新分析数据才是准确的
-          refreshAnalytics(sid);
-        })
-        .catch(e => {
-          console.error('[data] sync error:', e);
-          setSyncStatus('error');
-          // 失败回滚：清除本地未确认的数据，防止界面显示错误
-          // （暂时保留本地数据显示，下次刷新页面时从服务器重新拉取）
-        });
-      // ★ localStorage 持久化 + 服务器同步
-      try { localStorage.setItem('meoo_ds_' + sid, JSON.stringify({
-        o: newData.orders || [], ps: newData.promotionSummary || [], pp: newData.promotionProducts || [],
-        ss: newData.starStoreSummary || [], ls: newData.liveStreamSummary || [],
-        si: newData.shippingInsurance || [], as: newData.afterSaleRecords || [], fr: newData.financialRecords || [],
-        af: { csv: Array.from(newData.availableFields?.csv||[]), promotion: Array.from(newData.availableFields?.promotion||[]), insurance: Array.from(newData.availableFields?.insurance||[]), afterSale: Array.from(newData.availableFields?.afterSale||[]) },
-        v: Date.now()
-      })); } catch {}
-      return { ...prev, [storeId]: newData };
     });
-  }, [stores, refreshAnalytics]);
+  }, [stores, refreshAnalytics, zSetLocal, zSyncServer]);
 
   const currentDisplayData = useMemo((): StoreDataItem => {
     if (!dataFilter) return EMPTY_STORE_DATA;
@@ -910,8 +929,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         orders: [], promotionSummary: [], promotionProducts: [],
         starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [],
         afterSaleRecords: [], financialRecords: [],
-        availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() },
+        availableFields: { csv: [], promotion: [], insurance: [], afterSale: [], financial: [] },
       };
+      const csvSet = new Set<string>(); const promSet = new Set<string>();
+      const insSet = new Set<string>(); const asSet = new Set<string>(); const finSet = new Set<string>();
       for (const store of realStores) {
         const sd = storeDataMap[store.id];
         if (!sd) continue;
@@ -923,11 +944,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         merged.shippingInsurance.push(...sd.shippingInsurance);
         merged.afterSaleRecords.push(...sd.afterSaleRecords);
         merged.financialRecords.push(...sd.financialRecords);
-        sd.availableFields.csv.forEach(f => merged.availableFields.csv.add(f));
-        sd.availableFields.promotion.forEach(f => merged.availableFields.promotion.add(f));
-        sd.availableFields.insurance.forEach(f => merged.availableFields.insurance.add(f));
-        sd.availableFields.afterSale.forEach(f => merged.availableFields.afterSale.add(f));
+        (Array.isArray(sd.availableFields.csv) ? sd.availableFields.csv : []).forEach(f => csvSet.add(f));
+        (Array.isArray(sd.availableFields.promotion) ? sd.availableFields.promotion : []).forEach(f => promSet.add(f));
+        (Array.isArray(sd.availableFields.insurance) ? sd.availableFields.insurance : []).forEach(f => insSet.add(f));
+        (Array.isArray(sd.availableFields.afterSale) ? sd.availableFields.afterSale : []).forEach(f => asSet.add(f));
       }
+      realStores.forEach(store => {
+        const sd = storeDataMap[store.id];
+        if (!sd) return;
+        (Array.isArray(sd.availableFields.financial) ? sd.availableFields.financial : []).forEach(f => finSet.add(f));
+      });
+      merged.availableFields = { csv: [...csvSet], promotion: [...promSet], insurance: [...insSet], afterSale: [...asSet], financial: [...finSet] };
       return merged;
     }
     return storeDataMap[dataFilter] || EMPTY_STORE_DATA;
@@ -964,34 +991,45 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const setProductCost = useCallback((code: string, cost: number) => {
     if (isAllStores(dataFilter)) return;
-    setProductCostsByStore(prev => {
-      const current = prev[dataFilter] || {};
-      const next = { ...prev, [dataFilter]: { ...current, [code]: cost } };
+    const curPC = useDataStore.getState().productCostsByStore[dataFilter] || {};
+      const nextPC = { ...curPC, [code]: cost };
+      useDataStore.getState().setProductCosts(dataFilter, nextPC);
       // ★ 即时同步到服务器
-      syncStoreConfig(dataFilter, `dianfx_product_costs_${dataFilter}`, next[dataFilter]);
-      return next;
-    });
+      syncStoreConfig(dataFilter, `dianfx_product_costs_${dataFilter}`, nextPC);
     addLog({ action: '修改成本配置', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `修改商品成本: ${code} → ¥${cost}`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
   const setCostConfig = useCallback((code: string, config: CostConfig) => {
     if (isAllStores(dataFilter)) return;
-    setCostConfigsByStore(prev => {
-      const current = prev[dataFilter] || {};
-      const next = { ...prev, [dataFilter]: { ...current, [code]: config } };
-      syncStoreConfig(dataFilter, `dianfx_cost_configs_${dataFilter}`, next[dataFilter]);
-      return next;
-    });
+    const curCC = useDataStore.getState().costConfigsByStore[dataFilter] || {};
+      const nextCC = { ...curCC, [code]: config };
+      useDataStore.getState().setCostConfigs(dataFilter, nextCC);
+      syncStoreConfig(dataFilter, `dianfx_cost_configs_${dataFilter}`, nextCC);
     addLog({ action: '修改成本配置', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `修改成本配置: ${code}`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
   const addPricingPreset = useCallback((preset: any) => {
     if (isAllStores(dataFilter)) return;
-    setPricingPresetsByStore(prev => {
-      const next = [...(prev[dataFilter] || []), preset];
-      syncStoreConfig(dataFilter, `dianfx_pricing_presets_${dataFilter}`, next);
-      return { ...prev, [dataFilter]: next };
-    });
+    useDataStore.getState().setPricingPresets(dataFilter, [...(useDataStore.getState().pricingPresetsByStore[dataFilter] || []), preset]);
+      syncStoreConfig(dataFilter, `dianfx_pricing_presets_${dataFilter}`, useDataStore.getState().pricingPresetsByStore[dataFilter] || []);
+  }, [dataFilter]);
+  const updatePricingPreset = useCallback((presetId: string, updated: any) => {
+    if (isAllStores(dataFilter)) return;
+    const curPP = useDataStore.getState().pricingPresetsByStore[dataFilter] || [];
+      const nextPP = curPP.map((p: any) =>
+        (p.id === presetId || p.code === presetId || p.createdAt === presetId) ? { ...p, ...updated } : p
+      );
+      useDataStore.getState().setPricingPresets(dataFilter, nextPP);
+      syncStoreConfig(dataFilter, `dianfx_pricing_presets_${dataFilter}`, nextPP);
+  }, [dataFilter]);
+  const removePricingPreset = useCallback((presetId: string) => {
+    if (isAllStores(dataFilter)) return;
+    const curPP2 = useDataStore.getState().pricingPresetsByStore[dataFilter] || [];
+      const nextPP2 = curPP2.filter((p: any) =>
+        p.id !== presetId && p.code !== presetId && p.createdAt !== presetId
+      );
+      useDataStore.getState().setPricingPresets(dataFilter, nextPP2);
+      syncStoreConfig(dataFilter, `dianfx_pricing_presets_${dataFilter}`, nextPP2);
   }, [dataFilter]);
   const addUploadRecord = useCallback((record: Omit<UploadRecord, 'id' | 'uploadedAt'>) => {
     const storeId = record.storeId || dataFilter;
@@ -1002,118 +1040,94 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       id: `upload-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
       uploadedAt: new Date().toISOString(),
     };
-    setUploadRecords(prev => [...prev, newRecord]);
+    zAddUploadRecord(newRecord);
     addLog({ action: '上传数据', storeId, storeName: record.storeName, details: `上传文件: ${record.fileName} (${record.fileType}, ${record.rowCount}行)`, result: 'success' });
-  }, [dataFilter]);
+  }, [dataFilter, zAddUploadRecord]);
   const deleteUploadRecord = useCallback((id: string) => {
-    setUploadRecords(prev => {
-      const record = prev.find(r => r.id === id);
-      if (!record) return prev;
-      addLog({ action: '删除上传记录', storeId: record.storeId, storeName: record.storeName, details: `删除上传记录: ${record.fileName}`, result: 'success' });
-      // ★ 同步删除服务端对应分类数据
-      const catMap: Record<string, string> = {
-        '订单数据': 'orders', '商品推广数据': 'promotionProducts', '明星店铺数据': 'starStoreSummary',
-        '直播推广数据': 'liveStreamSummary', '运费险数据': 'shippingInsurance', '售后数据': 'afterSaleRecords',
-      };
-      const cat = catMap[record.fileType];
-      if (cat) {
-        apiClient.delete(`/data/store/${encodeURIComponent(record.storeId)}/category/${cat}`).catch(() => {});
-      }
-      setStoreDataMap(prevMap => {
-        const storeData = prevMap[record.storeId];
-        if (!storeData) return prevMap;
-        const newData = { ...storeData };
-        if (record.fileType === '订单数据') {
-          newData.orders = [];
-          newData.availableFields = { ...newData.availableFields, csv: new Set() };
-        } else if (record.fileType === '商品推广数据') {
-          newData.promotionSummary = [];
-          newData.promotionProducts = [];
-          newData.availableFields = { ...newData.availableFields, promotion: new Set() };
-        } else if (record.fileType === '明星店铺数据') {
-          newData.starStoreSummary = [];
-        } else if (record.fileType === '直播推广数据') {
-          newData.liveStreamSummary = [];
-        } else if (record.fileType === '运费险数据') {
-          newData.shippingInsurance = [];
-          newData.availableFields = { ...newData.availableFields, insurance: new Set() };
-        } else if (record.fileType === '售后数据') {
-          newData.afterSaleRecords = [];
-          newData.availableFields = { ...newData.availableFields, afterSale: new Set() };
-        }
-        return { ...prevMap, [record.storeId]: newData };
-      });
-      return prev.filter(r => r.id !== id);
+    const record = uploadRecords.find(r => r.id === id);
+    if (!record) return;
+    addLog({ action: '删除上传记录', storeId: record.storeId, storeName: record.storeName, details: `删除上传记录: ${record.fileName}`, result: 'success' });
+    const catMap: Record<string, string> = {
+      '订单数据': 'orders', '商品推广数据': 'promotionProducts', '明星店铺数据': 'starStoreSummary',
+      '直播推广数据': 'liveStreamSummary', '运费险数据': 'shippingInsurance', '售后数据': 'afterSaleRecords',
+      '货款明细': 'financialRecords',
+    };
+    const cat = catMap[record.fileType];
+    if (cat) {
+      apiClient.delete(`/data/store/${encodeURIComponent(record.storeId)}/category/${cat}`).catch(() => {});
+    }
+    // ★ 清除 Zustand 中对应数据
+    zSetLocal(record.storeId, (prev: StoreDataItem | null) => {
+      if (!prev) return EMPTY_STORE_DATA;
+      const nd = { ...prev, availableFields: { ...prev.availableFields } };
+      if (record.fileType === '订单数据') { nd.orders = []; nd.availableFields.csv = []; }
+      else if (record.fileType === '商品推广数据') { nd.promotionSummary = []; nd.promotionProducts = []; nd.availableFields.promotion = []; }
+      else if (record.fileType === '明星店铺数据') { nd.starStoreSummary = []; }
+      else if (record.fileType === '直播推广数据') { nd.liveStreamSummary = []; }
+      else if (record.fileType === '运费险数据') { nd.shippingInsurance = []; nd.availableFields.insurance = []; }
+      else if (record.fileType === '售后数据') { nd.afterSaleRecords = []; nd.availableFields.afterSale = []; }
+      else if (record.fileType === '货款明细') { nd.financialRecords = []; nd.availableFields.financial = []; }
+      return nd;
     });
-  }, [setDataFilter]);
+    zRemoveUploadRecord(id);
+  }, [uploadRecords, zSetLocal, zRemoveUploadRecord]);
   const clearStoreUploads = useCallback((storeId: string) => {
-    setUploadRecords(prev => prev.filter(r => r.storeId !== storeId));
-  }, []);
+    zClearStoreUploads(storeId);
+  }, [zClearStoreUploads]);
   const clearStoreData = useCallback((storeId: string) => {
-    // ★ 同步删除服务端数据
     apiClient.delete(`/data/store/${encodeURIComponent(storeId)}`).catch(() => {});
-    setStoreDataMap(prev => {
-      const newData = { ...prev };
-      delete newData[storeId];
-      return newData;
-    });
-  }, []);
+    zSetLocal(storeId, EMPTY_STORE_DATA);
+  }, [zSetLocal]);
 
   // Tax config callbacks
   const addTaxConfig = useCallback((config: TaxConfig) => {
     if (isAllStores(dataFilter)) return;
-    setTaxConfigsByStore(prev => {
-      const next = [...(prev[dataFilter] || []), config];
-      syncStoreConfig(dataFilter, `dianfx_tax_configs_${dataFilter}`, next);
-      return { ...prev, [dataFilter]: next };
-    });
+    const curTC = useDataStore.getState().taxConfigsByStore[dataFilter] || [];
+      const nextTC = [...curTC, config];
+      useDataStore.getState().setTaxConfigs(dataFilter, nextTC);
+      syncStoreConfig(dataFilter, `dianfx_tax_configs_${dataFilter}`, nextTC);
     addLog({ action: '修改税费/扣费', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `添加税费: ${config.name}`, result: 'success' });
   }, [dataFilter, getStoreName]);
   const removeTaxConfig = useCallback((id: string) => {
     if (isAllStores(dataFilter)) return;
-    setTaxConfigsByStore(prev => {
-      const next = (prev[dataFilter] || []).filter((t: TaxConfig) => t.id !== id);
-      syncStoreConfig(dataFilter, `dianfx_tax_configs_${dataFilter}`, next);
-      return { ...prev, [dataFilter]: next };
-    });
+    const curTC2 = useDataStore.getState().taxConfigsByStore[dataFilter] || [];
+      const nextTC2 = curTC2.filter((t: TaxConfig) => t.id !== id);
+      useDataStore.getState().setTaxConfigs(dataFilter, nextTC2);
+      syncStoreConfig(dataFilter, `dianfx_tax_configs_${dataFilter}`, nextTC2);
     addLog({ action: '修改税费/扣费', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `删除税费: ${id}`, result: 'success' });
   }, [dataFilter, getStoreName]);
   const updateTaxConfig = useCallback((id: string, updates: Partial<TaxConfig>) => {
     if (isAllStores(dataFilter)) return;
-    setTaxConfigsByStore(prev => {
-      const next = (prev[dataFilter] || []).map((t: TaxConfig) => t.id === id ? { ...t, ...updates } : t);
-      syncStoreConfig(dataFilter, `dianfx_tax_configs_${dataFilter}`, next);
-      return { ...prev, [dataFilter]: next };
-    });
+    const curTC3 = useDataStore.getState().taxConfigsByStore[dataFilter] || [];
+      const nextTC3 = curTC3.map((t: TaxConfig) => t.id === id ? { ...t, ...updates } : t);
+      useDataStore.getState().setTaxConfigs(dataFilter, nextTC3);
+      syncStoreConfig(dataFilter, `dianfx_tax_configs_${dataFilter}`, nextTC3);
     addLog({ action: '修改税费/扣费', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `更新税费: ${id}`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
   // Custom deduction callbacks
   const addCustomDeduction = useCallback((deduction: CustomDeduction) => {
     if (isAllStores(dataFilter)) return;
-    setCustomDeductionsByStore(prev => {
-      const next = [...(prev[dataFilter] || []), deduction];
-      syncStoreConfig(dataFilter, `dianfx_custom_deductions_${dataFilter}`, next);
-      return { ...prev, [dataFilter]: next };
-    });
+    const curCD = useDataStore.getState().customDeductionsByStore[dataFilter] || [];
+      const nextCD = [...curCD, deduction];
+      useDataStore.getState().setCustomDeductions(dataFilter, nextCD);
+      syncStoreConfig(dataFilter, `dianfx_custom_deductions_${dataFilter}`, nextCD);
     addLog({ action: '修改税费/扣费', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `添加自定义扣费: ${deduction.name}`, result: 'success' });
   }, [dataFilter, getStoreName]);
   const removeCustomDeduction = useCallback((id: string) => {
     if (isAllStores(dataFilter)) return;
-    setCustomDeductionsByStore(prev => {
-      const next = (prev[dataFilter] || []).filter((d: CustomDeduction) => d.id !== id);
-      syncStoreConfig(dataFilter, `dianfx_custom_deductions_${dataFilter}`, next);
-      return { ...prev, [dataFilter]: next };
-    });
+    const curCD2 = useDataStore.getState().customDeductionsByStore[dataFilter] || [];
+      const nextCD2 = curCD2.filter((d: CustomDeduction) => d.id !== id);
+      useDataStore.getState().setCustomDeductions(dataFilter, nextCD2);
+      syncStoreConfig(dataFilter, `dianfx_custom_deductions_${dataFilter}`, nextCD2);
     addLog({ action: '修改税费/扣费', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `删除自定义扣费: ${id}`, result: 'success' });
   }, [dataFilter, getStoreName]);
   const updateCustomDeduction = useCallback((id: string, updates: Partial<CustomDeduction>) => {
     if (isAllStores(dataFilter)) return;
-    setCustomDeductionsByStore(prev => {
-      const next = (prev[dataFilter] || []).map((d: CustomDeduction) => d.id === id ? { ...d, ...updates } : d);
-      syncStoreConfig(dataFilter, `dianfx_custom_deductions_${dataFilter}`, next);
-      return { ...prev, [dataFilter]: next };
-    });
+    const curCD3 = useDataStore.getState().customDeductionsByStore[dataFilter] || [];
+      const nextCD3 = curCD3.map((d: CustomDeduction) => d.id === id ? { ...d, ...updates } : d);
+      useDataStore.getState().setCustomDeductions(dataFilter, nextCD3);
+      syncStoreConfig(dataFilter, `dianfx_custom_deductions_${dataFilter}`, nextCD3);
     addLog({ action: '修改税费/扣费', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `更新自定义扣费: ${id}`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
@@ -1125,31 +1139,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       updatedAt: new Date().toISOString(),
     };
     if (isAllStores(dataFilter)) return;
-    setCostHistoryByStore(prev => {
-      const next = [newEntry, ...(prev[dataFilter] || [])].slice(0, 500);
-      syncStoreConfig(dataFilter, `dianfx_cost_history_${dataFilter}`, next);
-      return { ...prev, [dataFilter]: next };
-    });
+    const curCH = useDataStore.getState().costHistoryByStore[dataFilter] || [];
+      const nextCH = [newEntry, ...curCH].slice(0, 500);
+      useDataStore.getState().setCostHistory(dataFilter, nextCH);
+      syncStoreConfig(dataFilter, `dianfx_cost_history_${dataFilter}`, nextCH);
   }, [dataFilter]);
 
   const setAbnormalOrder = useCallback((orderNo: string, record: AbnormalOrderRecord) => {
     if (isAllStores(dataFilter)) return;
-    setAbnormalOrdersByStore(prev => {
-      const current = prev[dataFilter] || {};
-      const next = { ...prev, [dataFilter]: { ...current, [orderNo]: record } };
-      syncStoreConfig(dataFilter, `dianfx_abnormal_orders_${dataFilter}`, next[dataFilter]);
-      return next;
-    });
+    const curAO = useDataStore.getState().abnormalOrdersByStore[dataFilter] || {};
+      const nextAO = { ...curAO, [orderNo]: record };
+      useDataStore.getState().setAbnormalOrders(dataFilter, nextAO);
+      syncStoreConfig(dataFilter, `dianfx_abnormal_orders_${dataFilter}`, nextAO);
     addLog({ action: '修改异常订单', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `设置异常订单: ${orderNo}`, result: 'success' });
   }, [dataFilter, getStoreName]);
   const removeAbnormalOrder = useCallback((orderNo: string) => {
     if (isAllStores(dataFilter)) return;
-    setAbnormalOrdersByStore(prev => {
-      const current = { ...(prev[dataFilter] || {}) };
-      delete current[orderNo];
-      syncStoreConfig(dataFilter, `dianfx_abnormal_orders_${dataFilter}`, current);
-      return { ...prev, [dataFilter]: current };
-    });
+    const curAO2 = { ...(useDataStore.getState().abnormalOrdersByStore[dataFilter] || {}) };
+      delete curAO2[orderNo];
+      useDataStore.getState().setAbnormalOrders(dataFilter, curAO2);
+      syncStoreConfig(dataFilter, `dianfx_abnormal_orders_${dataFilter}`, curAO2);
     addLog({ action: '修改异常订单', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `移除异常订单: ${orderNo}`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
@@ -1157,65 +1166,58 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const setPackagingFeePerOrder = useCallback((fee: number) => {
     if (isAllStores(dataFilter)) return;
-    setPackagingFeeByStore(prev => {
+    useDataStore.getState().setPackagingFee(dataFilter, fee);
       syncStoreConfig(dataFilter, `dianfx_packaging_fee_${dataFilter}`, fee);
-      return { ...prev, [dataFilter]: fee };
-    });
     addLog({ action: '修改费用设置', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `设置包装费: ¥${fee}/单`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
   const setDefaultCostRatio = useCallback((ratio: number) => {
     if (isAllStores(dataFilter)) return;
-    setDefaultCostRatioByStore(prev => {
+    useDataStore.getState().setDefaultCostRatio(dataFilter, ratio);
       syncStoreConfig(dataFilter, `dianfx_default_cost_ratio_${dataFilter}`, ratio);
-      return { ...prev, [dataFilter]: ratio };
-    });
     addLog({ action: '修改费用设置', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `设置默认成本比例: ${ratio}`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
   const setShippingFeePerOrder = useCallback((fee: number) => {
     if (isAllStores(dataFilter)) return;
-    setShippingFeeByStore(prev => {
+    useDataStore.getState().setShippingFee(dataFilter, fee);
       syncStoreConfig(dataFilter, `dianfx_shipping_fee_${dataFilter}`, fee);
-      return { ...prev, [dataFilter]: fee };
-    });
     addLog({ action: '修改费用设置', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `设置运费: ¥${fee}/单`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
   const setPlatformCommissionRate = useCallback((rate: number) => {
     if (isAllStores(dataFilter)) return;
-    setPlatformCommissionByStore(prev => {
+    useDataStore.getState().setPlatformCommission(dataFilter, rate);
       syncStoreConfig(dataFilter, `dianfx_platform_commission_${dataFilter}`, rate);
-      return { ...prev, [dataFilter]: rate };
-    });
     addLog({ action: '修改费用设置', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `设置平台佣金率: ${rate}%`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
   const setLaborFeePerOrder = useCallback((fee: number) => {
     if (isAllStores(dataFilter)) return;
-    setLaborFeeByStore(prev => {
+    useDataStore.getState().setLaborFee(dataFilter, fee);
       syncStoreConfig(dataFilter, `dianfx_labor_fee_${dataFilter}`, fee);
-      return { ...prev, [dataFilter]: fee };
-    });
     addLog({ action: '修改费用设置', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `设置人工费: ¥${fee}/单`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
   const setInsuranceFeePerOrder = useCallback((fee: number) => {
     if (isAllStores(dataFilter)) return;
-    setInsuranceFeeByStore(prev => {
+    useDataStore.getState().setInsuranceFee(dataFilter, fee);
       syncStoreConfig(dataFilter, `dianfx_insurance_fee_${dataFilter}`, fee);
-      return { ...prev, [dataFilter]: fee };
-    });
     addLog({ action: '修改费用设置', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `设置运费险: ¥${fee}/单`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
   const setPromotionFeePerOrder = useCallback((fee: number) => {
     if (isAllStores(dataFilter)) return;
-    setPromotionFeeByStore(prev => {
+    useDataStore.getState().setPromotionFee(dataFilter, fee);
       syncStoreConfig(dataFilter, `dianfx_promotion_fee_${dataFilter}`, fee);
-      return { ...prev, [dataFilter]: fee };
-    });
     addLog({ action: '修改费用设置', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `设置推广费: ¥${fee}/单`, result: 'success' });
+  }, [dataFilter, getStoreName]);
+
+  const setSubsidyCommissionRate = useCallback((rate: number) => {
+    if (isAllStores(dataFilter)) return;
+    useDataStore.getState().setSubsidyCommission(dataFilter, rate);
+    syncStoreConfig(dataFilter, `dianfx_subsidy_commission_${dataFilter}`, rate);
+    addLog({ action: '修改费用设置', storeId: dataFilter, storeName: getStoreName(dataFilter), details: `设置百亿补贴佣金率: ${rate}%`, result: 'success' });
   }, [dataFilter, getStoreName]);
 
   // 清空所有数据（同步清除服务端 + React state）
@@ -1224,131 +1226,83 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     addLog({ action: '清空全部数据', storeId: '全部', storeName: '全部店铺', details: '清空所有数据（含云端）', result: 'success' });
     // ★ 调用服务端清除所有数据
     try { await apiClient.post('/data/clear-all'); } catch (e) { console.error('[clearAllData] server error:', e); }
-    setStoreDataMap({});
+    zResetAll();
     setDataFilter('');
-    setUploadRecords([]);
-    setProductCostsByStore({});
-    setCostConfigsByStore({});
-    setPackagingFeeByStore({});
-    setPricingPresetsByStore({});
-    setTaxConfigsByStore({});
-    setCustomDeductionsByStore({});
-    setDefaultCostRatioByStore({});
-    setShippingFeeByStore({});
-    setPlatformCommissionByStore({});
-    setLaborFeeByStore({});
-    setInsuranceFeeByStore({});
-    setPromotionFeeByStore({});
-    setAbnormalOrdersByStore({});
-    setCostHistoryByStore({});
+    useDataStore.getState().resetAllConfigs();
   }, []);
 
   const clearOrderData = useCallback((storeId?: string) => {
     console.log('[CLEAR] Clearing order data', storeId ?? 'ALL');
     if (storeId) {
-      // ★ 同步清除服务端订单数据
       apiClient.delete(`/data/store/${encodeURIComponent(storeId)}/category/orders`).catch(() => {});
-      setStoreDataMap(prev => {
-        if (!prev[storeId]) return prev;
-        return { ...prev, [storeId]: { ...prev[storeId], orders: [], availableFields: { ...prev[storeId].availableFields, csv: new Set() } } };
+      zSetLocal(storeId, (prev: StoreDataItem | null) => {
+        if (!prev) return EMPTY_STORE_DATA;
+        return { ...prev, orders: [], availableFields: { ...prev.availableFields, csv: [] } };
       });
       addLog({ action: '清除订单数据', storeId, storeName: getStoreName(storeId), details: `清除店铺"${getStoreName(storeId)}"的订单数据（含云端）`, result: 'success' });
     } else {
-      // 全部店铺：逐个调用服务端
       Object.keys(storeDataMap).forEach(sid => {
         apiClient.delete(`/data/store/${encodeURIComponent(sid)}/category/orders`).catch(() => {});
-      });
-      setStoreDataMap(prev => {
-        const next: Record<string, StoreDataItem> = {};
-        for (const [id, d] of Object.entries(prev)) {
-          next[id] = { ...d, orders: [], availableFields: { ...d.availableFields, csv: new Set() } };
-        }
-        return next;
+        zSetLocal(sid, (prev: StoreDataItem | null) => {
+          if (!prev) return EMPTY_STORE_DATA;
+          return { ...prev, orders: [], availableFields: { ...prev.availableFields, csv: [] } };
+        });
       });
       addLog({ action: '清除订单数据', storeId: '全部', storeName: '全部店铺', details: '清除所有店铺的订单数据（含云端）', result: 'success' });
     }
-  }, [getStoreName, storeDataMap]);
+  }, [getStoreName, storeDataMap, zSetLocal]);
 
   const clearPromotionData = useCallback((storeId?: string) => {
     console.log('[CLEAR] Clearing promotion data', storeId ?? 'ALL');
     const promoCats = ['promotionSummary', 'promotionProducts', 'starStoreSummary', 'liveStreamSummary'];
-    if (storeId) {
-      // ★ 同步清除服务端推广数据（4个分类）
+    const clearPromoForStore = (sid: string) => {
       promoCats.forEach(cat => {
-        apiClient.delete(`/data/store/${encodeURIComponent(storeId)}/category/${cat}`).catch(() => {});
+        apiClient.delete(`/data/store/${encodeURIComponent(sid)}/category/${cat}`).catch(() => {});
       });
-      setStoreDataMap(prev => {
-        if (!prev[storeId]) return prev;
-        return { ...prev, [storeId]: { ...prev[storeId], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], availableFields: { ...prev[storeId].availableFields, promotion: new Set() } } };
+      zSetLocal(sid, (prev: StoreDataItem | null) => {
+        if (!prev) return EMPTY_STORE_DATA;
+        return { ...prev, promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], availableFields: { ...prev.availableFields, promotion: [] } };
       });
+    };
+    if (storeId) {
+      clearPromoForStore(storeId);
       addLog({ action: '清除推广数据', storeId, storeName: getStoreName(storeId), details: `清除店铺"${getStoreName(storeId)}"的推广数据（含云端）`, result: 'success' });
     } else {
-      Object.keys(storeDataMap).forEach(sid => {
-        promoCats.forEach(cat => {
-          apiClient.delete(`/data/store/${encodeURIComponent(sid)}/category/${cat}`).catch(() => {});
-        });
-      });
-      setStoreDataMap(prev => {
-        const next: Record<string, StoreDataItem> = {};
-        for (const [id, d] of Object.entries(prev)) {
-          next[id] = { ...d, promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], availableFields: { ...d.availableFields, promotion: new Set() } };
-        }
-        return next;
-      });
+      Object.keys(storeDataMap).forEach(clearPromoForStore);
       addLog({ action: '清除推广数据', storeId: '全部', storeName: '全部店铺', details: '清除所有店铺的推广数据（含云端）', result: 'success' });
     }
-  }, [getStoreName, storeDataMap]);
+  }, [getStoreName, storeDataMap, zSetLocal]);
 
   const clearFinancialData = useCallback((storeId?: string) => {
     console.log('[CLEAR] Clearing financial data', storeId ?? 'ALL');
-    if (storeId) {
-      apiClient.delete(`/data/store/${encodeURIComponent(storeId)}/category/financialRecords`).catch(() => {});
-      setStoreDataMap(prev => {
-        if (!prev[storeId]) return prev;
-        return { ...prev, [storeId]: { ...prev[storeId], financialRecords: [] } };
+    const clearFinForStore = (sid: string) => {
+      apiClient.delete(`/data/store/${encodeURIComponent(sid)}/category/financialRecords`).catch(() => {});
+      zSetLocal(sid, (prev: StoreDataItem | null) => {
+        if (!prev) return EMPTY_STORE_DATA;
+        return { ...prev, financialRecords: [], availableFields: { ...prev.availableFields, financial: [] } };
       });
+    };
+    if (storeId) {
+      clearFinForStore(storeId);
       addLog({ action: '清除财务报表', storeId, storeName: getStoreName(storeId), details: `清除店铺"${getStoreName(storeId)}"的财务报表数据（含云端）`, result: 'success' });
     } else {
-      Object.keys(storeDataMap).forEach(sid => {
-        apiClient.delete(`/data/store/${encodeURIComponent(sid)}/category/financialRecords`).catch(() => {});
-      });
-      setStoreDataMap(prev => {
-        const next: Record<string, StoreDataItem> = {};
-        for (const [id, d] of Object.entries(prev)) {
-          next[id] = { ...d, financialRecords: [] };
-        }
-        return next;
-      });
+      Object.keys(storeDataMap).forEach(clearFinForStore);
       addLog({ action: '清除财务报表', storeId: '全部', storeName: '全部店铺', details: '清除所有店铺的财务报表数据（含云端）', result: 'success' });
     }
-  }, [getStoreName, storeDataMap]);
+  }, [getStoreName, storeDataMap, zSetLocal]);
 
   const clearCostData = useCallback((storeId?: string) => {
     console.log('[CLEAR] Clearing cost data', storeId ?? 'ALL');
     if (storeId) {
       // ★ 同步清除服务端配置
       apiClient.delete(`/data/store/${encodeURIComponent(storeId)}/configs`).catch(() => {});
-      setProductCostsByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
-      setCostConfigsByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
-      setPackagingFeeByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
-      setDefaultCostRatioByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
-      setShippingFeeByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
-      setPlatformCommissionByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
-      setLaborFeeByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
-      setInsuranceFeeByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
-      setPromotionFeeByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
-      setAbnormalOrdersByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
-      setCustomDeductionsByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
-      setCostHistoryByStore(prev => { const next = { ...prev }; delete next[storeId]; return next; });
+      useDataStore.getState().removeStoreConfigs(storeId);
       addLog({ action: '清除成本配置', storeId, storeName: getStoreName(storeId), details: `清除成本配置（含云端）`, result: 'success' });
     } else {
       Object.keys(storeDataMap).forEach(sid => {
         apiClient.delete(`/data/store/${encodeURIComponent(sid)}/configs`).catch(() => {});
       });
-      setProductCostsByStore({}); setCostConfigsByStore({}); setPackagingFeeByStore({});
-      setDefaultCostRatioByStore({}); setShippingFeeByStore({}); setPlatformCommissionByStore({});
-      setLaborFeeByStore({}); setInsuranceFeeByStore({}); setPromotionFeeByStore({});
-      setAbnormalOrdersByStore({}); setCustomDeductionsByStore({}); setCostHistoryByStore({});
+      useDataStore.getState().resetAllConfigs();
       addLog({ action: '清除成本配置', storeId: '全部', storeName: '全部店铺', details: '清除所有成本配置（含云端）', result: 'success' });
     }
   }, [getStoreName, storeDataMap]);
@@ -1356,18 +1310,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const clearUploadRecordsFn = useCallback((storeId?: string) => {
     console.log('[CLEAR] Clearing upload records', storeId ?? 'ALL');
     if (storeId) {
-      // ★ 同步清除服务端上传记录
       apiClient.delete(`/data/store/${encodeURIComponent(storeId)}/uploads`).catch(() => {});
-      setUploadRecords(prev => prev.filter(r => r.storeId !== storeId));
+      zClearStoreUploads(storeId);
       addLog({ action: '清除上传记录', storeId, storeName: getStoreName(storeId), details: `清除店铺"${getStoreName(storeId)}"的上传记录（含云端）`, result: 'success' });
     } else {
       Object.keys(storeDataMap).forEach(sid => {
         apiClient.delete(`/data/store/${encodeURIComponent(sid)}/uploads`).catch(() => {});
       });
-      setUploadRecords([]);
+      zClearAllUploads();
       addLog({ action: '清除上传记录', storeId: '全部', storeName: '全部店铺', details: '清除所有店铺的上传记录（含云端）', result: 'success' });
     }
-  }, [getStoreName, storeDataMap]);
+  }, [getStoreName, storeDataMap, zClearStoreUploads, zClearAllUploads]);
 
   const clearStoreList = useCallback(() => {
     console.log('[CLEAR] Clearing store list');
@@ -1378,17 +1331,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   // taxConfigs 和 customDeductions 的 setter 包装（直接替换整个数组）
   const setTaxConfigs = useCallback((configs: TaxConfig[]) => {
     if (isAllStores(dataFilter)) return;
-    setTaxConfigsByStore(prev => {
+    useDataStore.getState().setTaxConfigs(dataFilter, configs);
       syncStoreConfig(dataFilter, `dianfx_tax_configs_${dataFilter}`, configs);
-      return { ...prev, [dataFilter]: configs };
-    });
   }, [dataFilter]);
   const setCustomDeductions = useCallback((deductions: CustomDeduction[]) => {
     if (isAllStores(dataFilter)) return;
-    setCustomDeductionsByStore(prev => {
+    useDataStore.getState().setCustomDeductions(dataFilter, deductions);
       syncStoreConfig(dataFilter, `dianfx_custom_deductions_${dataFilter}`, deductions);
-      return { ...prev, [dataFilter]: deductions };
-    });
   }, [dataFilter]);
 
   return (
@@ -1398,7 +1347,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       productCosts, setProductCost,
       costConfigs, setCostConfig,
       packagingFeePerOrder, setPackagingFeePerOrder,
-      pricingPresets, addPricingPreset,
+      pricingPresets, addPricingPreset, updatePricingPreset, removePricingPreset,
       uploadRecords: filteredUploadRecords, allUploadRecords: uploadRecords, addUploadRecord, deleteUploadRecord, clearStoreUploads, clearStoreData,
       taxConfigs, setTaxConfigs, addTaxConfig, removeTaxConfig, updateTaxConfig,
       customDeductions, setCustomDeductions, addCustomDeduction, removeCustomDeduction, updateCustomDeduction,
@@ -1408,6 +1357,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       laborFeePerOrder, setLaborFeePerOrder,
       insuranceFeePerOrder, setInsuranceFeePerOrder,
       promotionFeePerOrder, setPromotionFeePerOrder,
+      subsidyCommissionRate, setSubsidyCommissionRate,
       orderFinancialActuals, unlinkedFinancials,
       abnormalOrders, setAbnormalOrder, removeAbnormalOrder,
       costHistory, addCostHistory,
@@ -1418,7 +1368,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       serverDashboard, serverProducts, serverPromotion, serverAfterSale,
       serverTrends, serverRegions, serverLogistics, serverPromoTrends,
       serverCosts, serverCompare, serverFinancial,
-      analyticsLoading, analyticsError, refreshAnalytics,
+      analyticsLoading, refreshAnalytics,
     }}>
       {children}
     </DataContext.Provider>
@@ -1428,22 +1378,63 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
   if (!user) return <Navigate to="/login" replace />;
+  // ★ 管理员账号走管理后台，不进入前端主站
+  if (user.role === 'admin') return <Navigate to="/login" replace />;
   return <>{children}</>;
 }
 
 // ★ ErrorBoundary 已迁移至 src/components/ErrorBoundary.tsx（更完善的重试+错误详情）
 
+// ★ 路由追踪：页面切换自动记录 page_view 事件
+function RouteTracker() {
+  const location = useLocation();
+  useEffect(() => {
+    initTracker();
+    trackPageView(location.pathname);
+  }, [location.pathname]);
+  return null;
+}
+
+// ★ 根级主题初始化：确保暗色模式在任何页面渲染前就已生效
+function ThemeProvider({ children }: { children: React.ReactNode }) {
+  const { ready } = useDarkMode();
+  if (!ready) return null; // 等待主题就绪再渲染子组件（防闪烁）
+  return <>{children}</>;
+}
+
 function App() {
+  useAutoReload('/build-meta.json');
+
+  // ── 读取公开设置（复制权限等） ──
+  useEffect(() => {
+    fetch('/api/v1/settings/public')
+      .then(r => r.json())
+      .then(res => {
+        if (res.success && res.data) {
+          const copyEnabled = res.data.copyEnabled !== false;
+          document.body.style.userSelect = copyEnabled ? '' : 'none';
+          document.body.style.webkitUserSelect = copyEnabled ? '' : 'none';
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   return (
     <ErrorBoundary>
+    <Toaster position="top-right" richColors closeButton />
+    <ProtectionProvider>
+    <ThemeProvider>
     <AuthProvider>
+      <PermissionProvider>
+      <LayoutProvider>
       <StoreProvider>
         <DataProvider>
           <HashRouter>
+            <RouteTracker />
             <Routes>
               {/* ★ 所有页面包裹 ErrorBoundary + Suspense */}
-              <Route path="/login" element={<RouteWrapper><LoginPage /></RouteWrapper>} />
-              <Route path="/register" element={<RouteWrapper><RegisterPage /></RouteWrapper>} />
+              <Route path="/login" element={<RouteWrapper><AuthPage /></RouteWrapper>} />
+              <Route path="/register" element={<RouteWrapper><AuthPage /></RouteWrapper>} />
               <Route path="/stores" element={<RouteWrapper><RequireAuth><StoresPage /></RequireAuth></RouteWrapper>} />
               <Route path="/upload" element={<RouteWrapper><RequireAuth><MainLayout><UploadPage /></MainLayout></RequireAuth></RouteWrapper>} />
               <Route path="/dashboard" element={<RouteWrapper><RequireAuth><MainLayout><DashboardPage /></MainLayout></RequireAuth></RouteWrapper>} />
@@ -1457,10 +1448,11 @@ function App() {
               <Route path="/shipping-insurance" element={<RouteWrapper><RequireAuth><MainLayout><InsurancePage /></MainLayout></RequireAuth></RouteWrapper>} />
               <Route path="/promotion" element={<RouteWrapper><RequireAuth><MainLayout><PromotionPage /></MainLayout></RequireAuth></RouteWrapper>} />
               <Route path="/risk" element={<RouteWrapper><RequireAuth><MainLayout><RiskPage /></MainLayout></RequireAuth></RouteWrapper>} />
+              <Route path="/time-window" element={<RouteWrapper><RequireAuth><MainLayout><TimeWindowPage /></MainLayout></RequireAuth></RouteWrapper>} />
               <Route path="/membership" element={<RouteWrapper><RequireAuth><MainLayout><MembershipPage /></MainLayout></RequireAuth></RouteWrapper>} />
               <Route path="/settings" element={<RouteWrapper><RequireAuth><SettingsPage /></RequireAuth></RouteWrapper>} />
               <Route path="/cost-management" element={<RouteWrapper><RequireAuth><MainLayout><CostManagementPage /></MainLayout></RequireAuth></RouteWrapper>} />
-              <Route path="/finance" element={<RouteWrapper><RequireAuth><MainLayout><FinancePage /></MainLayout></RequireAuth></RouteWrapper>} />
+              <Route path="/reconciliation" element={<RouteWrapper><RequireAuth><MainLayout><ReconciliationPage /></MainLayout></RequireAuth></RouteWrapper>} />
               <Route path="/product-links" element={<RouteWrapper><RequireAuth><MainLayout><ProductLinksPage /></MainLayout></RequireAuth></RouteWrapper>} />
               <Route path="/sub-accounts" element={<RouteWrapper><RequireAuth><MainLayout><SubAccountsPage /></MainLayout></RequireAuth></RouteWrapper>} />
               <Route path="/terms" element={<TermsPage />} />
@@ -1470,7 +1462,11 @@ function App() {
           </HashRouter>
         </DataProvider>
       </StoreProvider>
+      </LayoutProvider>
+      </PermissionProvider>
     </AuthProvider>
+    </ThemeProvider>
+    </ProtectionProvider>
     </ErrorBoundary>
   );
 }

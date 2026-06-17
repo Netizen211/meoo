@@ -1,7 +1,7 @@
 import { apiClient } from './client';
 
 // 同步店铺数据到服务器
-export async function syncStoreData(storeId: string, storeName: string, data: any, configs: Record<string, any>, uploadRecords: any[]): Promise<boolean> {
+export async function syncStoreData(storeId: string, storeName: string, data: any, configs: Record<string, any>, uploadRecords: any[]): Promise<{ success: boolean; error?: string; prohibitedFields?: string[] }> {
   const res = await apiClient.post('/data/sync', {
     storeId,
     storeName,
@@ -10,7 +10,7 @@ export async function syncStoreData(storeId: string, storeName: string, data: an
     configs,
     uploadRecords,
   });
-  return res.success;
+  return { success: res.success, error: res.error, prohibitedFields: (res.data as any)?.prohibitedFields };
 }
 
 // 从服务器拉取店铺数据

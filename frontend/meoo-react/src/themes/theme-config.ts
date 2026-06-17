@@ -2,7 +2,7 @@ import { ThemeConfig, ThemeMode } from './types';
 
 /**
  * 拼多多风格主题配置
- * 主色调：拼多多红 #e02e24
+ * 主色调：品牌蓝 #1F6BFF
  */
 
 export const lightTheme: ThemeConfig = {
@@ -10,7 +10,7 @@ export const lightTheme: ThemeConfig = {
   mode: 'light',
   colors: {
     // 主色调 - 拼多多红
-    primary: '#e02e24',
+    primary: '#1F6BFF',
     primaryLight: '#ef4444',
     primaryDark: '#c41e14',
     // 背景色

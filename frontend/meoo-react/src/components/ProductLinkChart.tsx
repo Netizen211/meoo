@@ -43,7 +43,7 @@ export default function ProductLinkChart({ linkStats }: Props) {
     <div className="pdd-card p-5 mb-4">
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-sm font-semibold flex items-center gap-2">
-          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-pdd-primary to-pdd-primary-light flex items-center justify-center">
+          <div className="w-6 h-6 rounded-lg bg-pdd-primary flex items-center justify-center">
             <BarChart3 size={14} color="white" />
           </div>
           ROI对比分析

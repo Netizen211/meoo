@@ -15,7 +15,7 @@ type RoiFilter = 'all' | 'profit' | 'loss' | 'flat';
 
 export default function ProductLinksPage() {
   const { currentDisplayData } = useData();
-  const tf = useTimeFilter('7', 'day');
+  const tf = useTimeFilter('all', 'day');
   const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
 
   // 构建时间过滤后的 displayData
@@ -55,6 +55,15 @@ export default function ProductLinksPage() {
       totalProfit: all.reduce((s, p) => s + p.netProfit, 0),
       avgRoi: all.length > 0 ? all.reduce((s, p) => s + p.roi, 0) / all.length : 0,
       avgProfitRate: all.length > 0 ? all.reduce((s, p) => s + p.profitRate, 0) / all.length : 0,
+      // Extended fields used by KPI cards
+      gmv: all.reduce((s, p) => s + p.gmv, 0),
+      revenue: all.reduce((s, p) => s + p.revenue, 0),
+      promoCost: all.reduce((s, p) => s + p.promoCost, 0),
+      discount: all.reduce((s, p) => s + p.discount, 0),
+      totalCost: all.reduce((s, p) => s + p.totalCost, 0),
+      netProfit: all.reduce((s, p) => s + p.netProfit, 0),
+      roi: all.length > 0 ? all.reduce((s, p) => s + p.roi, 0) / all.length : 0,
+      refundRate: all.length > 0 ? all.reduce((s, p) => s + p.refundRate, 0) / all.length : 0,
     };
   }, [productStats]);
 

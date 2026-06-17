@@ -45,13 +45,13 @@ export default function ProfitBreakdownDrawer({
   if (!isOpen) return null;
 
   const costItems: CostItem[] = [
-    { label: '商品裸货成本', amount: productCost, source: 'SKU成本配置', sourcePath: `成本管理页 → 按SKU编码匹配 → dianfx_product_costs_<storeId>`, icon: <Package size={14} />, color: '#e02e24' },
+    { label: '商品裸货成本', amount: productCost, source: 'SKU成本配置', sourcePath: `成本管理页 → 按SKU编码匹配 → dianfx_product_costs_<storeId>`, icon: <Package size={14} />, color: 'var(--pdd-danger)' },
     { label: '包装费', amount: packagingFee, source: '费用配置', sourcePath: `成本管理页 → 包装费(元/单) × ${orderCount}单 = ${fmt(packagingFee)}`, icon: <Package size={14} />, color: '#f97316' },
     { label: '快递费', amount: shippingFee, source: '费用配置', sourcePath: `成本管理页 → 快递费(元/单) × ${orderCount}单 = ${fmt(shippingFee)}`, icon: <Truck size={14} />, color: '#f97316' },
     { label: '推广费', amount: promoCost, source: '推广数据', sourcePath: `商品推广XLSX → 按商品ID匹配 → 总花费(元)求和`, icon: <Target size={14} />, color: '#7c3aed' },
     { label: '平台佣金(已含实收)', amount: platformFee, source: '货款明细/公式(仅供参考)', sourcePath: `货款明细CSV → 平台技术服务费（已含在商家实收中，仅供参考）`, icon: <Database size={14} />, color: '#0891b2' },
     { label: '运费险', amount: insuranceFee, source: '运费险数据/配置', sourcePath: `运费险XLSX → 按订单号匹配服务费用 或 保费(元/单)`, icon: <Shield size={14} />, color: '#0891b2' },
-    { label: '罚款/扣款', amount: penaltyFee, source: '货款明细', sourcePath: `货款明细CSV → 004/006开头扣款 → 按商户订单号匹配`, icon: <AlertTriangle size={14} />, color: '#e02e24' },
+    { label: '罚款/扣款', amount: penaltyFee, source: '货款明细', sourcePath: `货款明细CSV → 004/006开头扣款 → 按商户订单号匹配`, icon: <AlertTriangle size={14} />, color: 'var(--pdd-danger)' },
     ...otherFees.map(f => ({ label: f.label, amount: f.amount, source: '自定义扣费', sourcePath: f.source, icon: <FileText size={14} />, color: '#6b7280' })),
   ].filter(c => c.amount > 0 || c.label.includes('成本'));
 

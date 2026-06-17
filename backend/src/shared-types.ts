@@ -65,6 +65,7 @@ export interface StoreAvailableFields {
   promotion: string[];
   insurance: string[];
   afterSale: string[];
+  financial: string[];
 }
 
 export type DataCategory =

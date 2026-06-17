@@ -1,13 +1,245 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis, CartesianGrid } from 'recharts';
+import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import {
-  Users, Store, Database, HardDrive, Shield, Crown, AlertTriangle,
-  Clock, Wifi, WifiOff, Server, Activity, CreditCard, FileText, Settings,
-  RefreshCw, TrendingUp, UserPlus, Zap, ArrowUpRight, DollarSign,
+  Users, Store, Database, DollarSign, Activity, Clock, AlertTriangle,
+  CreditCard, FileText, Settings, RefreshCw, UserPlus, Zap, Shield,
+  TrendingUp, Wallet,
 } from 'lucide-react';
-import { adminApi, type AdminStats, type RevenueSummary } from '../../../api/adminApi';
+import type { OperationsOverview } from '../../../api/adminApi';
+import StatCard from '../../components/admin/StatCard';
+import { useOperationsOverview, useRecentActivity } from '../../hooks/useAdminData';
+
+const TIME_OPTIONS = [
+  { label: '今日', value: '1d' },
+  { label: '近7天', value: '7d' },
+  { label: '近30天', value: '30d' },
+  { label: '近90天', value: '90d' },
+];
+
+const QUICK_ACTIONS = [
+  { label: '审核充值', icon: CreditCard, path: '/admin/recharge' },
+  { label: '用户管理', icon: Users, path: '/admin/users' },
+  { label: '操作日志', icon: FileText, path: '/admin/logs' },
+  { label: '系统设置', icon: Settings, path: '/admin/settings' },
+  { label: '数据总览', icon: Activity, path: '/admin/data' },
+  { label: '风险监控', icon: Shield, path: '/admin/risk' },
+];
+
+function formatBytes(bytes: number) {
+  if (!bytes) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  let val = bytes;
+  while (val >= 1024 && i < units.length - 1) { val /= 1024; i++; }
+  return val.toFixed(1) + ' ' + units[i];
+}
+
+export default function AdminDashboard() {
+  const navigate = useNavigate();
+  const [timeRange, setTimeRange] = useState('7d');
+
+  const { data: overview, isLoading, isFetching, refetch } = useOperationsOverview(timeRange, {
+    refetchInterval: 30000,
+    placeholderData: (prev: OperationsOverview | null | undefined) => prev,
+  });
+
+  if (isLoading && !overview) {
+    return (
+      <div className='flex flex-col items-center justify-center h-64 gap-3'>
+        <RefreshCw size={24} className='animate-spin text-pdd-gray-400' />
+        <span className='text-sm text-pdd-text-secondary'>加载运营数据...</span>
+      </div>
+    );
+  }
+
+  const { trendData = [] } = overview || {};
+
+  return (
+    <div className='space-y-5'>
+
+      {/* Alert Banners */}
+      {overview && (overview.pendingRecharge > 0 || overview.systemAnomalies > 0) && (
+        <div className='space-y-2'>
+          {overview.pendingRecharge > 0 && (
+            <div className='flex items-center gap-3 px-4 py-3 rounded-lg border border-pdd-warning/30 bg-pdd-warning/5'>
+              <Wallet size={18} className='text-pdd-warning' />
+              <div className='flex-1 min-w-0'>
+                <span className='text-sm font-medium text-pdd-warning'>待审核充值</span>
+                <span className='text-sm ml-2 text-pdd-text-secondary'>
+                  {overview.pendingRecharge} 笔，合计 ¥{overview.pendingRechargeAmount.toLocaleString()}
+                </span>
+              </div>
+              <button
+                onClick={() => navigate('/admin/recharge')}
+                className='text-xs font-medium px-3 py-1.5 rounded-lg transition-colors text-pdd-warning hover:bg-pdd-warning/10'
+              >
+                去审核 →
+              </button>
+            </div>
+          )}
+          {overview.systemAnomalies > 0 && (
+            <div className='flex items-center gap-3 px-4 py-3 rounded-lg border border-pdd-danger/30 bg-pdd-danger/5'>
+              <AlertTriangle size={18} className='text-pdd-danger' />
+              <div className='flex-1 min-w-0'>
+                <span className='text-sm font-medium text-pdd-danger'>系统异常</span>
+                <span className='text-sm ml-2 text-pdd-text-secondary'>
+                  检测到 {overview.systemAnomalies} 个异常事件，请及时处理
+                </span>
+              </div>
+              <button
+                onClick={() => navigate('/admin/risk')}
+                className='text-xs font-medium px-3 py-1.5 rounded-lg transition-colors text-pdd-danger hover:bg-pdd-danger/10'
+              >
+                查看详情 →
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* KPI Cards — no stagger animations, flat professional layout */}
+      <div className='grid grid-cols-2 lg:grid-cols-4 gap-3'>
+        <StatCard
+          title='日活跃用户 (DAU)'
+          value={overview?.dau ?? '-'}
+          subtitle='当日活跃用户数'
+          icon={<Zap size={18} />}
+          loading={isLoading}
+          onClick={() => navigate('/admin/analytics')}
+        />
+        <StatCard
+          title='周活跃用户 (WAU)'
+          value={overview?.wau ?? '-'}
+          subtitle='近7天活跃用户数'
+          icon={<Activity size={18} />}
+          loading={isLoading}
+          onClick={() => navigate('/admin/analytics')}
+        />
+        <StatCard
+          title='月活跃用户 (MAU)'
+          value={overview?.mau ?? '-'}
+          subtitle='近30天活跃用户数'
+          icon={<Users size={18} />}
+          loading={isLoading}
+          onClick={() => navigate('/admin/analytics')}
+        />
+        <StatCard
+          title='总用户数'
+          value={overview?.totalUsers ?? '-'}
+          subtitle={'新增 ' + (overview?.newUsers ?? 0).toLocaleString()}
+          icon={<UserPlus size={18} />}
+          loading={isLoading}
+          trend='up'
+          trendValue={'+' + (overview?.newUsers ?? 0)}
+          onClick={() => navigate('/admin/users')}
+        />
+        <StatCard
+          title='店铺总数'
+          value={overview?.totalStores ?? '-'}
+          subtitle={'新增 ' + (overview?.newStores ?? 0).toLocaleString()}
+          icon={<Store size={18} />}
+          loading={isLoading}
+          trend={(overview?.newStores ?? 0) > 0 ? 'up' : 'stable'}
+          trendValue={'+' + (overview?.newStores ?? 0)}
+          onClick={() => navigate('/admin/stores')}
+        />
+        <StatCard
+          title='上传次数'
+          value={overview?.uploads ?? '-'}
+          subtitle='累计上传文件数'
+          icon={<Database size={18} />}
+          loading={isLoading}
+          onClick={() => navigate('/admin/data')}
+        />
+        <StatCard
+          title='总营收'
+          value={'¥' + (overview?.revenue ?? 0).toLocaleString()}
+          subtitle='累计付费金额'
+          icon={<DollarSign size={18} />}
+          loading={isLoading}
+          onClick={() => navigate('/admin/revenue')}
+        />
+        <StatCard
+          title='付费用户'
+          value={overview?.payingUsers ?? '-'}
+          subtitle='累计付费人数'
+          icon={<TrendingUp size={18} />}
+          loading={isLoading}
+          onClick={() => navigate('/admin/revenue')}
+        />
+      </div>
+
+      {/* Storage + Trend Chart */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+        <div className="bg-pdd-card border border-pdd-border rounded-lg p-4 lg:col-span-1">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-pdd-text-secondary">存储使用</span>
+            <Database size={14} className="text-pdd-gray-400" />
+          </div>
+          <p className="text-lg font-bold text-pdd-text">{formatBytes(overview?.storageBytes ?? 0)}</p>
+          <div className="mt-3 w-full h-1.5 rounded-full bg-pdd-gray-100">
+            <div className="h-1.5 rounded-full bg-pdd-primary transition-all duration-700" style={{ width: Math.min(((overview?.storageBytes ?? 0) / (5 * 1024 * 1024 * 1024)) * 100, 100) + '%' }} />
+          </div>
+          <p className="text-[10px] mt-1.5 text-pdd-gray-400">已用 {((overview?.storageBytes ?? 0) / (1024 * 1024 * 1024)).toFixed(2)} GB / 5 GB</p>
+        </div>
+
+        <div className="bg-pdd-card border border-pdd-border rounded-lg p-4 lg:col-span-3">
+          <h3 className="text-sm font-semibold mb-3 text-pdd-text">增长趋势 (30天)</h3>
+          {trendData.length > 0 ? (
+            <>
+              <ResponsiveContainer width="100%" height={200}>
+                <AreaChart data={trendData}>
+                  <defs>
+                    <linearGradient id="trendUsers" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="var(--pdd-primary)" stopOpacity={0.12} />
+                      <stop offset="95%" stopColor="var(--pdd-primary)" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--pdd-gray-400)' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: 'var(--pdd-gray-400)' }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <Tooltip contentStyle={{ background: 'var(--pdd-card)', border: '1px solid var(--pdd-border)', borderRadius: 8, fontSize: 12, boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }} />
+                  <Area type="monotone" dataKey="newUsers" name="新用户" stroke="var(--pdd-primary)" fill="url(#trendUsers)" strokeWidth={2} dot={false} />
+                  <Area type="monotone" dataKey="newStores" name="新店铺" stroke="var(--pdd-primary)" strokeOpacity={0.5} fill="url(#trendUsers)" strokeWidth={1.5} dot={false} />
+                  <Area type="monotone" dataKey="uploads" name="上传" stroke="var(--pdd-primary)" strokeOpacity={0.3} fill="url(#trendUsers)" strokeWidth={1} dot={false} />
+                  <Area type="monotone" dataKey="revenue" name="营收" stroke="var(--pdd-success)" fill="url(#trendUsers)" strokeWidth={1.5} dot={false} />
+                </AreaChart>
+              </ResponsiveContainer>
+              <div className="flex items-center gap-4 mt-2 justify-center flex-wrap">
+                <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 rounded bg-pdd-primary" /><span className="text-[10px] text-pdd-text-secondary">新用户</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 rounded" style={{ backgroundColor: 'var(--pdd-primary)', opacity: 0.5 }} /><span className="text-[10px] text-pdd-text-secondary">新店铺</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 rounded" style={{ backgroundColor: 'var(--pdd-primary)', opacity: 0.3 }} /><span className="text-[10px] text-pdd-text-secondary">上传</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 rounded bg-pdd-success" /><span className="text-[10px] text-pdd-text-secondary">营收</span></div>
+              </div>
+            </>
+          ) : (
+            <div className="text-xs py-12 text-center text-pdd-gray-400">暂无趋势数据</div>
+          )}
+        </div>
+      </div>
+
+      {/* Bottom: Quick actions + Activity log */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
+        <div className="bg-pdd-card border border-pdd-border rounded-lg p-4">
+          <h3 className="text-sm font-semibold mb-3 text-pdd-text">快捷操作</h3>
+          <div className="grid grid-cols-2 gap-2">
+            {QUICK_ACTIONS.map(item => (
+              <button key={item.label} onClick={() => navigate(item.path)} className="flex flex-col items-center gap-1.5 p-3 rounded-lg border border-pdd-border hover:border-pdd-primary/30 transition-colors bg-pdd-gray-50">
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center bg-pdd-gray-100 text-pdd-primary">
+                  <item.icon size={16} />
+                </div>
+                <span className="text-[10px] text-pdd-text-secondary">{item.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <ActivityLog />
+      </div>
+    </div>
+  );
+}
 
 interface ActivityItem {
   id: number;
@@ -18,344 +250,77 @@ interface ActivityItem {
   createdAt: string;
 }
 
-interface HealthData {
-  dbConnected: boolean;
-  uptime: number;
-  status: string;
-  timestamp: string;
-}
+function ActivityLog() {
+  const { data: activities = [], isLoading } = useRecentActivity();
 
-interface GrowthPoint {
-  date: string;
-  newUsers: number;
-  newStores: number;
-}
+  const ACTION_LABELS: Record<string, string> = {
+    ban_user: '封禁用户', unban_user: '解封用户',
+    admin_adjust_membership: '调整会员',
+    delete_data: '删除数据', generate_invite: '生成邀请码',
+    delete_invite: '删除邀请码', system_config: '系统配置',
+    impersonate_user: '模拟登录',
+  };
 
-const ACTION_LABELS: Record<string, string> = {
-  ban_user: '封禁用户', unban_user: '解封用户',
-  admin_adjust_membership: '调整会员',
-  delete_data: '删除数据', generate_invite: '生成邀请码',
-  delete_invite: '删除邀请码', system_config: '系统配置',
-  impersonate_user: '模拟登录',
-};
-
-const COLORS = ['#22c55e', '#f59e0b', '#3b82f6'];
-
-export default function AdminDashboard() {
-  const navigate = useNavigate();
-  const [stats, setStats] = useState<AdminStats | null>(null);
-  const [activities, setActivities] = useState<ActivityItem[]>([]);
-  const [health, setHealth] = useState<HealthData | null>(null);
-  const [growthTrend, setGrowthTrend] = useState<GrowthPoint[]>([]);
-  const [apiLatency, setApiLatency] = useState<number | null>(null);
-  const [revenue, setRevenue] = useState<RevenueSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  const fetchData = useCallback(async () => {
-    const startTime = performance.now();
-    try {
-      const [s, a, h, g, r] = await Promise.all([
-        adminApi.getStats(),
-        adminApi.getRecentActivity(),
-        adminApi.getHealth(),
-        adminApi.getGrowthTrend(),
-        adminApi.getRevenueSummary(),
-      ]);
-      const latency = Math.round(performance.now() - startTime);
-      setStats(s);
-      if (a?.success) setActivities(a.data || []);
-      if (h?.success) setHealth(h.data);
-      if (g?.success) setGrowthTrend(g.data || []);
-      setRevenue(r);
-      setApiLatency(latency);
-    } catch {
-      // keep stale data on error
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-    const timer = setInterval(fetchData, 30000);
-    return () => clearInterval(timer);
-  }, [fetchData]);
-
-  const getActionIcon = (action: string) => {
+  const getIcon = (action: string) => {
     if (action.includes('ban')) return <Shield size={12} />;
-    if (action.includes('membership')) return <Crown size={12} />;
+    if (action.includes('membership')) return <TrendingUp size={12} />;
     if (action.includes('invite')) return <UserPlus size={12} />;
     if (action.includes('impersonate')) return <Users size={12} />;
     return <FileText size={12} />;
   };
 
-  const getActionColor = (action: string) => {
-    if (action.includes('ban') && !action.includes('unban')) return 'text-red-400 bg-red-500/10';
-    if (action.includes('unban')) return 'text-green-400 bg-green-500/10';
-    if (action.includes('membership')) return 'text-amber-400 bg-amber-500/10';
-    if (action.includes('impersonate')) return 'text-purple-400 bg-purple-500/10';
-    return 'text-blue-400 bg-blue-500/10';
+  const getBadgeStyle = (action: string): { cls: string; color: string } => {
+    if (action.includes('ban') && !action.includes('unban')) return { cls: 'bg-pdd-danger/10 text-pdd-danger', color: 'var(--pdd-danger)' };
+    if (action.includes('unban')) return { cls: 'bg-pdd-success/10 text-pdd-success', color: 'var(--pdd-success)' };
+    if (action.includes('membership')) return { cls: 'bg-pdd-warning/10 text-pdd-warning', color: 'var(--pdd-warning)' };
+    if (action.includes('impersonate')) return { cls: 'bg-pdd-purple/10 text-pdd-purple', color: 'var(--pdd-purple)' };
+    return { cls: 'bg-pdd-primary/10 text-pdd-primary', color: 'var(--pdd-primary)' };
   };
-
-  const formatUptime = (seconds: number) => {
-    const d = Math.floor(seconds / 86400);
-    const h = Math.floor((seconds % 86400) / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    if (d > 0) return `${d}d ${h}h`;
-    if (h > 0) return `${h}h ${m}m`;
-    return `${m}m`;
-  };
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-64 gap-3">
-        <RefreshCw size={24} className="animate-spin text-pdd-text-secondary" />
-        <span className="text-sm text-pdd-text-secondary">加载系统数据...</span>
-      </div>
-    );
-  }
-
-  const cards = [
-    { label: '总用户', value: stats?.totalUsers ?? 0, icon: Users, color: '#3b82f6', bg: 'bg-blue-500/10', path: '/users' },
-    { label: '企业用户', value: stats?.enterpriseUsers ?? 0, icon: Shield, color: '#22c55e', bg: 'bg-green-500/10', path: '/members' },
-    { label: 'Pro 用户', value: stats?.proUsers ?? 0, icon: Crown, color: '#f59e0b', bg: 'bg-amber-500/10', path: '/members' },
-    { label: '总营收', value: `¥${(revenue?.totalRevenue ?? 0).toLocaleString()}`, icon: DollarSign, color: '#22c55e', bg: 'bg-green-500/10', path: '/revenue' },
-    { label: '本月营收', value: `¥${(revenue?.monthlyRevenue ?? 0).toLocaleString()}`, icon: TrendingUp, color: '#10b981', bg: 'bg-emerald-500/10', path: '/revenue' },
-    { label: '待审金额', value: `¥${(revenue?.pendingAmount ?? 0).toLocaleString()}`, icon: Clock, color: '#f59e0b', bg: 'bg-amber-500/10', path: '/recharge' },
-    { label: '总店铺', value: stats?.totalStores ?? 0, icon: Store, color: '#8b5cf6', bg: 'bg-violet-500/10', path: '/data' },
-    { label: '总记录数', value: (stats?.totalRecords ?? 0).toLocaleString(), icon: Database, color: '#06b6d4', bg: 'bg-cyan-500/10', path: '/data' },
-    { label: '今日活跃', value: stats?.todayActiveUsers ?? 0, icon: Zap, color: '#14b8a6', bg: 'bg-teal-500/10' },
-    { label: '封禁用户', value: stats?.bannedUsers ?? 0, icon: AlertTriangle, color: '#ef4444', bg: 'bg-red-500/10', path: '/users' },
-  ];
-
-  const pieData = [
-    { name: '企业', value: stats?.enterpriseUsers || 0 },
-    { name: '专业', value: stats?.proUsers || 0 },
-    { name: '免费', value: stats?.freeUsers || 0 },
-  ].filter(d => d.value > 0);
-
-  const storageMB = ((stats?.storageBytes ?? 0) / (1024 * 1024)).toFixed(1);
-  const storagePercent = Math.min(((stats?.storageBytes ?? 0) / (500 * 1024 * 1024)) * 100, 100);
 
   return (
-    <div className="space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-pdd-text-primary">系统概览</h2>
-          <p className="text-xs text-pdd-text-secondary mt-0.5">
-            实时监控平台运行状态
-            {health && (
-              <span className="ml-2 inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-green-500/10 text-green-400 border border-green-500/20">
-                {health.status === 'healthy' ? '运行正常' : '降级运行'}
-              </span>
-            )}
-          </p>
-        </div>
-        <button onClick={fetchData} className="p-2 rounded-lg hover:bg-pdd-card text-pdd-text-secondary hover:text-pdd-text transition-colors" title="刷新数据">
-          <RefreshCw size={16} />
-        </button>
+    <div className="bg-pdd-card border border-pdd-border rounded-lg p-4 lg:col-span-3">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-sm font-semibold text-pdd-text">最近操作</h3>
+        <Clock size={14} className="text-pdd-gray-400" />
       </div>
-
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        {cards.map((card, i) => (
-          <motion.div
-            key={card.label}
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.04 }}
-            onClick={() => card.path ? navigate(card.path) : undefined}
-            className={`bg-pdd-card rounded-xl border border-pdd-border p-4 transition-all ${
-              card.path ? 'cursor-pointer hover:border-pdd-primary/30 hover:shadow-lg hover:shadow-pdd-primary/5' : ''
-            }`}
-          >
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-xs text-pdd-text-secondary font-medium">{card.label}</span>
-              <div className={`w-8 h-8 rounded-lg ${card.bg} flex items-center justify-center`}>
-                <card.icon size={16} style={{ color: card.color }} />
+      {isLoading ? (
+        <div className="space-y-3">
+          {[1,2,3,4].map(i => (
+            <div key={i} className="flex items-start gap-2.5 animate-pulse">
+              <div className="w-6 h-6 rounded-full bg-pdd-gray-100" />
+              <div className="flex-1 space-y-1">
+                <div className="h-3 w-32 rounded bg-pdd-gray-100" />
+                <div className="h-2.5 w-48 rounded bg-pdd-gray-50" />
               </div>
             </div>
-            <div className="flex items-end gap-2">
-              <span className="text-2xl font-bold text-pdd-text-primary tabular-nums">{card.value}</span>
-              {card.path && <ArrowUpRight size={12} className="text-pdd-text-secondary mb-1 opacity-50" />}
-            </div>
-          </motion.div>
-        ))}
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-pdd-card rounded-xl border border-pdd-border p-4">
-          <h3 className="text-sm font-semibold text-pdd-text-primary mb-3">会员分布</h3>
-          {pieData.length > 0 ? (
-            <div className="flex items-center">
-              <ResponsiveContainer width="60%" height={150}>
-                <PieChart>
-                  <Pie data={pieData} cx="50%" cy="50%" innerRadius={35} outerRadius={55} dataKey="value" strokeWidth={0}>
-                    {pieData.map((_, idx) => <Cell key={idx} fill={COLORS[idx]} />)}
-                  </Pie>
-                  <Tooltip contentStyle={{ background: '#171717', border: '1px solid #262626', borderRadius: 8, fontSize: 12 }} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-2 flex-1">
-                {pieData.map((d, i) => (
-                  <div key={d.name} className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full flex-shrink-0" style={{ backgroundColor: COLORS[i] }} />
-                    <span className="text-xs text-pdd-text-secondary">{d.name}</span>
-                    <span className="text-xs font-bold text-pdd-text-primary ml-auto">{d.value}</span>
+          ))}
+        </div>
+      ) : activities.length > 0 ? (
+        <div className="space-y-2.5 max-h-[260px] overflow-y-auto">
+          {activities.map(a => {
+            const badge = getBadgeStyle(a.action);
+            return (
+              <div key={a.id} className="flex items-start gap-2.5">
+                <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${badge.cls}`}>
+                  {getIcon(a.action)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="text-xs font-medium text-pdd-text">{a.username}</span>
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded ${badge.cls}`}>
+                      {ACTION_LABELS[a.action] || a.action}
+                    </span>
                   </div>
-                ))}
-                <div className="text-[10px] text-pdd-text-secondary pt-1 border-t border-pdd-border">
-                  总计 <span className="font-bold text-pdd-text-primary">{(stats?.totalUsers ?? 0).toLocaleString()}</span> 用户
+                  <p className="text-[10px] mt-0.5 truncate text-pdd-text-secondary">{a.details || '-'}</p>
+                  <p className="text-[10px] text-pdd-gray-400">{new Date(a.createdAt).toLocaleString('zh-CN')}</p>
                 </div>
               </div>
-            </div>
-          ) : (
-            <div className="text-pdd-text-secondary text-xs py-8 text-center">暂无数据</div>
-          )}
+            );
+          })}
         </div>
-
-        <div className="bg-pdd-card rounded-xl border border-pdd-border p-4 lg:col-span-2">
-          <h3 className="text-sm font-semibold text-pdd-text-primary mb-3">近7天增长趋势</h3>
-          {growthTrend.length > 0 ? (
-            <>
-              <ResponsiveContainer width="100%" height={180}>
-                <AreaChart data={growthTrend}>
-                  <defs>
-                    <linearGradient id="colorUsers" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="colorStores" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: 'var(--pdd-text-secondary)' }} />
-                  <YAxis tick={{ fontSize: 11, fill: 'var(--pdd-text-secondary)' }} allowDecimals={false} />
-                  <Tooltip contentStyle={{ background: '#171717', border: '1px solid #262626', borderRadius: 8, fontSize: 12 }} />
-                  <Area type="monotone" dataKey="newUsers" name="新用户" stroke="#3b82f6" fill="url(#colorUsers)" strokeWidth={2} />
-                  <Area type="monotone" dataKey="newStores" name="新店铺" stroke="#8b5cf6" fill="url(#colorStores)" strokeWidth={2} />
-                </AreaChart>
-              </ResponsiveContainer>
-              <div className="flex items-center gap-4 mt-2 justify-center">
-                <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 rounded bg-blue-500" /><span className="text-[10px] text-pdd-text-secondary">新用户</span></div>
-                <div className="flex items-center gap-1.5"><div className="w-3 h-0.5 rounded bg-violet-500" /><span className="text-[10px] text-pdd-text-secondary">新店铺</span></div>
-              </div>
-            </>
-          ) : (
-            <div className="text-pdd-text-secondary text-xs py-8 text-center">暂无趋势数据</div>
-          )}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="bg-pdd-card rounded-xl border border-pdd-border p-4">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-pdd-text-primary">最近操作</h3>
-            <Clock size={14} className="text-pdd-text-secondary" />
-          </div>
-          {activities.length > 0 ? (
-            <div className="space-y-3 max-h-[260px] overflow-y-auto">
-              {activities.map((a) => (
-                <div key={a.id} className="flex items-start gap-2.5">
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5 ${getActionColor(a.action)}`}>
-                    {getActionIcon(a.action)}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-medium text-pdd-text-primary">{a.username}</span>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-pdd-bg text-pdd-text-secondary">
-                        {ACTION_LABELS[a.action] || a.action}
-                      </span>
-                    </div>
-                    <p className="text-[10px] text-pdd-text-secondary truncate mt-0.5">{a.details || '-'}</p>
-                    <p className="text-[10px] text-pdd-gray-400 mt-0.5">{new Date(a.createdAt).toLocaleString('zh-CN')}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="text-pdd-text-secondary text-xs py-8 text-center">暂无操作记录</div>
-          )}
-        </div>
-
-        <div className="bg-pdd-card rounded-xl border border-pdd-border p-4">
-          <h3 className="text-sm font-semibold text-pdd-text-primary mb-3">系统健康</h3>
-          <div className="space-y-3">
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-pdd-bg">
-              <div className="flex items-center gap-2">
-                {health?.dbConnected ? <Wifi size={14} className="text-green-400" /> : <WifiOff size={14} className="text-red-400" />}
-                <span className="text-xs text-pdd-text-secondary">数据库</span>
-              </div>
-              <span className={`text-xs font-medium ${health?.dbConnected ? 'text-green-400' : 'text-red-400'}`}>
-                {health?.dbConnected ? '正常' : '异常'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-pdd-bg">
-              <div className="flex items-center gap-2">
-                <Server size={14} className="text-blue-400" />
-                <span className="text-xs text-pdd-text-secondary">API 延迟</span>
-              </div>
-              <span className={`text-xs font-medium tabular-nums ${(apiLatency ?? 0) < 300 ? 'text-green-400' : (apiLatency ?? 0) < 800 ? 'text-amber-400' : 'text-red-400'}`}>
-                {apiLatency !== null ? `${apiLatency}ms` : '-'}
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-pdd-bg">
-              <div className="flex items-center gap-2">
-                <HardDrive size={14} className="text-cyan-400" />
-                <span className="text-xs text-pdd-text-secondary">存储空间</span>
-              </div>
-              <span className={`text-xs font-medium ${storagePercent < 80 ? 'text-green-400' : storagePercent < 95 ? 'text-amber-400' : 'text-red-400'}`}>
-                {storageMB} MB
-              </span>
-            </div>
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-pdd-bg">
-              <div className="flex items-center gap-2">
-                <TrendingUp size={14} className="text-purple-400" />
-                <span className="text-xs text-pdd-text-secondary">运行时长</span>
-              </div>
-              <span className="text-xs font-medium text-pdd-text-primary tabular-nums">
-                {health?.uptime ? formatUptime(health.uptime) : '-'}
-              </span>
-            </div>
-            <div className="w-full bg-pdd-bg rounded-full h-1.5 mt-1">
-              <div
-                className="h-1.5 rounded-full transition-all duration-700"
-                style={{
-                  width: `${Math.max(100 - storagePercent, 4)}%`,
-                  backgroundColor: storagePercent > 90 ? 'var(--pdd-danger)' : storagePercent > 70 ? 'var(--pdd-warning)' : 'var(--pdd-success)',
-                }}
-              />
-            </div>
-            <p className="text-[10px] text-pdd-text-secondary text-center">存储使用 {storagePercent.toFixed(1)}%</p>
-          </div>
-        </div>
-
-        <div className="bg-pdd-card rounded-xl border border-pdd-border p-4">
-          <h3 className="text-sm font-semibold text-pdd-text-primary mb-3">快捷操作</h3>
-          <div className="grid grid-cols-2 gap-2">
-            {[
-              { label: '审核充值', icon: CreditCard, color: 'text-amber-400', bg: 'bg-amber-500/10', path: '/recharge' },
-              { label: '用户管理', icon: Users, color: 'text-blue-400', bg: 'bg-blue-500/10', path: '/users' },
-              { label: '操作日志', icon: FileText, color: 'text-cyan-400', bg: 'bg-cyan-500/10', path: '/logs' },
-              { label: '系统设置', icon: Settings, color: 'text-gray-400', bg: 'bg-gray-500/10', path: '/settings' },
-              { label: '会员管理', icon: Crown, color: 'text-purple-400', bg: 'bg-purple-500/10', path: '/members' },
-              { label: '数据监控', icon: Activity, color: 'text-green-400', bg: 'bg-green-500/10', path: '/data' },
-            ].map((item) => (
-              <button
-                key={item.label}
-                onClick={() => navigate(item.path)}
-                className="flex flex-col items-center gap-1.5 p-3 rounded-lg bg-pdd-bg hover:bg-pdd-border/50 transition-colors"
-              >
-                <div className={`w-9 h-9 rounded-lg ${item.bg} flex items-center justify-center`}>
-                  <item.icon size={16} className={item.color} />
-                </div>
-                <span className="text-[10px] text-pdd-text-secondary">{item.label}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      ) : (
+        <div className="text-xs py-8 text-center text-pdd-gray-400">暂无操作记录</div>
+      )}
     </div>
   );
 }

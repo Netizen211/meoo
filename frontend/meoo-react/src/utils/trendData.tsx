@@ -3,32 +3,51 @@ import { findField } from './fieldAccess';
 
 // KPI指标线定义 — 共享于 DashboardKpiPanel 和 TrendPage
 export const KPI_LINES = [
-  { key: 'gmv', label: 'GMV', type: 'value' as const, color: '#1677FF' },
-  { key: 'orderCount', label: '订单量', type: 'value' as const, color: '#722ED1' },
-  { key: 'avgPrice', label: '客单价', type: 'value' as const, color: '#52C41A' },
+  // ── 收入 ──
+  { key: 'gmv', label: '总GMV', type: 'value' as const, color: '#165DFF' },
+  { key: 'merchantReceived', label: '总实收(商家实收)', type: 'value' as const, color: '#00B42A' },
   { key: 'paid', label: '用户实付', type: 'value' as const, color: '#73D13D' },
-  { key: 'postage', label: '邮费', type: 'value' as const, color: '#13C2C2' },
-  { key: 'refundAmount', label: '退款金额', type: 'value' as const, color: '#FF7875' },
-  { key: 'discount', label: '优惠', type: 'value' as const, color: '#FFC53D' },
-  { key: 'asRate', label: '售后率', type: 'percent' as const, color: '#FAAD14' },
-  { key: 'rfRate', label: '退款率', type: 'percent' as const, color: '#FF4D4F' },
-  { key: 'shipRate', label: '发货率', type: 'percent' as const, color: '#36CFC9' },
-  { key: 'promoCost', label: '推广花费', type: 'value' as const, color: '#F759AB' },
-  { key: 'promoGmv', label: '推广GMV', type: 'value' as const, color: '#EB2F96' },
-  { key: 'promoRoi', label: '推广ROI', type: 'value' as const, color: '#2F54EB' },
-  { key: 'buyerCount', label: '买家数', type: 'value' as const, color: '#9254DE' },
-  { key: 'productCount', label: '商品数', type: 'value' as const, color: '#EB2F96' },
-  { key: 'avgQty', label: '平均件数', type: 'value' as const, color: '#FA8C16' },
-  { key: 'avgShipHours', label: '平均发货时长', type: 'value' as const, color: '#597EF7' },
-  { key: 'ctr', label: '点击率', type: 'percent' as const, color: '#FAAD14' },
-  { key: 'cvr', label: '转化率', type: 'percent' as const, color: '#13C2C2' },
-  { key: 'cpc', label: '平均点击成本', type: 'value' as const, color: '#EB2F96' },
-  { key: 'cpa', label: '平均获客成本', type: 'value' as const, color: '#722ED1' },
+  { key: 'refundAmount', label: '退款金额', type: 'value' as const, color: '#F53F3F' },
+  { key: 'discount', label: '优惠总额', type: 'value' as const, color: '#FF7D00' },
+  { key: 'organicGmv', label: '自然销售额', type: 'value' as const, color: '#00B42A' },
+  // ── 利润 ──
+  { key: 'profit', label: '总利润', type: 'value' as const, color: '#00B42A' },
+  { key: 'profitRate', label: '利润率', type: 'percent' as const, color: '#00B42A' },
+  { key: 'netProfitRate', label: '净利润率', type: 'percent' as const, color: '#00B42A' },
   { key: 'promoRatio', label: '推广占比', type: 'percent' as const, color: '#FA541C' },
-  { key: 'shopRoi', label: '全店投产', type: 'value' as const, color: '#52C41A' },
-  { key: 'profit', label: '利润金额', type: 'value' as const, color: '#52C41A' },
-  { key: 'penaltyAmount', label: '罚款金额', type: 'value' as const, color: '#FF4D4F' },
-  { key: 'insuranceFee', label: '运费险', type: 'value' as const, color: '#FA8C16' },
+  { key: 'penaltyAmount', label: '罚款金额', type: 'value' as const, color: '#F53F3F' },
+  { key: 'subsidyFee', label: '百亿补贴费', type: 'value' as const, color: '#FF7D00' },
+  // ── 效率 ──
+  { key: 'avgPrice', label: '客单价', type: 'value' as const, color: '#165DFF' },
+  { key: 'orderCount', label: '有效订单量', type: 'value' as const, color: '#722ED1' },
+  { key: 'productCount', label: '在售商品', type: 'value' as const, color: '#722ED1' },
+  { key: 'sellThroughRate', label: '动销率', type: 'percent' as const, color: '#722ED1' },
+  { key: 'asRate', label: '售后率', type: 'percent' as const, color: '#FF7D00' },
+  { key: 'rfRate', label: '退款率', type: 'percent' as const, color: '#F53F3F' },
+  { key: 'buyerCount', label: '买家数', type: 'value' as const, color: '#722ED1' },
+  { key: 'avgShipHours', label: '平均发货时长', type: 'value' as const, color: '#165DFF' },
+  { key: 'organicOrders', label: '自然单', type: 'value' as const, color: '#00B42A' },
+  { key: 'shipRate', label: '发货率', type: 'percent' as const, color: '#36CFC9' },
+  { key: 'avgQty', label: '平均件数', type: 'value' as const, color: '#FA8C16' },
+  // ── 推广 ──
+  { key: 'promoCost', label: '推广花费', type: 'value' as const, color: '#165DFF' },
+  { key: 'promoGmv', label: '推广GMV', type: 'value' as const, color: '#722ED1' },
+  { key: 'promoRoi', label: '推广ROI', type: 'value' as const, color: '#00B42A' },
+  { key: 'promoRefund', label: '推广退款', type: 'value' as const, color: '#F53F3F' },
+  { key: 'realPromoOrders', label: '推广真实单量', type: 'value' as const, color: '#165DFF' },
+  { key: 'promoRecharge', label: '推广充值', type: 'value' as const, color: '#FF7D00' },
+  { key: 'ctr', label: '点击率', type: 'percent' as const, color: '#FF7D00' },
+  { key: 'cvr', label: '转化率', type: 'percent' as const, color: '#00B42A' },
+  { key: 'cpc', label: '平均点击成本', type: 'value' as const, color: '#F53F3F' },
+  { key: 'cpa', label: '平均获客成本', type: 'value' as const, color: '#722ED1' },
+  { key: 'shopRoi', label: '全店投产', type: 'value' as const, color: '#00B42A' },
+  // ── 费用 ──
+  { key: 'shippedCost', label: '发货商品成本', type: 'value' as const, color: '#FF7D00' },
+  { key: 'postage', label: '快递成本', type: 'value' as const, color: '#FF7D00' },
+  { key: 'insurance', label: '运费险', type: 'value' as const, color: '#165DFF' },
+  { key: 'platformFee', label: '平台扣点', type: 'value' as const, color: '#F53F3F' },
+  { key: 'vatEstimate', label: '增值税(估)', type: 'value' as const, color: '#722ED1' },
+  { key: 'surchargeEstimate', label: '附加税(估)', type: 'value' as const, color: '#722ED1' },
 ];
 
 // 共享的趋势图 Tooltip
@@ -88,6 +107,7 @@ export function buildTrendData(
         asCount: 0, rfCount: 0, shippedCount: 0,
         buyerSet: new Set<string>(), productSet: new Set<string>(),
         totalQty: 0, shipHourSum: 0,
+        merchantReceived: 0, platformFee: 0, insuranceFromOrder: 0,
       };
     }
     const g = byKey[key];
@@ -102,6 +122,10 @@ export function buildTrendData(
       + safeFloat(findField(o, '平台优惠折扣(元)', '平台优惠折扣', '平台优惠'))
       + safeFloat(findField(o, '多多支付立减金额(元)', '多多支付立减金额', '支付立减'));
     g.refundAmount += safeFloat(findField(o, '退款金额(元)', '退款金额', '退款(元)'));
+    // ★ 新增：商家实收、平台扣点、运费险（从订单行提取）
+    g.merchantReceived += safeFloat(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额'));
+    g.platformFee += safeFloat(findField(o, '平台技术服务费(元)', '技术服务费(元)', '平台技术服务费', '技术服务费'));
+    g.insuranceFromOrder += safeFloat(findField(o, '运费险(元)', '运费险', '保险(元)', '保险'));
     const st = String(findField(o, '售后状态') || '').trim();
     if (st && st !== '无售后或售后取消' && st !== '无') g.asCount += 1;
     if (st.includes('退款')) g.rfCount += 1;
@@ -154,28 +178,47 @@ export function buildTrendData(
     .sort((a: any, b: any) => a._sortKey.localeCompare(b._sortKey))
     .map((d: any) => {
       const promo = promoByKey[d._key] || { promoCost: 0, promoGmv: 0, promoImpressions: 0, promoClicks: 0, promoOrders: 0 };
+      const totalProfit = d.merchantReceived - d.refundAmount - d.platformFee;
       return {
         date: formatGranularityLabel(d._key, granularity),
         _fullDate: d._sortKey,
-        gmv: d.gmv, orderCount: d.orderCount,
+        // 收入
+        gmv: d.gmv, merchantReceived: d.merchantReceived,
+        paid: d.paid, refundAmount: d.refundAmount, discount: d.discount,
+        organicGmv: Math.max(0, d.gmv - promo.promoGmv),
+        // 利润
+        profit: totalProfit,
+        profitRate: d.merchantReceived > 0 ? (totalProfit / d.merchantReceived) * 100 : 0,
+        netProfitRate: d.merchantReceived > 0 ? (totalProfit / d.merchantReceived) * 100 : 0,
+        promoRatio: d.gmv > 0 ? (promo.promoCost / d.gmv) * 100 : 0,
+        penaltyAmount: 0, subsidyFee: 0,
+        // 效率
         avgPrice: d.orderCount > 0 ? d.paid / d.orderCount : 0,
-        paid: d.paid, postage: d.postage, refundAmount: d.refundAmount, discount: d.discount,
+        orderCount: d.orderCount, productCount: d.productSet.size,
+        sellThroughRate: 0,
         asRate: d.orderCount > 0 ? (d.asCount / d.orderCount) * 100 : 0,
         rfRate: d.orderCount > 0 ? (d.rfCount / d.orderCount) * 100 : 0,
-        shipRate: d.orderCount > 0 ? (d.shippedCount / d.orderCount) * 100 : 0,
         buyerCount: d.buyerSet.size,
-        productCount: d.productSet.size,
-        avgQty: d.orderCount > 0 ? d.totalQty / d.orderCount : 0,
         avgShipHours: d.shippedCount > 0 ? d.shipHourSum / d.shippedCount : 0,
+        organicOrders: Math.max(0, d.orderCount - promo.promoOrders),
+        shipRate: d.orderCount > 0 ? (d.shippedCount / d.orderCount) * 100 : 0,
+        avgQty: d.orderCount > 0 ? d.totalQty / d.orderCount : 0,
+        // 推广
         promoCost: promo.promoCost, promoGmv: promo.promoGmv,
         promoRoi: promo.promoCost > 0 ? promo.promoGmv / promo.promoCost : 0,
+        promoRefund: 0, realPromoOrders: 0, promoRecharge: 0,
         ctr: promo.promoImpressions > 0 ? (promo.promoClicks / promo.promoImpressions) * 100 : 0,
         cvr: promo.promoClicks > 0 ? (promo.promoOrders / promo.promoClicks) * 100 : 0,
         cpc: promo.promoClicks > 0 ? promo.promoCost / promo.promoClicks : 0,
         cpa: promo.promoOrders > 0 ? promo.promoCost / promo.promoOrders : 0,
-        promoRatio: d.gmv > 0 ? (promo.promoCost / d.gmv) * 100 : 0,
         shopRoi: promo.promoCost > 0 ? d.gmv / promo.promoCost : 0,
-        profit: 0, penaltyAmount: 0, insuranceFee: 0,
+        // 费用
+        shippedCost: 0,
+        postage: d.postage,
+        insurance: d.insuranceFromOrder || 0,
+        platformFee: d.platformFee,
+        vatEstimate: d.merchantReceived > 0 ? d.merchantReceived / 1.01 * 0.01 : 0,
+        surchargeEstimate: d.merchantReceived > 0 ? (d.merchantReceived / 1.01 * 0.01) * 0.12 : 0,
       };
     });
 }
@@ -203,6 +246,7 @@ export function buildCompareTrendData(
         asCount: 0, rfCount: 0, shippedCount: 0,
         buyerSet: new Set<string>(), productSet: new Set<string>(),
         totalQty: 0, shipHourSum: 0,
+        merchantReceived: 0, platformFee: 0, insuranceFromOrder: 0,
       };
     }
     const g = byKey[key];
@@ -215,6 +259,9 @@ export function buildCompareTrendData(
       + safeFloat(findField(o, '平台优惠折扣(元)', '平台优惠折扣', '平台优惠'))
       + safeFloat(findField(o, '多多支付立减金额(元)', '多多支付立减金额', '支付立减'));
     g.refundAmount += safeFloat(findField(o, '退款金额(元)', '退款金额', '退款(元)'));
+    g.merchantReceived += safeFloat(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额'));
+    g.platformFee += safeFloat(findField(o, '平台技术服务费(元)', '技术服务费(元)', '平台技术服务费', '技术服务费'));
+    g.insuranceFromOrder += safeFloat(findField(o, '运费险(元)', '运费险', '保险(元)', '保险'));
     const st = String(findField(o, '售后状态') || '').trim();
     if (st && st !== '无售后或售后取消' && st !== '无') g.asCount += 1;
     if (st.includes('退款')) g.rfCount += 1;
@@ -232,21 +279,31 @@ export function buildCompareTrendData(
 
   return Object.values(byKey)
     .sort((a: any, b: any) => a._sortKey.localeCompare(b._sortKey))
-    .map((d: any) => ({
-      date: formatGranularityLabel(d._key, granularity),
-      _fullDate: d._sortKey,
-      gmv: d.gmv, orderCount: d.orderCount,
-      avgPrice: d.orderCount > 0 ? d.paid / d.orderCount : 0,
-      paid: d.paid, postage: d.postage, refundAmount: d.refundAmount, discount: d.discount,
-      asRate: d.orderCount > 0 ? (d.asCount / d.orderCount) * 100 : 0,
-      rfRate: d.orderCount > 0 ? (d.rfCount / d.orderCount) * 100 : 0,
-      shipRate: d.orderCount > 0 ? (d.shippedCount / d.orderCount) * 100 : 0,
-      buyerCount: d.buyerSet.size,
-      productCount: d.productSet.size,
-      avgQty: d.orderCount > 0 ? d.totalQty / d.orderCount : 0,
-      avgShipHours: d.shippedCount > 0 ? d.shipHourSum / d.shippedCount : 0,
-      promoCost: 0, promoGmv: 0, promoRoi: 0,
-      ctr: 0, cvr: 0, cpc: 0, cpa: 0, promoRatio: 0, shopRoi: 0,
-      profit: 0, penaltyAmount: 0, insuranceFee: 0,
-    }));
+    .map((d: any) => {
+      const totalProfit = d.merchantReceived - d.refundAmount - d.platformFee;
+      return {
+        date: formatGranularityLabel(d._key, granularity),
+        _fullDate: d._sortKey,
+        gmv: d.gmv, orderCount: d.orderCount,
+        merchantReceived: d.merchantReceived,
+        avgPrice: d.orderCount > 0 ? d.paid / d.orderCount : 0,
+        paid: d.paid, postage: d.postage, refundAmount: d.refundAmount, discount: d.discount,
+        asRate: d.orderCount > 0 ? (d.asCount / d.orderCount) * 100 : 0,
+        rfRate: d.orderCount > 0 ? (d.rfCount / d.orderCount) * 100 : 0,
+        shipRate: d.orderCount > 0 ? (d.shippedCount / d.orderCount) * 100 : 0,
+        buyerCount: d.buyerSet.size, productCount: d.productSet.size,
+        avgQty: d.orderCount > 0 ? d.totalQty / d.orderCount : 0,
+        avgShipHours: d.shippedCount > 0 ? d.shipHourSum / d.shippedCount : 0,
+        profit: totalProfit, profitRate: d.merchantReceived > 0 ? (totalProfit / d.merchantReceived) * 100 : 0,
+        netProfitRate: d.merchantReceived > 0 ? (totalProfit / d.merchantReceived) * 100 : 0,
+        platformFee: d.platformFee, insurance: d.insuranceFromOrder || 0,
+        vatEstimate: d.merchantReceived > 0 ? d.merchantReceived / 1.01 * 0.01 : 0,
+        surchargeEstimate: d.merchantReceived > 0 ? (d.merchantReceived / 1.01 * 0.01) * 0.12 : 0,
+        // 对比版无推广数据
+        organicGmv: 0, organicOrders: 0, promoRatio: 0, penaltyAmount: 0, subsidyFee: 0,
+        sellThroughRate: 0, shippedCost: 0,
+        promoCost: 0, promoGmv: 0, promoRoi: 0, promoRefund: 0, realPromoOrders: 0, promoRecharge: 0,
+        ctr: 0, cvr: 0, cpc: 0, cpa: 0, shopRoi: 0,
+      };
+    });
 }

@@ -11,6 +11,7 @@ export const PROMO_FIELDS = {
   productId:   ['商品ID', '商品id', '商品编号'],
   productName: ['商品名称', '商品'],
   keyword:     ['推广名称', '关键词'],
+  scene:       ['场景', '投放场景', '推广场景'],
   cpc:         ['平均点击花费(元)', '单次点击花费'],
   inquiry:     ['询单量', '询单'],
   inquiryCost: ['询单花费(元)', '询单花费'],

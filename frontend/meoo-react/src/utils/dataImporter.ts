@@ -5,6 +5,7 @@ import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
 import { findField } from './index';
 import { apiClient } from '../../api/client';
+import { useDataStore } from '../store/dataStore';
 
 export interface StoreDataItem {
   orders: any[];
@@ -15,7 +16,7 @@ export interface StoreDataItem {
   shippingInsurance: any[];
   afterSaleRecords: any[];
   financialRecords: any[];
-  availableFields: { csv: Set<string>; promotion: Set<string>; insurance: Set<string>; afterSale: Set<string> };
+  availableFields: { csv: string[]; promotion: string[]; insurance: string[]; afterSale: string[]; financial: string[] };
 }
 
 const EMPTY_STORE_DATA: StoreDataItem = {
@@ -27,7 +28,7 @@ const EMPTY_STORE_DATA: StoreDataItem = {
   shippingInsurance: [],
   afterSaleRecords: [],
   financialRecords: [],
-  availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() }
+  availableFields: { csv: [], promotion: [], insurance: [], afterSale: [], financial: [] }
 };
 
 // 清理字段名
@@ -171,11 +172,11 @@ async function parseXLSX(arrayBuffer: ArrayBuffer): Promise<Record<string, { fie
 
 // 处理订单数据
 function processOrderData(existing: StoreDataItem, data: any[], fields: string[]): void {
-  const existingOrderIds = new Set(existing.orders.map((o: any) => String(o['订单号'] || '').trim()));
+  const existingOrderIds = new Set(existing.orders.map((o: any) => String(findField(o, '订单号', '订单编号') || '').trim()));
   const newOrders: any[] = [];
 
   data.forEach((row: any) => {
-    const orderId = String(row['订单号'] || '').trim();
+    const orderId = String(findField(row, '订单号', '订单编号') || '').trim();
     if (orderId && !existingOrderIds.has(orderId)) {
       newOrders.push(row);
       existingOrderIds.add(orderId);
@@ -183,7 +184,7 @@ function processOrderData(existing: StoreDataItem, data: any[], fields: string[]
   });
 
   existing.orders = [...existing.orders, ...newOrders];
-  fields.forEach(f => existing.availableFields.csv.add(f));
+  fields.forEach(f => { if (!existing.availableFields.csv.includes(f)) existing.availableFields.csv.push(f); });
 }
 
 // 处理商品推广数据
@@ -209,7 +210,7 @@ function processPromotionData(existing: StoreDataItem, sheets: Record<string, { 
           seenKeys.add(key);
         }
       });
-      sheet.fields.forEach(f => existing.availableFields.promotion.add(f));
+      sheet.fields.forEach(f => { if (!existing.availableFields.promotion.includes(f)) existing.availableFields.promotion.push(f); });
       processedTypes.add('商品推广_产品');
     } else {
       const summaryMap = new Map<string, any>();
@@ -222,7 +223,7 @@ function processPromotionData(existing: StoreDataItem, sheets: Record<string, { 
         summaryMap.set(String(item['日期']).trim(), item);
       });
       existing.promotionSummary = Array.from(summaryMap.values());
-      sheet.fields.forEach(f => existing.availableFields.promotion.add(f));
+      sheet.fields.forEach(f => { if (!existing.availableFields.promotion.includes(f)) existing.availableFields.promotion.push(f); });
       processedTypes.add('商品推广_汇总');
     }
   }
@@ -255,7 +256,7 @@ function processStarStoreData(existing: StoreDataItem, sheets: Record<string, { 
 
     existing.starStoreSummary = Array.from(starMap.values());
 
-    sheet.fields.forEach(f => existing.availableFields.promotion.add(f));
+    sheet.fields.forEach(f => { if (!existing.availableFields.promotion.includes(f)) existing.availableFields.promotion.push(f); });
   }
 }
 
@@ -286,7 +287,7 @@ function processLiveStreamData(existing: StoreDataItem, sheets: Record<string, {
 
     existing.liveStreamSummary = Array.from(liveMap.values());
 
-    sheet.fields.forEach(f => existing.availableFields.promotion.add(f));
+    sheet.fields.forEach(f => { if (!existing.availableFields.promotion.includes(f)) existing.availableFields.promotion.push(f); });
   }
 }
 
@@ -303,7 +304,7 @@ function processInsuranceData(existing: StoreDataItem, sheets: Record<string, { 
         existingKeys.add(key);
       }
     });
-    existing.availableFields.insurance = new Set(sheet.fields);
+    existing.availableFields.insurance = [...sheet.fields];
   }
 }
 
@@ -332,8 +333,8 @@ function processAfterSaleData(existing: StoreDataItem, sheets: Record<string, { 
         existingKeys.add(key);
       }
     });
-    if (!existing.availableFields.afterSale) existing.availableFields.afterSale = new Set();
-    existing.availableFields.afterSale = new Set(sheet.fields);
+    if (!existing.availableFields.afterSale) existing.availableFields.afterSale = [];
+    existing.availableFields.afterSale = [...sheet.fields];
   }
 }
 
@@ -469,14 +470,15 @@ export async function importSampleData(): Promise<{ storeId: string; storeName: 
     }
   }
 
-  // ★ 直接同步到服务器（不使用浏览器存储）
+  // ★ 构建保存数据（数组已兼容全部字段）
   const storeDataForSave = {
     ...existing,
     availableFields: {
-      csv: Array.from(existing.availableFields.csv),
-      promotion: Array.from(existing.availableFields.promotion),
-      insurance: Array.from(existing.availableFields.insurance),
-      afterSale: Array.from(existing.availableFields.afterSale)
+      csv: existing.availableFields.csv,
+      promotion: existing.availableFields.promotion,
+      insurance: existing.availableFields.insurance,
+      afterSale: existing.availableFields.afterSale,
+      financial: existing.availableFields.financial
     }
   };
 
@@ -524,6 +526,9 @@ export async function importSampleData(): Promise<{ storeId: string; storeName: 
     configs,
     uploadRecords,
   }).catch(e => console.error('[dataImporter] sync error:', e));
+
+  // ★ 立即写入 Zustand store，确保 UI 即时显示（不依赖轮询）
+  useDataStore.getState().replaceStoreForId(storeId, storeDataForSave as any);
 
   return { storeId, storeName, results };
 }

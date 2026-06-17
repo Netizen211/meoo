@@ -1,6 +1,10 @@
 import { Router, Request, Response } from 'express';
+import multer from 'multer';
+import path from 'path';
+import fs from 'fs';
 import { requireAuth } from '../middleware/auth';
 import * as dataService from '../services/dataService';
+import { normalizeFieldName, normalizeRecordKeys, normalizeRecordsArray } from '../services/fieldNormalizer';
 import { DATA_CATEGORIES } from '../shared-types';
 import cache from '../services/cacheService';
 import { transaction } from '../services/transactionService';
@@ -10,11 +14,30 @@ import { sse } from '../services/sseService';
 
 const router = Router();
 
+// multer 配置 — 产品图片上传
+const UPLOAD_DIR = path.resolve(process.cwd(), 'uploads/products');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+const productImgStorage = multer.diskStorage({
+  destination: (_req: any, _file: any, cb: Function) => { cb(null, UPLOAD_DIR); },
+  filename: (req: any, file: Express.Multer.File, cb: Function) => {
+    const userId = req.user?.userId || 'unknown';
+    const productId = req.body?.productId || req.params?.productId || 'unknown';
+    const ext = path.extname(file.originalname) || '.jpg';
+    cb(null, `${userId}_${productId}${ext}`);
+  }
+});
+const upload = multer({ storage: productImgStorage, limits: { fileSize: 2 * 1024 * 1024 }, fileFilter: (_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) => {
+  if (!file.mimetype.startsWith('image/')) { cb(new Error('仅支持图片文件')); return; }
+  cb(null, true);
+} });
+
 // 各类数据的主键字段（用于去重合并）
 const KEY_FIELDS: Record<string, string> = {
   orders: '订单号',
   afterSaleRecords: '售后编号',
   shippingInsurance: '订单编号',
+  // ★ 推广/货款/明星/直播：前端已去重，后端直接合并不丢行
+  // （不用单字段去重，避免同订单多行货款、同商品多计划推广被误判重复）
 };
 
 // POST /api/data/sync — 智能合并同步（多设备安全，追加去重）
@@ -34,6 +57,10 @@ router.post('/sync', requireAuth, validate(syncSchema), async (req: Request, res
       await db('stores').insert({
         id: storeId, user_id: req.user!.userId, name: storeName || '未命名店铺',
       });
+    } else if (existingStoreRow.user_id !== req.user!.userId && req.user!.role !== 'admin') {
+      // ★ 修复：店铺属于其他用户，拒绝写入（管理员除外）
+      res.status(403).json({ success: false, error: '无权操作此店铺' });
+      return;
     }
 
     // 隐私合规检查：禁止上传含个人信息的字段
@@ -62,51 +89,16 @@ router.post('/sync', requireAuth, validate(syncSchema), async (req: Request, res
 
     const mergeStats: Record<string, { added: number; skipped: number; total: number }> = {};
 
-    // ★ 字段名标准化 — 确保存入MySQL的列名与后端KPI计算使用的名称一致
-    // 前端使用 findField() 做模糊匹配，但后端 analyticsService 使用硬编码精确匹配
-    // 此处统一规范化：全角括号→半角，去除括号内空格，常见别名映射
-    const normalizeFieldName = (name: string): string => {
-      let s = String(name).replace(/[﻿ \t\r\n]+/g, '').trim();
-      s = s.replace(/（/g, '(').replace(/）/g, ')');
-      s = s.replace(/＋/g, '+').replace(/－/g, '-');
-      s = s.replace(/\s+\(/g, '(').replace(/\(\s+/g, '(').replace(/\s+\)/g, ')');
-      const ALIASES: Record<string, string> = {
-        '商家实收金额(元)': '商家实收金额(元)',
-        '商家实收(元)': '商家实收金额(元)',
-        '用户实付金额(元)': '用户实付金额(元)',
-        '用户实付(元)': '用户实付金额(元)',
-        '退款金额(元)': '退款金额(元)',
-        '退款(元)': '退款金额(元)',
-        '技术服务费(元)': '平台技术服务费(元)',
-        '成交量(件)': '商品数量(件)',
-        '成交花费(元)': '成交花费(元)',
-        '成交金额(元)': '交易额(元)',
-        '净交易额(元)': '交易额(元)',
-        '快递费(元)': '邮费(元)',
-        '保费(元)': '保费(元)',
-      };
-      return ALIASES[s] || s;
-    };
-    const normalizeRecordKeys = (record: any): any => {
-      if (!record || typeof record !== 'object') return record;
-      const out: any = {};
-      for (const [key, value] of Object.entries(record)) {
-        const nk = normalizeFieldName(key);
-        if (!(nk in out)) out[nk] = value;
-      }
-      return out;
-    };
-    const normalizeRecordsArray = (arr: any[]): any[] => arr.map(normalizeRecordKeys);
-
     // 智能合并各类数据
-    for (const category of DATA_CATEGORIES) {
+    await db.transaction(async (trx: any) => {
+      for (const category of DATA_CATEGORIES) {
       const categoryData = data[category];
       if (!categoryData || !Array.isArray(categoryData)) continue;
 
       // ★ 入库前规范化每条记录的字段名
       const normalizedCategoryData = normalizeRecordsArray(categoryData);
 
-      const existingRow = await db('store_data').where({ store_id: storeId, category }).first();
+      const existingRow = await trx('store_data').where({ store_id: storeId, category }).first();
 
       // 🔴 保护1：空数据不覆盖已有数据
       if (normalizedCategoryData.length === 0 && existingRow) {
@@ -135,12 +127,28 @@ router.post('/sync', requireAuth, validate(syncSchema), async (req: Request, res
               });
               merged = [...existingData, ...newItems];
               added = newItems.length;
+            } else {
+              // ★ 无主键分类：用内容哈希去重（避免重复同步翻倍）
+              const existingHashes = new Set(existingData.map((item: any) => {
+                try { return JSON.stringify(item); } catch { return ''; }
+              }).filter(Boolean));
+              const newItems: any[] = [];
+              normalizedCategoryData.forEach((item: any) => {
+                let hash = '';
+                try { hash = JSON.stringify(item); } catch {}
+                if (hash && !existingHashes.has(hash)) {
+                  newItems.push(item);
+                  existingHashes.add(hash);
+                } else { skipped++; }
+              });
+              merged = [...existingData, ...newItems];
+              added = newItems.length;
             }
           }
         } catch { /* 解析失败则覆盖 */ }
       }
 
-      await db('store_data')
+      await trx('store_data')
         .insert({ store_id: storeId, category, payload_json: JSON.stringify(merged), row_count: merged.length })
         .onConflict(['store_id', 'category'] as any)
         .merge({ payload_json: JSON.stringify(merged), row_count: merged.length, updated_at: db.fn.now() });
@@ -148,7 +156,9 @@ router.post('/sync', requireAuth, validate(syncSchema), async (req: Request, res
       mergeStats[category] = { added, skipped, total: merged.length };
     }
 
-    // 保存可用字段（合并）
+    });
+
+// 保存可用字段（合并）
     if (data.availableFields) {
       await dataService.saveAvailableFields(storeId, data.availableFields);
     }
@@ -194,6 +204,14 @@ router.post('/pull', requireAuth, validate(pullSchema), async (req: Request, res
       return;
     }
 
+    // ★ 修复：验证店铺归属权
+    const { db } = require('../db');
+    const storeOwner = await db('stores').where('id', storeId).select('user_id').first();
+    if (storeOwner && storeOwner.user_id !== req.user!.userId && req.user!.role !== 'admin') {
+      res.status(403).json({ success: false, error: '无权访问此店铺数据' });
+      return;
+    }
+
     const storeData = await dataService.loadStoreData(storeId);
     const configs = await dataService.loadStoreConfigs(storeId);
     const availableFields = await dataService.loadAvailableFields(storeId);
@@ -225,6 +243,13 @@ router.post('/config', requireAuth, validate(configSyncSchema), async (req: Requ
     const { storeId, configKey, payloadJson } = req.body;
     if (!storeId || !configKey) {
       res.status(400).json({ success: false, error: '缺少storeId或configKey' });
+      return;
+    }
+    // ★ 修复：验证店铺归属权
+    const { db } = require('../db');
+    const storeOwner = await db('stores').where('id', storeId).select('user_id').first();
+    if (storeOwner && storeOwner.user_id !== req.user!.userId && req.user!.role !== 'admin') {
+      res.status(403).json({ success: false, error: '无权操作此店铺配置' });
       return;
     }
     await dataService.saveStoreConfig(storeId, configKey, payloadJson);
@@ -304,6 +329,12 @@ router.delete('/store/:storeId/uploads', requireAuth, async (req: Request, res: 
   try {
     const { storeId } = req.params;
     const { db } = require('../db');
+    // ★ 修复：验证店铺归属权
+    const store = await db('stores').where({ id: storeId, user_id: req.user!.userId }).first();
+    if (!store && req.user!.role !== 'admin') {
+      res.status(403).json({ success: false, error: '无权操作此店铺上传记录' });
+      return;
+    }
     await db('upload_records').where('store_id', storeId).del();
     res.json({ success: true, message: '上传记录已清除' });
   } catch (err: any) {
@@ -338,6 +369,29 @@ router.post('/clear-all', requireAuth, async (req: Request, res: Response) => {
     logger.error('clear-all failed', { error: err.message, userId: req.user!.userId });
     res.status(500).json({ success: false, error: '清除失败' });
   }
+});
+
+// ★ 产品图片上传
+router.post('/product-image/upload', requireAuth, upload.single('image'), async (req: Request, res: Response) => {
+  try {
+    const multerReq = req as Request & { file: Express.Multer.File };
+    if (!multerReq.file) { res.status(400).json({ success: false, error: '请选择图片' }); return; }
+    const productId = req.body.productId as string;
+    if (!productId) { res.status(400).json({ success: false, error: '缺少productId' }); return; }
+    res.json({ success: true, data: { url: `/api/data/product-image/${productId}`, productId } });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || '上传失败' });
+  }
+});
+
+// ★ 产品图片获取
+router.get('/product-image/:productId', async (req: Request, res: Response) => {
+  try {
+    const productId = req.params.productId;
+    const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.includes('_') && f.split('_').slice(1).join('_').split('.')[0] === productId);
+    if (files.length === 0) { res.status(404).json({ success: false, error: '图片不存在' }); return; }
+    res.sendFile(path.join(UPLOAD_DIR, files[0]));
+  } catch { res.status(404).json({ success: false, error: '图片不存在' }); }
 });
 
 export default router;

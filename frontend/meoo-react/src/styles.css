@@ -1,8 +1,8 @@
 :root {
   color-scheme: light;
   font-family: Inter, "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
-  background: #f6f7f9;
-  color: #1f2937;
+  background: var(--pdd-bg, #f6f7f9);
+  color: var(--pdd-text, #1f2937);
 }
 
 * {
@@ -11,7 +11,7 @@
 
 body {
   margin: 0;
-  background: #f6f7f9;
+  background: var(--pdd-bg, #f6f7f9);
 }
 
 button,
@@ -23,7 +23,7 @@ select {
 button {
   border: 0;
   border-radius: 6px;
-  background: #d92d20;
+  background: var(--pdd-primary, #1F6BFF);
   color: #fff;
   cursor: pointer;
   font-weight: 700;
@@ -37,9 +37,9 @@ button:disabled {
 }
 
 button.secondary {
-  background: #fff;
-  border: 1px solid #d1d5db;
-  color: #1f2937;
+  background: var(--pdd-card, #fff);
+  border: 1px solid var(--pdd-border, #d1d5db);
+  color: var(--pdd-text, #1f2937);
 }
 
 button.danger-button {
@@ -50,10 +50,10 @@ button.danger-button {
 input,
 select {
   width: 100%;
-  border: 1px solid #d1d5db;
+  border: 1px solid var(--pdd-border, #d1d5db);
   border-radius: 6px;
-  background: #fff;
-  color: #111827;
+  background: var(--pdd-card, #fff);
+  color: var(--pdd-text, #111827);
   min-height: 40px;
   padding: 8px 10px;
 }
@@ -61,7 +61,7 @@ select {
 label {
   display: grid;
   gap: 6px;
-  color: #374151;
+  color: var(--pdd-text-secondary, #374151);
   font-size: 13px;
   font-weight: 700;
 }
@@ -83,11 +83,11 @@ label {
   width: min(440px, calc(100vw - 32px));
   display: grid;
   gap: 20px;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  background: var(--pdd-card, #fff);
+  border: 1px solid var(--pdd-border, #e5e7eb);
+  border-radius: var(--pdd-radius-lg, 12px);
   padding: 28px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--pdd-shadow-xl, 0 20px 25px -5px rgba(0 0 0 / 0.10));
 }
 
 .topbar,
@@ -128,7 +128,7 @@ label {
 }
 
 .eyebrow {
-  color: #d92d20;
+  color: var(--pdd-primary, #d92d20);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -137,15 +137,15 @@ label {
 }
 
 .muted {
-  color: #6b7280;
+  color: var(--pdd-text-secondary, #6b7280);
   font-size: 13px;
   margin: 4px 0 0;
 }
 
 .toolbar {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  background: var(--pdd-card, #fff);
+  border: 1px solid var(--pdd-border, #e5e7eb);
+  border-radius: var(--pdd-radius-md, 8px);
   padding: 14px;
   margin-bottom: 16px;
   flex-wrap: wrap;
@@ -170,9 +170,9 @@ label {
 }
 
 .panel {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  background: var(--pdd-card, #fff);
+  border: 1px solid var(--pdd-border, #e5e7eb);
+  border-radius: var(--pdd-radius-md, 8px);
   padding: 18px;
   margin-bottom: 16px;
 }
@@ -212,9 +212,9 @@ label {
 }
 
 .count {
-  background: #f3f4f6;
-  border-radius: 999px;
-  color: #4b5563;
+  background: var(--pdd-gray-100, #f3f4f6);
+  border-radius: var(--pdd-radius-full, 999px);
+  color: var(--pdd-text-secondary, #4b5563);
   font-size: 12px;
   font-weight: 800;
   padding: 5px 10px;
@@ -229,21 +229,21 @@ label {
 }
 
 .kpi {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border: 1px solid var(--pdd-border, #e5e7eb);
+  border-radius: var(--pdd-radius-md, 8px);
   padding: 14px;
   min-width: 0;
 }
 
 .kpi span {
-  color: #6b7280;
+  color: var(--pdd-text-secondary, #6b7280);
   display: block;
   font-size: 13px;
   margin-bottom: 8px;
 }
 
 .kpi strong {
-  color: #111827;
+  color: var(--pdd-text, #111827);
   display: block;
   font-size: 22px;
   line-height: 1.1;
@@ -251,10 +251,11 @@ label {
 }
 
 .table-wrap {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
+  border: 1px solid var(--pdd-border, #e5e7eb);
+  border-radius: var(--pdd-radius-md, 8px);
   margin-top: 14px;
   overflow: auto;
+  box-shadow: var(--pdd-shadow-xs, none);
 }
 
 .table-wrap.compact {
@@ -269,7 +270,7 @@ table {
 
 th,
 td {
-  border-bottom: 1px solid #e5e7eb;
+  border-bottom: 1px solid var(--pdd-border, #e5e7eb);
   padding: 10px 12px;
   text-align: left;
   vertical-align: top;
@@ -277,14 +278,14 @@ td {
 }
 
 th {
-  background: #f9fafb;
-  color: #374151;
+  background: var(--pdd-gray-50, #f9fafb);
+  color: var(--pdd-text-secondary, #374151);
   font-size: 12px;
   font-weight: 800;
 }
 
 td {
-  color: #1f2937;
+  color: var(--pdd-text, #1f2937);
   font-size: 13px;
 }
 
@@ -293,7 +294,7 @@ tr:last-child td {
 }
 
 .product-name {
-  color: #111827;
+  color: var(--pdd-text, #111827);
   font-weight: 800;
   max-width: 360px;
   overflow: hidden;
@@ -302,7 +303,7 @@ tr:last-child td {
 }
 
 .empty {
-  color: #6b7280;
+  color: var(--pdd-text-secondary, #6b7280);
   padding: 28px 12px;
   text-align: center;
 }

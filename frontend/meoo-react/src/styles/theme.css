@@ -1,20 +1,21 @@
 /**
  * 主题系统 CSS 变量
- * 拼多多风格主题 - 主色调 #e02e24
+ * 蓝白企业级SaaS风格 - 主色调 #1F6BFF
+ * 符合 21-蓝白企业级UI设计系统.md 规范
  */
 
 :root {
-  /* Light Theme (Default) */
-  --pdd-primary: #e02e24;
-  --pdd-primary-light: #ef4444;
-  --pdd-primary-dark: #c41e14;
-  --pdd-bg: #f5f5f5;
-  --pdd-bg-rgb: 245 245 245;
-  --pdd-card: #ffffff;
-  --pdd-sidebar: #ffffff;
-  --pdd-text: #1f2937;
-  --pdd-text-secondary: #6b7280;
-  --pdd-border: #e5e5e5;
+  /* Light Theme (蓝白企业级) */
+  --pdd-primary: #1F6BFF;
+  --pdd-primary-light: #4F8CFF;
+  --pdd-primary-dark: #1557D9;
+  --pdd-bg: #F6FAFF;
+  --pdd-bg-rgb: 246 250 255;
+  --pdd-card: #FFFFFF;
+  --pdd-sidebar: #FFFFFF;
+  --pdd-text: #101828;
+  --pdd-text-secondary: #667085;
+  --pdd-border: #E3EAF5;
   --pdd-success: #22c55e;
   --pdd-warning: #f59e0b;
   --pdd-danger: #ef4444;
@@ -27,31 +28,31 @@
   --pdd-danger-light: #f87171;
 
   /* Gray scale - Light */
-  --pdd-gray-50: #f9fafb;
-  --pdd-gray-100: #f3f4f6;
-  --pdd-gray-200: #e5e7eb;
-  --pdd-gray-300: #d1d5db;
-  --pdd-gray-400: #9ca3af;
-  --pdd-gray-500: #6b7280;
-  --pdd-gray-600: #4b5563;
-  --pdd-gray-700: #374151;
-  --pdd-gray-800: #1f2937;
-  --pdd-gray-900: #111827;
+  --pdd-gray-50: #F8FAFD;
+  --pdd-gray-100: #F0F5FF;
+  --pdd-gray-200: #E3EAF5;
+  --pdd-gray-300: #CBD5E1;
+  --pdd-gray-400: #94A3B8;
+  --pdd-gray-500: #667085;
+  --pdd-gray-600: #475467;
+  --pdd-gray-700: #344054;
+  --pdd-gray-800: #1D2939;
+  --pdd-gray-900: #101828;
 }
 
 :root.dark,
 [data-theme='dark'] {
-  /* Dark Theme */
-  --pdd-primary: #ef4444;
-  --pdd-primary-light: #f87171;
-  --pdd-primary-dark: #dc2626;
-  --pdd-bg: #0a0a0a;
-  --pdd-bg-rgb: 10 10 10;
-  --pdd-card: #171717;
-  --pdd-sidebar: #0a0a0a;
-  --pdd-text: #f5f5f5;
-  --pdd-text-secondary: #a3a3a3;
-  --pdd-border: #262626;
+  /* Dark Theme (蓝白暗色变体) */
+  --pdd-primary: #4F8CFF;
+  --pdd-primary-light: #7AA8FF;
+  --pdd-primary-dark: #1F6BFF;
+  --pdd-bg: #0F172A;
+  --pdd-bg-rgb: 15 23 42;
+  --pdd-card: #1E293B;
+  --pdd-sidebar: #0F172A;
+  --pdd-text: #F1F5F9;
+  --pdd-text-secondary: #94A3B8;
+  --pdd-border: #1E293B;
   --pdd-success: #22c55e;
   --pdd-warning: #f59e0b;
   --pdd-danger: #ef4444;
@@ -63,17 +64,17 @@
   --pdd-orange: #fb923c;
   --pdd-danger-light: #fca5a5;
 
-  /* Gray scale - Dark (inverted for readability) */
-  --pdd-gray-50: #171717;
-  --pdd-gray-100: #1f1f1f;
-  --pdd-gray-200: #2a2a2a;
-  --pdd-gray-300: #3a3a3a;
-  --pdd-gray-400: #737373;
-  --pdd-gray-500: #a3a3a3;
-  --pdd-gray-600: #d4d4d4;
-  --pdd-gray-700: #e5e5e5;
-  --pdd-gray-800: #f5f5f5;
-  --pdd-gray-900: #ffffff;
+  /* Gray scale - Dark */
+  --pdd-gray-50: #1E293B;
+  --pdd-gray-100: #334155;
+  --pdd-gray-200: #475569;
+  --pdd-gray-300: #64748B;
+  --pdd-gray-400: #94A3B8;
+  --pdd-gray-500: #CBD5E1;
+  --pdd-gray-600: #E2E8F0;
+  --pdd-gray-700: #F1F5F9;
+  --pdd-gray-800: #F8FAFC;
+  --pdd-gray-900: #FFFFFF;
 }
 
 /* Theme transition — only applied when html has .theme-ready class */
@@ -98,4 +99,84 @@ html.theme-ready *::after {
 .no-theme-transition,
 .no-theme-transition * {
   transition: none !important;
+}
+
+/* ══════════════════════════════════════════════════════════
+   Layer 1 Extended — 阴影 / 圆角 / 动画 / 玻璃效果
+   参考来源: shadcn/ui + Horizon UI + Cruip/Mosaic
+   ══════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Shadow System (shadcn/ui 风格) ── */
+  --pdd-shadow-xs:   0 1px 2px 0 rgba(0 0 0 / 0.03);
+  --pdd-shadow-sm:   0 1px 3px 0 rgba(0 0 0 / 0.06), 0 1px 2px -1px rgba(0 0 0 / 0.04);
+  --pdd-shadow-md:   0 4px 6px -1px rgba(0 0 0 / 0.07), 0 2px 4px -2px rgba(0 0 0 / 0.05);
+  --pdd-shadow-lg:   0 10px 15px -3px rgba(0 0 0 / 0.08), 0 4px 6px -4px rgba(0 0 0 / 0.04);
+  --pdd-shadow-xl:   0 20px 25px -5px rgba(0 0 0 / 0.10), 0 8px 10px -6px rgba(0 0 0 / 0.05);
+  --pdd-shadow-card-hover: 0 8px 25px -6px rgba(31 107 255 / 0.12);
+
+  /* ── Border Radius Scale (Cruip/Mosaic 风格) ── */
+  --pdd-radius-xs:   4px;
+  --pdd-radius-sm:   6px;
+  --pdd-radius-md:   8px;
+  --pdd-radius-lg:   12px;
+  --pdd-radius-xl:   16px;
+  --pdd-radius-2xl:  24px;
+  --pdd-radius-full: 9999px;
+
+  /* ── Animation Timing (shadcn/ui 风格) ── */
+  --pdd-duration-fast:   150ms;
+  --pdd-duration-normal: 200ms;
+  --pdd-duration-slow:   350ms;
+  --pdd-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --pdd-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  /* ── Glass Effect (Horizon UI 风格) ── */
+  --pdd-glass-bg: rgba(255 255 255 / 0.72);
+  --pdd-glass-border: rgba(255 255 255 / 0.25);
+  --pdd-glass-blur: 12px;
+
+  /* ── Gradient Definitions ── */
+  --pdd-gradient-primary: linear-gradient(135deg, #4F8CFF 0%, #1F6BFF 50%, #1557D9 100%);
+  --pdd-gradient-success: linear-gradient(135deg, #4ADE80 0%, #22C55E 100%);
+  --pdd-gradient-warning: linear-gradient(135deg, #FBBF24 0%, #F59E0B 100%);
+  --pdd-gradient-danger:  linear-gradient(135deg, #F87171 0%, #EF4444 100%);
+  --pdd-gradient-card:    linear-gradient(135deg, #FFFFFF 0%, #F8FAFD 100%);
+
+  /* ── Focus Ring (shadcn/ui 风格) ── */
+  --pdd-ring-primary: 0 0 0 2px rgba(31 107 255 / 0.35);
+  --pdd-ring-offset: 2px;
+}
+
+/* Dark theme overrides for extended tokens */
+:root.dark,
+[data-theme='dark'] {
+  --pdd-shadow-xs:   0 1px 2px 0 rgba(0 0 0 / 0.30);
+  --pdd-shadow-sm:   0 1px 3px 0 rgba(0 0 0 / 0.35), 0 1px 2px -1px rgba(0 0 0 / 0.30);
+  --pdd-shadow-md:   0 4px 6px -1px rgba(0 0 0 / 0.40), 0 2px 4px -2px rgba(0 0 0 / 0.30);
+  --pdd-shadow-lg:   0 10px 15px -3px rgba(0 0 0 / 0.45), 0 4px 6px -4px rgba(0 0 0 / 0.35);
+  --pdd-shadow-xl:   0 20px 25px -5px rgba(0 0 0 / 0.50), 0 8px 10px -6px rgba(0 0 0 / 0.40);
+  --pdd-shadow-card-hover: 0 8px 25px -6px rgba(31 107 255 / 0.25);
+
+  --pdd-glass-bg: rgba(30 41 59 / 0.80);
+  --pdd-glass-border: rgba(255 255 255 / 0.08);
+
+  --pdd-gradient-card: linear-gradient(135deg, #1E293B 0%, #1A2332 100%);
+  --pdd-ring-primary: 0 0 0 2px rgba(79 140 255 / 0.40);
+}
+
+/* ══════════════════════════════════════════════════════════
+   Utility Classes — 基于上述 CSS 变量的工具类
+   参考: shadcn/ui + Horizon UI + Cruip/Mosaic
+   ══════════════════════════════════════════════════════════ */
+
+/* Gradient Button 背景 */
+.btn-gradient {
+  background: var(--pdd-gradient-primary);
+}
+.btn-gradient:hover {
+  filter: brightness(1.08);
+}
+.btn-gradient:active {
+  filter: brightness(0.95);
 }

@@ -23,7 +23,7 @@ export default function KpiCard({
   change,
   changeLabel = '环比',
   icon: Icon,
-  color = '#6366f1',
+  color = 'var(--pdd-primary)',
   trend = 'neutral',
   detailData,
   onClick,
@@ -32,8 +32,8 @@ export default function KpiCard({
   const [showDetail, setShowDetail] = useState(false);
 
   const getTrendIcon = () => {
-    if (trend === 'up') return <TrendingUp size={14} className="text-green-400" />;
-    if (trend === 'down') return <TrendingDown size={14} className="text-red-400" />;
+    if (trend === 'up') return <TrendingUp size={14} className="text-pdd-success" />;
+    if (trend === 'down') return <TrendingDown size={14} className="text-pdd-danger" />;
     return null;
   };
 
@@ -49,15 +49,10 @@ export default function KpiCard({
 
   return (
     <>
-      <motion.div
-        whileHover={{ scale: 1.02, y: -2 }}
-        whileTap={{ scale: 0.98 }}
+      <div
         onClick={() => detailData ? setShowDetail(true) : onClick?.()}
-        className={`pdd-card px-4 py-3 cursor-pointer relative overflow-hidden group ${className}`}
+        className={`pdd-card px-4 py-3 cursor-pointer transition-all hover:border-pdd-primary/30 ${className}`}
       >
-        {/* Accent glow */}
-        <div className="absolute top-0 left-0 w-full h-[2px]" style={{ background: `linear-gradient(90deg, transparent, ${color}, transparent)` }} />
-        
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 mb-1.5">
@@ -84,15 +79,7 @@ export default function KpiCard({
             <span className="text-pdd-text-secondary ml-1">{changeLabel}</span>
           </div>
         )}
-
-        {/* Hover shimmer */}
-        <motion.div
-          className="absolute inset-0 bg-gradient-to-r from-transparent via-white/[0.03] to-transparent"
-          initial={{ x: '-100%' }}
-          whileHover={{ x: '100%' }}
-          transition={{ duration: 0.6 }}
-        />
-      </motion.div>
+      </div>
 
       {/* Detail modal */}
       <AnimatePresence>
@@ -101,19 +88,19 @@ export default function KpiCard({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
             onClick={() => setShowDetail(false)}
           >
             <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
+              initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-pdd-card border border-pdd-border rounded-2xl p-5 max-w-sm w-full shadow-2xl"
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-pdd-card border border-pdd-border rounded-lg p-5 max-w-sm w-full shadow-lg"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-lg" style={{ backgroundColor: `${color}15` }}>
+                  <div className="p-1.5 rounded-md" style={{ backgroundColor: `${color}15` }}>
                     <Icon size={18} style={{ color }} />
                   </div>
                   <span className="font-semibold text-pdd-text">{label}详情</span>

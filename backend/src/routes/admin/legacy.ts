@@ -1,8 +1,8 @@
 import { Router, Request, Response } from 'express';
-import { requireAuth } from '../middleware/auth';
-import { requireRole } from '../middleware/requireRole';
-import { db } from '../db';
-import * as dataService from '../services/dataService';
+import { requireAuth } from '../../middleware/auth';
+import { requireRole } from '../../middleware/requireRole';
+import { db } from '../../db';
+import * as dataService from '../../services/dataService';
 
 const router = Router();
 

@@ -6,6 +6,24 @@
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* 全局输入控件样式 — 跟随主题变量，暗色模式下文字可见 */
+input, select, textarea, button {
+  font-family: inherit;
+}
+input, select, textarea {
+  color: var(--pdd-text);
+  background-color: var(--pdd-card);
+  border: 1px solid var(--pdd-border);
+  caret-color: var(--pdd-primary);
+}
+input::placeholder, textarea::placeholder, select:invalid {
+  color: var(--pdd-gray-400);
+}
+/* 针对 type 做微调 */
+input[type="checkbox"], input[type="radio"] {
+  accent-color: var(--pdd-primary);
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
   -webkit-font-smoothing: antialiased;
@@ -22,7 +40,7 @@ body {
 @layer components {
   .pdd-card {
     background: var(--pdd-card);
-    border-radius: 12px;
+    border-radius: 8px;
     border: 1px solid var(--pdd-border);
     padding: 16px;
   }
@@ -52,8 +70,51 @@ body {
   }
 }
 
+/* ═══════════════════════════════════════════════════
+   Phase 6.2 — 间距/字体/阴影系统规范化
+   ═══════════════════════════════════════════════════ */
+
+/* 页面容器: 1440px 最大宽 + 24px 内边距 */
+.page-container {
+  max-width: 1440px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 24px;
+  padding-right: 24px;
+  padding-top: 24px;
+  padding-bottom: 24px;
+  width: 100%;
+}
+
+/* Admin 容器: 1440px 最大宽 + 居中（内边距由父组件控制） */
+.admin-container {
+  max-width: 1440px;
+  margin-left: auto;
+  margin-right: auto;
+  width: 100%;
+}
+
+/* 字体层级标准（参考，使用 Tailwind 原子类）：
+   h1: text-xl font-semibold — 页面大标题
+   h2: text-lg font-semibold — 区块标题
+   h3: text-sm font-semibold — 卡片标题
+   body: text-sm — 正文/表格
+   small: text-xs — 辅助文字/标签
+   caption: text-[10px] — 极简提示/角标
+*/
+
+/* 卡片间距标准: gap-4 (16px) / space-y-4 */
+.page-card-grid { display: grid; gap: 16px; }
+
+/* 阴影标准：
+   卡片默认: 无阴影（仅 border）
+   hover 增强: shadow-sm
+   下拉菜单: shadow-lg
+   弹窗: shadow-xl
+*/
+
 /* Glow effects */
-.glow-primary { box-shadow: 0 0 20px rgba(224, 46, 36, 0.15); }
+.glow-primary { box-shadow: 0 0 20px rgba(31, 107, 255, 0.15); }
 .glow-success { box-shadow: 0 0 20px rgba(34, 197, 94, 0.15); }
 .glow-warning { box-shadow: 0 0 20px rgba(245, 158, 11, 0.15); }
 

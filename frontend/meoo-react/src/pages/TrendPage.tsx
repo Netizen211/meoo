@@ -5,6 +5,7 @@ import { TrendingUp, Download, ArrowUp, ArrowDown, Table, ChevronDown, ChevronUp
 import { useData } from '../App';
 import { findField } from '../utils';
 import TimeFilter, { useTimeFilter, safeFloat, filterByTimeRange, getCompareOrders, getAllDateGroups, filterPromoByTimeRange, changePct } from '../components/TimeFilter';
+import FilterToolbar from '../components/FilterToolbar';
 import { KPI_LINES, ChartTooltip, buildTrendData, buildCompareTrendData } from '../utils/trendData';
 import TrendDataTable from '../components/TrendDataTable';
 import EventAnalysisPanel from '../components/EventAnalysisPanel';
@@ -14,11 +15,11 @@ const cv = { hidden: { opacity: 0, y: 20 }, visible: (i: number) => ({ opacity: 
 export default function TrendPage() {
   const { currentDisplayData } = useData();
   const tf = useTimeFilter('7', 'day');
-  const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
+  const { timeRange, granularity, compareEnabled, useNaturalDate, setUseNaturalDate, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
 
   const orders = currentDisplayData?.orders || [];
   const allDates = useMemo(() => getAllDateGroups(orders), [orders]);
-  const filteredOrders = useMemo(() => filterByTimeRange(orders, allDates, timeRange, customStart, customEnd, quickRange), [orders, allDates, timeRange, customStart, customEnd, quickRange]);
+  const filteredOrders = useMemo(() => filterByTimeRange(orders, allDates, timeRange, customStart, customEnd, quickRange, useNaturalDate), [orders, allDates, timeRange, customStart, customEnd, quickRange]);
   const compareOrders = useMemo(() => getCompareOrders(orders, allDates, timeRange, compareStart, compareEnd, customStart, customEnd, quickRange), [orders, allDates, timeRange, compareStart, compareEnd, customStart, customEnd, quickRange]);
 
   const filteredPromoSummary = useMemo(() => {
@@ -129,11 +130,11 @@ export default function TrendPage() {
       { key: 'promoRoi', label: '推广ROI', value: fullKpi.promoRoi, fmt: (v: number) => v.toFixed(2), color: '#2F54EB', change: null },
       { key: 'rfRate', label: '退款率', value: fullKpi.rfRate, fmt: (v: number) => `${v.toFixed(1)}%`, color: '#FF4D4F', change: null },
       { key: 'asRate', label: '售后率', value: fullKpi.asRate, fmt: (v: number) => `${v.toFixed(1)}%`, color: '#FAAD14', change: null },
-      { key: 'postage', label: '邮费总额', value: fullKpi.postage, fmt: (v: number) => `¥${v.toFixed(0)}`, color: '#13C2C2', change: null },
+      { key: 'postage', label: '邮费总额', value: fullKpi.postage, fmt: (v: number) => `¥${v.toFixed(0)}`, color: 'var(--pdd-cyan)', change: null },
       { key: 'refundAmount', label: '退款金额', value: fullKpi.refundAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, color: '#FF7875', change: null },
       { key: 'discount', label: '优惠总额', value: fullKpi.discount, fmt: (v: number) => `¥${v.toFixed(0)}`, color: '#FFC53D', change: null },
-      { key: 'promoGmv', label: '推广GMV', value: fullKpi.promoGmv, fmt: (v: number) => `¥${v.toFixed(0)}`, color: '#EB2F96', change: null },
-      { key: 'promoRatio', label: '推广占比', value: fullKpi.promoRatio, fmt: (v: number) => `${v.toFixed(1)}%`, color: '#FA541C', change: null },
+      { key: 'promoGmv', label: '推广GMV', value: fullKpi.promoGmv, fmt: (v: number) => `¥${v.toFixed(0)}`, color: 'var(--pdd-pink)', change: null },
+      { key: 'promoRatio', label: '推广占比', value: fullKpi.promoRatio, fmt: (v: number) => `${v.toFixed(1)}%`, color: 'var(--pdd-orange)', change: null },
       { key: 'shopRoi', label: '全店投产', value: fullKpi.shopRoi, fmt: (v: number) => v.toFixed(2), color: '#52C41A', change: null },
     ];
   }, [fullKpi, compareFullKpi]);
@@ -160,7 +161,15 @@ export default function TrendPage() {
 
   return (
     <div className="p-4 space-y-3">
-      <TimeFilter state={tf} />
+      <FilterToolbar tf={tf} />
+        {timeRange !== 'all' && timeRange !== 'custom' && (
+          <div className="flex items-center rounded border border-pdd-border overflow-hidden text-[11px]">
+            <button onClick={() => setUseNaturalDate(false)}
+              className={`px-2 py-1 transition-colors ${!useNaturalDate ? 'bg-pdd-primary text-white' : 'text-pdd-text-secondary hover:text-pdd-text'}`}>按订单时间</button>
+            <button onClick={() => setUseNaturalDate(true)}
+              className={`px-2 py-1 transition-colors ${useNaturalDate ? 'bg-pdd-primary text-white' : 'text-pdd-text-secondary hover:text-pdd-text'}`}>按当前时间</button>
+          </div>
+        )}
 
       {/* KPI 汇总卡片 */}
       {fullKpi && (

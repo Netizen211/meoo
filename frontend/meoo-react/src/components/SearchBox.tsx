@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Clock, TrendingUp } from 'lucide-react';
 import { useData } from '../App';
+import { findField } from '../utils';
 
 interface SearchResult {
   type: 'order' | 'product' | 'phone';
@@ -41,9 +42,9 @@ export default function SearchBox() {
     const seen = new Set<string>();
     
     parsedData.orders.forEach((o: any) => {
-      const orderNo = String(o['订单号'] || '');
-      const product = String(o['商品'] || '');
-      const phone = String(o['用户购买手机号'] || '');
+      const orderNo = String(findField(o, '订单号') || '');
+      const product = String(findField(o, '商品', '商品名称') || '');
+      const phone = String(findField(o, '收货人手机', '收货人电话', '用户购买手机号', '手机号') || '');
       
       if (orderNo.toLowerCase().includes(q) && !seen.has(`order:${orderNo}`)) {
         seen.add(`order:${orderNo}`);
@@ -68,7 +69,7 @@ export default function SearchBox() {
     return (
       <>
         {text.slice(0, idx)}
-        <span className="bg-pdd-primary-light/20 text-pdd-primary font-medium">{text.slice(idx, idx + query.length)}</span>
+        <span className="bg-pdd-gray-100 text-pdd-primary font-medium">{text.slice(idx, idx + query.length)}</span>
         {text.slice(idx + query.length)}
       </>
     );
@@ -90,8 +91,8 @@ export default function SearchBox() {
 
   return (
     <div ref={containerRef} className="relative w-80">
-      <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-[var(--pdd-border)] bg-[var(--pdd-card)] focus-within:border-pdd-primary transition-colors">
-        <Search size={16} className="text-[var(--pdd-text-secondary)]" />
+      <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-pdd-border bg-pdd-gray-50 focus-within:border-pdd-primary focus-within:shadow-[0_0_0_3px_rgba(31,107,255,0.1)] transition-all">
+        <Search size={16} className="text-pdd-gray-400" />
         <input
           ref={inputRef}
           type="text"
@@ -99,10 +100,10 @@ export default function SearchBox() {
           onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }}
           onFocus={() => setIsOpen(true)}
           placeholder="搜索订单号、商品、手机号..."
-          className="flex-1 text-sm bg-transparent outline-none text-[var(--pdd-text)]"
+          className="flex-1 text-sm bg-transparent outline-none text-pdd-text placeholder-pdd-gray-400"
         />
         {query && (
-          <button onClick={() => { setQuery(''); inputRef.current?.focus(); }} className="text-[var(--pdd-text-secondary)] hover:text-pdd-primary">
+          <button onClick={() => { setQuery(''); inputRef.current?.focus(); }} className="text-pdd-gray-400 hover:text-pdd-primary">
             <X size={14} />
           </button>
         )}
@@ -114,12 +115,12 @@ export default function SearchBox() {
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
-            className="absolute top-full left-0 right-0 mt-1 bg-[var(--pdd-card)] border border-[var(--pdd-border)] rounded-lg shadow-lg z-50 max-h-80 overflow-y-auto"
+            className="absolute top-full left-0 right-0 mt-1 bg-pdd-card border border-pdd-border rounded-lg shadow-[0_4px_12px_rgba(16,24,40,0.08)] z-50 max-h-80 overflow-y-auto"
           >
             {!query && history.length > 0 && (
               <div className="p-2">
                 <div className="flex items-center justify-between px-2 py-1">
-                  <span className="text-xs text-[var(--pdd-text-secondary)] flex items-center gap-1">
+                  <span className="text-xs text-pdd-text-secondary flex items-center gap-1">
                     <Clock size={12} /> 搜索历史
                   </span>
                   <button onClick={clearHistory} className="text-xs text-pdd-primary hover:underline">清空</button>
@@ -128,9 +129,9 @@ export default function SearchBox() {
                   <button
                     key={i}
                     onClick={() => handleSearch(h)}
-                    className="w-full text-left px-2 py-1.5 text-sm hover:bg-pdd-primary-light/10 rounded flex items-center gap-2"
+                    className="w-full text-left px-2 py-1.5 text-sm hover:bg-pdd-gray-100 rounded flex items-center gap-2"
                   >
-                    <Clock size={12} className="text-[var(--pdd-text-secondary)]" />
+                    <Clock size={12} className="text-pdd-gray-400" />
                     {h}
                   </button>
                 ))}
@@ -139,16 +140,16 @@ export default function SearchBox() {
             
             {suggestions.length > 0 && (
               <div className="p-2">
-                <div className="px-2 py-1 text-xs text-[var(--pdd-text-secondary)] flex items-center gap-1">
+                <div className="px-2 py-1 text-xs text-pdd-text-secondary flex items-center gap-1">
                   <TrendingUp size={12} /> 搜索结果
                 </div>
                 {suggestions.map((s, i) => (
                   <button
                     key={i}
                     onClick={() => handleSearch(s.value)}
-                    className="w-full text-left px-2 py-1.5 text-sm hover:bg-pdd-primary-light/10 rounded flex items-center gap-2"
+                    className="w-full text-left px-2 py-1.5 text-sm hover:bg-pdd-gray-100 rounded flex items-center gap-2"
                   >
-                    <span className="text-xs px-1.5 py-0.5 rounded bg-[var(--pdd-bg)] text-[var(--pdd-text-secondary)]">{s.label}</span>
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-pdd-gray-50 text-pdd-text-secondary">{s.label}</span>
                     <span className="truncate">{s.highlight}</span>
                   </button>
                 ))}

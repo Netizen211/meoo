@@ -23,6 +23,13 @@ export interface AdminUser {
   bannedReason: string | null;
   phone: string;
   createdAt: string;
+  lastLoginAt?: string | null;
+  storeCount?: number;
+  dataVolume?: number;
+  totalRecharge?: number;
+  activeDays?: number;
+  activityLevel?: 'high' | 'medium' | 'low' | 'silent';
+  riskEventCount?: number;
 }
 
 export interface AdminLog {
@@ -93,6 +100,7 @@ export interface SystemSettings {
   tokenExpiresMinutes: number;
   wecomWebhook: string;
   dingtalkWebhook: string;
+  copyEnabled: boolean;
   aiEnabled: boolean;
   aiApiKey: string;
   aiDailyLimit: number;
@@ -116,6 +124,8 @@ export interface GetUsersParams {
   search?: string;
   role?: string;
   membershipLevel?: string;
+  activityLevel?: string;
+  hasRisk?: string;
 }
 
 export interface UserStore {
@@ -254,6 +264,8 @@ export const adminApi = {
     if (params.search) qs.set('search', params.search);
     if (params.role) qs.set('role', params.role);
     if (params.membershipLevel) qs.set('membershipLevel', params.membershipLevel);
+    if (params.activityLevel) qs.set('activityLevel', params.activityLevel);
+    if (params.hasRisk) qs.set('hasRisk', params.hasRisk);
     const res = await apiClient.get('/admin/users?' + qs.toString());
     return res;
   },
@@ -440,6 +452,11 @@ export const adminApi = {
     return res.success;
   },
 
+  async getInviteStats(timeRange = '30d') {
+    const res = await apiClient.get('/admin/invite-codes/stats?timeRange=' + timeRange);
+    return res.success ? (res.data ?? {}) : {};
+  },
+
   // ========== 子账号管理（管理员） ==========
   async getSubAccounts(params: {
     page?: number; pageSize?: number;
@@ -495,25 +512,26 @@ export const adminApi = {
 
   // ========== 充值审核 ==========
   async getRechargeList(status?: string, page = 1, pageSize = 20, search?: string) {
-    const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
-    if (status) params.set('status', status);
-    if (search) params.set('search', search);
-    const res = await apiClient.get('/recharge/list?' + params.toString());
+    const res = await apiClient.get('/admin/recharges?status=' + (status || 'all'));
     return res;
   },
 
   async reviewRecharge(orderId: number, action: 'approve' | 'reject', note?: string) {
-    const res = await apiClient.put('/recharge/review/' + orderId, { action, note });
+    const res = await apiClient.post('/admin/recharges/' + orderId + '/review', { status: action, note });
     return res;
   },
 
   async batchReviewRecharge(ids: number[], action: 'approve' | 'reject', note?: string) {
-    const res = await apiClient.put('/recharge/review/batch', { ids, action, note });
-    return res;
+    const results = [];
+    for (const id of ids) {
+      const res = await apiClient.post('/admin/recharges/' + id + '/review', { status: action, note });
+      results.push(res);
+    }
+    return { success: true, data: results };
   },
 
   async exportRechargeRecords(status: string, format: 'csv' | 'json') {
-    const res = await apiClient.get('/recharge/list?status=' + status + '&pageSize=10000');
+    const res = await apiClient.get('/admin/recharges?status=' + (status || 'all'));
     return res;
   },
 
@@ -671,4 +689,430 @@ export const adminApi = {
     const res = await apiClient.put('/admin/maintenance', data);
     return res;
   },
+
+  // ========== ========== 分析模块 (Phase 2.2+) ========== ==========
+  async getEventStats(params: { startDate?: string; endDate?: string } = {}): Promise<EventStat[]> {
+    const qs = new URLSearchParams();
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    const res = await apiClient.get<EventStat[]>('/admin/analytics/event-stats?' + qs.toString());
+    return res.success ? (res.data ?? []) : [];
+  },
+
+  async getDailyActivity(params: { startDate?: string; endDate?: string } = {}): Promise<DailyActivity[]> {
+    const qs = new URLSearchParams();
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    const res = await apiClient.get<DailyActivity[]>('/admin/analytics/daily-activity?' + qs.toString());
+    return res.success ? (res.data ?? []) : [];
+  },
+
+  async getEvents(params: {
+    event_type?: string; user_id?: string;
+    page?: number; pageSize?: number;
+    startDate?: string; endDate?: string;
+  } = {}): Promise<{ success: boolean; data: EventRecord[]; total: number; page: number; pageSize: number }> {
+    const qs = new URLSearchParams();
+    if (params.event_type) qs.set('event_type', params.event_type);
+    if (params.user_id) qs.set('user_id', params.user_id);
+    qs.set('page', String(params.page ?? 1));
+    qs.set('pageSize', String(params.pageSize ?? 20));
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    const res = await apiClient.get<any>('/admin/analytics/events?' + qs.toString());
+    if (res.success) {
+      return { success: true, data: res.data ?? [], total: res.total ?? 0, page: res.page ?? 1, pageSize: res.pageSize ?? 20 };
+    }
+    return { success: false, data: [], total: 0, page: 1, pageSize: 20 };
+  },
+
+  async getFunnelData(params: { funnel_name?: string; startDate?: string; endDate?: string } = {}): Promise<FunnelStep[]> {
+    const qs = new URLSearchParams();
+    if (params.funnel_name) qs.set('funnel_name', params.funnel_name);
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    const res = await apiClient.get<FunnelStep[]>('/admin/analytics/funnel?' + qs.toString());
+    return res.success ? (res.data ?? []) : [];
+  },
+
+  async getModuleRank(params: { startDate?: string; endDate?: string } = {}): Promise<ModuleRankItem[]> {
+    const qs = new URLSearchParams();
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    const res = await apiClient.get<ModuleRankItem[]>('/admin/analytics/module-rank?' + qs.toString());
+    return res.success ? (res.data ?? []) : [];
+  },
+
+  async getPayConversion(params: { startDate?: string; endDate?: string } = {}): Promise<{ trend: PayConversionTrend[] }> {
+    const qs = new URLSearchParams();
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    const res = await apiClient.get<{ trend: PayConversionTrend[] }>('/admin/analytics/pay-conversion?' + qs.toString());
+    return res.success ? (res.data ?? { trend: [] }) : { trend: [] };
+  },
+
+  async getDataQuality(params: { store_id?: string; check_type?: string; page?: number; pageSize?: number } = {}): Promise<{
+    success: boolean; data: { summary: any[]; checks: any[]; total: number; page: number; pageSize: number }
+  }> {
+    const qs = new URLSearchParams();
+    if (params.store_id) qs.set('store_id', params.store_id);
+    if (params.check_type) qs.set('check_type', params.check_type);
+    qs.set('page', String(params.page ?? 1));
+    qs.set('pageSize', String(params.pageSize ?? 20));
+    const res = await apiClient.get('/admin/data-quality?' + qs.toString());
+    return res.success ? { success: true, data: res.data ?? { summary: [], checks: [], total: 0, page: 1, pageSize: 20 } }
+      : { success: false, data: { summary: [], checks: [], total: 0, page: 1, pageSize: 20 } };
+  },
+
+  async getAIMonitoring(params: { startDate?: string; endDate?: string; page?: number; pageSize?: number } = {}): Promise<{
+    success: boolean; data: { summary: any; recent: any[]; total: number; page: number; pageSize: number }
+  }> {
+    const qs = new URLSearchParams();
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    qs.set('page', String(params.page ?? 1));
+    qs.set('pageSize', String(params.pageSize ?? 20));
+    const res = await apiClient.get('/admin/monitoring/ai?' + qs.toString());
+    return res.success ? { success: true, data: res.data ?? { summary: {}, recent: [], total: 0, page: 1, pageSize: 20 } }
+      : { success: false, data: { summary: {}, recent: [], total: 0, page: 1, pageSize: 20 } };
+  },
+
+  async getRiskEvents(params: { risk_type?: string; risk_level?: string; status?: string; page?: number; pageSize?: number } = {}): Promise<{
+    success: boolean; data: { summary: any; events: any[]; total: number; page: number; pageSize: number }
+  }> {
+    const qs = new URLSearchParams();
+    if (params.risk_type) qs.set('risk_type', params.risk_type);
+    if (params.risk_level) qs.set('risk_level', params.risk_level);
+    if (params.status) qs.set('status', params.status);
+    qs.set('page', String(params.page ?? 1));
+    qs.set('pageSize', String(params.pageSize ?? 20));
+    const res = await apiClient.get('/admin/risk-events?' + qs.toString());
+    return res.success ? { success: true, data: res.data ?? { summary: {}, events: [], total: 0, page: 1, pageSize: 20 } }
+      : { success: false, data: { summary: {}, events: [], total: 0, page: 1, pageSize: 20 } };
+  },
+
+  // ========== 运营总览 (Phase 2.1) ==========
+  async getOperationsOverview(timeRange = '7d'): Promise<OperationsOverview | null> {
+    const res = await apiClient.get<OperationsOverview>('/admin/operations/overview?timeRange=' + timeRange);
+    return res.success ? (res.data ?? null) : null;
+  },
+
+  // ========== 用户分群 (Phase 2.4) ==========
+  async getUserSegments(): Promise<any[]> {
+    const res = await apiClient.get<any[]>('/admin/users/segments');
+    return res.success ? (res.data ?? []) : [];
+  },
+
+  async createUserSegment(data: { segment_name: string; segment_rules?: any; is_active?: number }): Promise<boolean> {
+    const res = await apiClient.post('/admin/users/segments', data);
+    return res.success;
+  },
+
+  // ========== 用户行为时间线 (Phase 2.4) ==========
+  async getUserTimeline(userId: string, days = 30): Promise<any[]> {
+    const res = await apiClient.get<any[]>(`/admin/users/${userId}/timeline?days=${days}`);
+    return res.success ? (res.data ?? []) : [];
+  },
+
+  async getUserModuleClicks(userId: string): Promise<any[]> {
+    const res = await apiClient.get<any[]>(`/admin/users/${userId}/module-clicks`);
+    return res.success ? (res.data ?? []) : [];
+  },
+
+  async getUserRiskEvents(userId: string): Promise<any[]> {
+    const res = await apiClient.get<any[]>(`/admin/users/${userId}/risk-events`);
+    return res.success ? (res.data ?? []) : [];
+  },
+
+  // ========== 营收升级 (Phase 2.5) ==========
+  async getMrrTrend(months = 12): Promise<any[]> {
+    const res = await apiClient.get<any[]>(`/admin/revenue/mrr-trend?months=${months}`);
+    return res.success ? (res.data ?? []) : [];
+  },
+
+  async getChurnRate(period = 'monthly'): Promise<any[]> {
+    const res = await apiClient.get<any[]>(`/admin/revenue/churn-rate?period=${period}`);
+    return res.success ? (res.data ?? []) : [];
+  },
+
+  // ========== 上传监控 (Phase 3.1) ==========
+  async getUploadStats(params: { startDate?: string; endDate?: string } = {}): Promise<any> {
+    const qs = new URLSearchParams();
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    const res = await apiClient.get<any>('/admin/monitoring/upload-stats?' + qs.toString());
+    return res.success ? (res.data ?? {}) : {};
+  },
+
+  async getUploadFailures(params: { page?: number; pageSize?: number; startDate?: string; endDate?: string } = {}): Promise<{ success: boolean; data: { uploads: any[]; total: number; page: number; pageSize: number } }> {
+    const qs = new URLSearchParams();
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    qs.set('page', String(params.page ?? 1));
+    qs.set('pageSize', String(params.pageSize ?? 20));
+    const res = await apiClient.get('/admin/monitoring/upload-failures?' + qs.toString());
+    return res.success ? { success: true, data: res.data ?? { uploads: [], total: 0, page: 1, pageSize: 20 } }
+      : { success: false, data: { uploads: [], total: 0, page: 1, pageSize: 20 } };
+  },
+
+  // ========== 风控中心 (Phase 3.5) ==========
+  async getRiskOverview(): Promise<any> {
+    const res = await apiClient.get<any>('/admin/risk/overview');
+    return res.success ? (res.data ?? {}) : {};
+  },
+
+  async resolveRiskEvent(id: number, resolution_note = ''): Promise<boolean> {
+    const res = await apiClient.put(`/admin/risk/events/${id}/resolve`, { resolution_note });
+    return res.success;
+  },
+
+  async muteRiskEvent(id: number): Promise<boolean> {
+    const res = await apiClient.put(`/admin/risk/events/${id}/mute`);
+    return res.success;
+  },
+
+  // ========== 系统健康 (Phase 3.6) ==========
+  async getApiHealthStats(timeRange = '24h'): Promise<any> {
+    const res = await apiClient.get<any>('/admin/health/api-stats?timeRange=' + timeRange);
+    return res.success ? (res.data ?? {}) : {};
+  },
+
+  async getDatabaseStats(): Promise<any> {
+    const res = await apiClient.get<any>('/admin/health/database-stats');
+    return res.success ? (res.data ?? {}) : {};
+  },
+
+  async getStorageStats(): Promise<any> {
+    const res = await apiClient.get<any>('/admin/health/storage-stats');
+    return res.success ? (res.data ?? {}) : {};
+  },
 };
+
+export interface OperationsOverview {
+  dau: number;
+  wau: number;
+  mau: number;
+  totalUsers: number;
+  newUsers: number;
+  totalStores: number;
+  newStores: number;
+  uploads: number;
+  storageBytes: number;
+  revenue: number;
+  payingUsers: number;
+  pendingRecharge: number;
+  pendingRechargeAmount: number;
+  systemAnomalies: number;
+  trendData: Array<{
+    date: string;
+    newUsers: number;
+    newStores: number;
+    uploads: number;
+    revenue: number;
+  }>;
+}
+
+// ========== 分析模块类型定义 ==========
+
+export interface EventStat {
+  event_type: string;
+  count: number;
+  unique_users: number;
+}
+
+export interface DailyActivity {
+  stat_date: string;
+  active_users: number;
+  total_users: number;
+  total_page_views: number;
+  total_module_clicks: number;
+  total_duration: number;
+}
+
+export interface EventRecord {
+  id: number;
+  user_id: string;
+  session_id: string;
+  event_type: string;
+  event_category: string;
+  event_label: string;
+  event_value: string;
+  page_url: string;
+  store_id: string;
+  device_info: string;
+  ip_address: string;
+  duration_ms: number;
+  metadata: any;
+  created_at: string;
+}
+
+export interface FunnelStep {
+  id: number;
+  funnel_name: string;
+  step_name: string;
+  step_order: number;
+  user_count: number;
+  conversion_rate: number;
+  stat_date: string;
+}
+
+export interface ModuleRankItem {
+  module_name: string;
+  click_count: number;
+  unique_users: number;
+  click_ratio: number;
+  avg_duration_sec: number;
+  bounce_rate: number;
+  pay_conversion_contribution: number;
+  stat_date: string;
+}
+
+export interface PayConversionTrend {
+  stat_date: string;
+  dau: number;
+  paywall_views: number;
+  module_clicks: number;
+}
+
+// ========== 用户分群 & 时间线 (Phase 2.4) ==========
+export interface UserSegment {
+  id: number;
+  segment_name: string;
+  segment_rules: any;
+  user_count: number;
+  is_active: number;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TimelineEvent {
+  event_type: string;
+  event_label: string;
+  page_url: string;
+  duration_ms: number;
+  created_at: string;
+}
+
+export interface UserModuleClick {
+  module_name: string;
+  click_count: number;
+  active_days: number;
+  total_duration: number;
+}
+
+// ========== 营收升级 (Phase 2.5) ==========
+export interface MrrTrendItem {
+  month: string;
+  revenue: number;
+  paying_users: number;
+}
+
+export interface ChurnRateItem {
+  month: string;
+  active_users: number;
+  retained_users: number;
+  churn_rate: number;
+}
+
+// ========== 上传监控 (Phase 3.1) ==========
+export interface UploadStatsData {
+  stats: {
+    total_uploads: number;
+    active_stores: number;
+    success_count: number;
+    fail_count: number;
+    avg_parse_ms: number;
+  };
+  trend: Array<{
+    date: string;
+    total: number;
+    success: number;
+    fail: number;
+  }>;
+  typeDist: Array<{ file_type: string; count: number }>;
+  failReasons: Array<{ error_message: string; count: number }>;
+}
+
+// ========== 风控中心 (Phase 3.5) ==========
+export interface RiskOverview {
+  summary: {
+    total_events: number;
+    critical_count: number;
+    high_count: number;
+    medium_count: number;
+    open_count: number;
+    resolved_count: number;
+  };
+  typeDist: Array<{
+    risk_type: string;
+    count: number;
+    open_count: number;
+  }>;
+}
+
+// ========== 系统健康 (Phase 3.6) ==========
+export interface ApiHealthData {
+  summary: {
+    avg_latency: number;
+    total_errors: number;
+    total_calls: number;
+    error_rate: number;
+  };
+  endpoints: Array<{
+    endpoint: string;
+    method: string;
+    avg_response_ms: number;
+    p95_response_ms: number;
+    p99_response_ms: number;
+    error_count: number;
+    total_calls: number;
+    error_rate: number;
+    stat_date: string;
+  }>;
+}
+
+export interface DatabaseStats {
+  size_mb: number;
+  table_count: number;
+  active_connections: number;
+  status: string;
+}
+
+export interface StorageStats {
+  total_bytes: number;
+  top_users: Array<{
+    user_id: string;
+    username: string;
+    storage_bytes: number;
+  }>;
+  avg_bytes: number;
+  total_users_with_data: number;
+}
+
+export interface InviteStats {
+  totalCodes: number;
+  usedCodes: number;
+  availableCodes: number;
+  totalUsers: number;
+  payingUsers: number;
+  totalRevenue: number;
+  registrationRate: number;
+  paymentRate: number;
+  batchDetails: Array<{
+    channel: string;
+    invite_count: number;
+    used_count: number;
+    registered_users: number;
+    paying_users: number;
+    revenue: number;
+  }>;
+  codeDetails: Array<{
+    code: string;
+    batch_id: string;
+    used_by: string;
+    used_at: string;
+    registered_at: string;
+    paid_amount: number;
+  }>;
+}

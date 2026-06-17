@@ -1,4 +1,5 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
+import path from 'path';
 import compression from 'compression';
 import cors from 'cors';
 import helmet from 'helmet';
@@ -21,8 +22,12 @@ import analyticsRoutes from './routes/analytics';
 import subAccountRoutes from './routes/subAccounts';
 import sseRoutes from './routes/sse';
 import { startCleanupCron } from './services/cleanupService';
+import { startRiskDetection } from './services/riskDetectionService';
 import bcrypt from 'bcrypt';
 import { db } from './db';
+import { requireAuth } from './middleware/auth';
+import { requireRole } from './middleware/requireRole';
+import fs from 'fs';
 
 // ★ 安装 Knex 租户隔离查询注入（全局生效）
 installTenantQueryScope();
@@ -117,9 +122,11 @@ app.use(cors({
   credentials: true,
 }));
 
-// 4. 请求体解析（限制大小防内存炸弹）
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+// 4. 请求体解析（限制大小防内存炸弹，100MB 满足大CSV上传需求）
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: false, limit: '10mb' }));
+// 产品图片静态目录
+app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
 
 // 5. 全局限流
 const globalLimiter = rateLimit({
@@ -181,6 +188,54 @@ const API_V1 = '/api/v1';
 app.use(`${API_V1}/data`, tenantContext, dataRoutes);
 app.use(`${API_V1}/membership`, tenantContext, membershipRoutes);
 app.use(`${API_V1}/stores`, tenantContext, storeRoutes);
+
+// ─── Reports 路由（放在 adminRoutes 前面，避免子路由匹配问题） ─────
+const REPORTS_DIR = path.resolve(__dirname, 'reports');
+const REPORT_TITLES: Record<string, string> = {
+  'ui-feasibility-report.html': 'UI可配置化可行性分析报告',
+};
+
+app.get(`${API_V1}/admin/reports`, tenantContext, requireAuth, requireRole('admin', 'test'), (_req, res) => {
+  try {
+    if (!fs.existsSync(REPORTS_DIR)) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+    const files = fs.readdirSync(REPORTS_DIR)
+      .filter((f: string) => f.endsWith('.html'))
+      .map((f: string) => {
+        const stat = fs.statSync(path.join(REPORTS_DIR, f));
+        return {
+          id: f.replace('.html', ''),
+          name: f,
+          title: REPORT_TITLES[f] || f.replace('.html', ''),
+          size: stat.size,
+          updatedAt: stat.mtime.toISOString(),
+        };
+      });
+    res.json({ success: true, data: files });
+  } catch {
+    res.status(500).json({ success: false, error: '获取报告列表失败' });
+  }
+});
+
+app.get(`${API_V1}/admin/reports/:id`, tenantContext, requireAuth, requireRole('admin', 'test'), (req, res) => {
+  try {
+    const { id } = req.params;
+    const safeId = path.basename(id.replace(/\.\./g, ''));
+    const filePath = path.join(REPORTS_DIR, safeId.endsWith('.html') ? safeId : safeId + '.html');
+    if (!fs.existsSync(filePath)) {
+      res.status(404).json({ success: false, error: '报告不存在' });
+      return;
+    }
+    const html = fs.readFileSync(filePath, 'utf-8');
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch {
+    res.status(500).json({ success: false, error: '读取报告失败' });
+  }
+});
+
 app.use(`${API_V1}/admin`, tenantContext, adminRoutes);
 app.use(`${API_V1}/recharge`, tenantContext, rechargeRoutes);
 app.use(`${API_V1}/analytics`, tenantContext, analyticsRoutes);
@@ -189,6 +244,23 @@ app.use(`${API_V1}/sse`, tenantContext, sseRoutes);  // ★ SSE 实时推送
 
 // auth 路由单独处理（不含 tenantContext，因登录时尚未有完整上下文）
 app.use(`${API_V1}/auth`, loginLimiter, authRoutes);
+
+// ─── 公开设置 — 无需登录 ───
+app.get(`${API_V1}/settings/public`, async (_req: Request, res: Response) => {
+  try {
+    const rows = await db('system_configs').select('config_key', 'config_value');
+    const cfg: Record<string, string> = {};
+    for (const row of rows as any[]) cfg[row.config_key] = row.config_value;
+    res.json({
+      success: true,
+      data: {
+        copyEnabled: cfg.copy_enabled !== 'false',
+      },
+    });
+  } catch {
+    res.status(500).json({ success: false, error: '获取设置失败' });
+  }
+});
 
 // ─── 向后兼容：旧版 /api/ 路径自动重定向到 /api/v1/ ───
 // 这样旧客户端不会突然全部报错，而是渐进式迁移
@@ -246,6 +318,7 @@ server = app.listen(PORT, async () => {
   // 启动定时清理任务（生产环境）
   if (config.nodeEnv === 'production') {
     startCleanupCron();
+    startRiskDetection();
   }
 
   logger.info('Ready ✓');

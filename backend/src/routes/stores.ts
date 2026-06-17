@@ -65,13 +65,23 @@ router.put('/:storeId', requireAuth, async (req: Request, res: Response) => {
 // DELETE /api/stores/:storeId
 router.delete('/:storeId', requireAuth, async (req: Request, res: Response) => {
   try {
-    await db('store_data').where('store_id', req.params.storeId).del();
-    await db('store_configs').where('store_id', req.params.storeId).del();
-    await db('store_available_fields').where('store_id', req.params.storeId).del();
-    await db('upload_records').where('store_id', req.params.storeId).del();
-    await db('stores').where({ id: req.params.storeId, user_id: req.user!.userId }).del();
+    const { storeId } = req.params;
+    // ★ 先校验归属权（事务外，防止任意用户删除他人店铺数据）
+    const store = await db('stores').where({ id: storeId, user_id: req.user!.userId }).first();
+    if (!store && req.user!.role !== 'admin') {
+      res.status(403).json({ success: false, error: '无权删除此店铺' });
+      return;
+    }
+    // ★ 事务保护：全部删除或全部回滚
+    await db.transaction(async (trx: any) => {
+      await trx('store_data').where('store_id', storeId).del();
+      await trx('store_configs').where('store_id', storeId).del();
+      await trx('store_available_fields').where('store_id', storeId).del();
+      await trx('upload_records').where('store_id', storeId).del();
+      await trx('stores').where({ id: storeId }).del();
+    });
     // ★ SSE 推送：通知前端店铺已删除
-    sse.sendToUser(req.user!.userId, 'stores:changed', { storeId: req.params.storeId, action: 'deleted' });
+    sse.sendToUser(req.user!.userId, 'stores:changed', { storeId, action: 'deleted' });
     res.json({ success: true, message: '店铺已删除' });
   } catch (err: any) {
     res.status(500).json({ success: false, error: '删除失败' });

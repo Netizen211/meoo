@@ -265,6 +265,18 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
       }
     }
 
+    // ★ 子账号：加载角色权限
+    let permissions: any = null;
+    if (row.role === 'sub_account' && row.sub_role_id) {
+      const roleRow = await db('sub_roles').where('id', row.sub_role_id).first();
+      if (roleRow) {
+        permissions = {
+          features: roleRow.feature_permissions ? (typeof roleRow.feature_permissions === 'string' ? JSON.parse(roleRow.feature_permissions) : roleRow.feature_permissions) : {},
+          data: roleRow.data_permissions ? (typeof roleRow.data_permissions === 'string' ? JSON.parse(roleRow.data_permissions) : roleRow.data_permissions) : {},
+        };
+      }
+    }
+
     res.json({
       success: true,
       data: {
@@ -276,6 +288,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
           membershipExpiresAt: row.membership_expires_at,
           phone: row.phone,
           isBanned: row.is_banned,
+          permissions,
         },
         notifications,
       },

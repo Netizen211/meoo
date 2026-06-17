@@ -234,15 +234,70 @@ router.get('/products/stats', requireStoreOwnership, async (req: Request, res: R
     const pageSize = Math.min(100, Math.max(1, parseInt(req.query.pageSize as string) || 50));
     if (!storeId) { res.status(400).json({ success: false, error: '缺少storeId' }); return; }
     const { data, configs, productCosts } = await analytics.resolveStoreContext(storeId, req.user!.userId);
+    // ★ 时间筛选：按支付时间过滤订单
+    const timeRange = req.query.timeRange as string;
+    let orders = data.orders || [];
+    if (timeRange && timeRange !== 'all') {
+      const rangeDays = parseInt(timeRange) || 7;
+      const allDates = orders.map((o: any) => String(o['支付时间'] || o['下单时间'] || '').trim().slice(0, 10)).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+      if (allDates.length > 0) {
+        const maxDate = new Date(allDates[allDates.length - 1]);
+        const cutoff = new Date(maxDate);
+        cutoff.setDate(cutoff.getDate() - rangeDays + 1);
+        const startStr = cutoff.toISOString().split('T')[0];
+        const endStr = maxDate.toISOString().split('T')[0];
+        orders = orders.filter((o: any) => {
+          const d = String(o['支付时间'] || o['下单时间'] || '').trim().slice(0, 10);
+          return d >= startStr && d <= endStr;
+        });
+      }
+    }
     const stats = analytics.computeAllProductStats(
-      data.orders || [], data.promotionProducts || [],
-      data.starStoreSummary || [], data.liveStreamSummary || [],
-      data.afterSaleRecords || [], productCosts, configs
+      orders,
+      data.promotionProducts || [],
+      data.starStoreSummary || [],
+      data.liveStreamSummary || [],
+      data.afterSaleRecords || [],
+      productCosts,
+      configs
     );
+    // ★ 上一周期数据（用于环比）
+    const prevTimeRange = req.query.prevTimeRange as string;
+    let prevStats: Record<string, any> | null = null;
+    if (prevTimeRange && prevTimeRange !== 'all') {
+      const prevDays = parseInt(prevTimeRange) || 7;
+      const allDates = (data.orders || []).map((o: any) => String(o['支付时间'] || o['下单时间'] || '').trim().slice(0, 10)).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+      if (allDates.length > 0) {
+        const maxDate = new Date(allDates[allDates.length - 1]);
+        const currentCutoff = new Date(maxDate);
+        currentCutoff.setDate(currentCutoff.getDate() - parseInt(timeRange || '7') + 1);
+        const prevEnd = new Date(currentCutoff);
+        prevEnd.setDate(prevEnd.getDate() - 1);
+        const prevCutoff = new Date(prevEnd);
+        prevCutoff.setDate(prevCutoff.getDate() - prevDays + 1);
+        const prevStartStr = prevCutoff.toISOString().split('T')[0];
+        const prevEndStr = prevEnd.toISOString().split('T')[0];
+        const prevOrders = (data.orders || []).filter((o: any) => {
+          const d = String(o['支付时间'] || o['下单时间'] || '').trim().slice(0, 10);
+          return d >= prevStartStr && d <= prevEndStr;
+        });
+        prevStats = analytics.computeAllProductStats(
+          prevOrders,
+          data.promotionProducts || [],
+          data.starStoreSummary || [],
+          data.liveStreamSummary || [],
+          data.afterSaleRecords || [],
+          productCosts,
+          configs
+        );
+      }
+    }
     const entries = Object.entries(stats);
     const total = entries.length;
     const paged = Object.fromEntries(entries.slice((page - 1) * pageSize, page * pageSize));
-    res.json({ success: true, data: paged, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } });
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.json({ success: true, data: paged, prevData: prevStats, pagination: { page, pageSize, total, totalPages: Math.ceil(total / pageSize) } });
   } catch (err: any) { res.status(500).json({ success: false, error: '计算失败' }); }
 });
 
@@ -331,14 +386,113 @@ router.get('/promo-trends', requireStoreOwnership, async (req: Request, res: Res
   } catch (err: any) { res.status(500).json({ success: false, error: '计算失败' }); }
 });
 
-// ★ 新增: 成本汇总
+// ★ 增强: 成本汇总（完整概览含罚金/营销/退款/多SKU重复扣费）
+// 可选 startDate/endDate 参数做时间过滤
 router.get('/costs', requireStoreOwnership, async (req: Request, res: Response) => {
   try {
     const storeId = req.query.storeId as string;
     if (!storeId) { res.status(400).json({ success: false, error: '缺少storeId' }); return; }
     const { data, configs, productCosts } = await analytics.resolveStoreContext(storeId, req.user!.userId);
-    const costs = analytics.computeCostSummary(data.orders || [], productCosts, configs);
+
+    let orders = data.orders || [];
+    // 时间过滤
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
+    if (startDate || endDate) {
+      orders = orders.filter((o: any) => {
+        const d = (o['支付时间'] || '').split(' ')[0];
+        if (!d) return false;
+        if (startDate && d < startDate) return false;
+        if (endDate && d > endDate) return false;
+        return true;
+      });
+    }
+
+    const costs = analytics.computeCostSummary(
+      orders, productCosts, configs,
+      data.financialRecords || [], data.afterSaleRecords || [],
+      storeId
+    );
     res.json({ success: true, data: costs });
+  } catch (err: any) { res.status(500).json({ success: false, error: '计算失败' }); }
+});
+
+// ★ 新增: 成本环比趋势（接受时间范围，对比前后周期）
+router.get('/cost-trend', requireStoreOwnership, async (req: Request, res: Response) => {
+  try {
+    const storeId = req.query.storeId as string;
+    if (!storeId) { res.status(400).json({ success: false, error: '缺少storeId' }); return; }
+    const { data, configs, productCosts } = await analytics.resolveStoreContext(storeId, req.user!.userId);
+
+    // 当前时间范围
+    const startDate = req.query.startDate as string;
+    const endDate = req.query.endDate as string;
+    // 比较期天数（默认 7 天）
+    const compareDays = parseInt(req.query.compareDays as string) || 7;
+
+    let currentOrders = data.orders || [];
+    if (startDate || endDate) {
+      currentOrders = data.orders.filter((o: any) => {
+        const d = (o['支付时间'] || '').split(' ')[0];
+        if (!d) return false;
+        if (startDate && d < startDate) return false;
+        if (endDate && d > endDate) return false;
+        return true;
+      });
+    }
+
+    // 比较期：当前范围往前推 compareDays 天
+    let prevStart = '', prevEnd = '';
+    if (startDate && endDate) {
+      const daysDiff = Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000);
+      const prevEndDate = new Date(new Date(startDate).getTime() - 86400000);
+      const prevStartDate = new Date(prevEndDate.getTime() - daysDiff * 86400000);
+      prevStart = prevStartDate.toISOString().slice(0, 10);
+      prevEnd = prevEndDate.toISOString().slice(0, 10);
+    }
+
+    let prevOrders: any[] = [];
+    if (prevStart && prevEnd) {
+      prevOrders = data.orders.filter((o: any) => {
+        const d = (o['支付时间'] || '').split(' ')[0];
+        if (!d) return false;
+        return d >= prevStart && d <= prevEnd;
+      });
+    }
+
+    // 计算
+    const getCosts = (ords: any[]) => analytics.computeCostSummary(
+      ords, productCosts, configs,
+      data.financialRecords || [], data.afterSaleRecords || [],
+      storeId
+    );
+    const current = getCosts(currentOrders);
+    const previous = getCosts(prevOrders);
+
+    const chg = (cur: number, prev: number) => prev > 0 ? ((cur - prev) / prev * 100) : (cur > 0 ? 100 : 0);
+
+    res.json({
+      success: true,
+      data: {
+        current: {
+          revenue: current.totalRevenue,
+          cost: current.totalCost,
+          profit: current.profit,
+          penalties: current.penalties,
+          marketingFees: current.marketingFees,
+        },
+        previous: {
+          revenue: previous.totalRevenue,
+          cost: previous.totalCost,
+          profit: previous.profit,
+        },
+        changes: {
+          revenue: chg(current.totalRevenue, previous.totalRevenue),
+          cost: chg(current.totalCost, previous.totalCost),
+          profit: previous.profit !== 0 ? ((current.profit - previous.profit) / Math.abs(previous.profit)) * 100 : (current.profit > 0 ? 100 : -100),
+        },
+      },
+    });
   } catch (err: any) { res.status(500).json({ success: false, error: '计算失败' }); }
 });
 
@@ -349,8 +503,15 @@ router.get('/dashboard-full', requireStoreOwnership, async (req: Request, res: R
     if (!storeId) { res.status(400).json({ success: false, error: '缺少storeId' }); return; }
     const { data, configs, productCosts } = await analytics.resolveStoreContext(storeId, req.user!.userId);
     const kpi = analytics.computeDashboardKPI(data);
-    const costs = analytics.computeCostSummary(data.orders || [], productCosts, configs);
-    const compare = analytics.computePeriodCompare(data.orders || [], data.promotionProducts || [], data.afterSaleRecords || [], 7);
+    const costs = analytics.computeCostSummary(
+      data.orders || [], productCosts, configs,
+      data.financialRecords || [], data.afterSaleRecords || [],
+      storeId
+    );
+    const compare = analytics.computePeriodCompare(
+      data.orders || [], data.promotionProducts || [], data.afterSaleRecords || [], 7,
+      productCosts, configs, storeId
+    );
     const promoByDate = analytics.computePromoByDate(data.promotionProducts || [], data.starStoreSummary || [], data.liveStreamSummary || []);
     res.json({ success: true, data: { kpi: kpi.kpi, status: kpi.status, provinces: kpi.provinces, costs, compare, promoByDate } });
   } catch (err: any) { res.status(500).json({ success: false, error: '计算失败' }); }
@@ -395,9 +556,14 @@ router.get('/bulk', requireStoreOwnership, async (req: Request, res: Response) =
       Promise.resolve(analytics.computePromoByDate(
         data.promotionProducts || [], data.starStoreSummary || [], data.liveStreamSummary || []
       )),
-      Promise.resolve(analytics.computeCostSummary(data.orders || [], productCosts, configs)),
+      Promise.resolve(analytics.computeCostSummary(
+        data.orders || [], productCosts, configs,
+        data.financialRecords || [], data.afterSaleRecords || [],
+        storeId
+      )),
       Promise.resolve(analytics.computePeriodCompare(
-        data.orders || [], data.promotionProducts || [], data.afterSaleRecords || [], 7
+        data.orders || [], data.promotionProducts || [], data.afterSaleRecords || [], 7,
+        productCosts, configs, storeId
       )),
       Promise.resolve(analytics.computeFinancialSummary(data.financialRecords || [], data.orders || [])),
     ]);
@@ -424,6 +590,25 @@ router.get('/bulk', requireStoreOwnership, async (req: Request, res: Response) =
   } catch (err: any) {
     logger.error('bulk analytics error', { error: err.message });
     res.status(500).json({ success: false, error: '批量计算失败' });
+  }
+});
+
+// GET /api/analytics/products/retrospective — 商品复盘数据
+router.get('/products/retrospective', requireStoreOwnership, async (req: Request, res: Response) => {
+  try {
+    const storeId = req.query.storeId as string;
+    const productId = req.query.productId as string;
+    if (!storeId || !productId) { res.status(400).json({ success: false, error: '缺少storeId或productId' }); return; }
+    const timeRange = (req.query.timeRange as string) || '30';
+    const customStart = req.query.customStart as string;
+    const customEnd = req.query.customEnd as string;
+    const compareWindow = parseInt(req.query.compareWindow as string) || 7;
+    const { data, configs, productCosts } = await analytics.resolveStoreContext(storeId, req.user!.userId);
+    const result = await analytics.computeProductRetrospective(data, productCosts, configs, productId, timeRange, customStart, customEnd, compareWindow);
+    res.json({ success: true, data: result });
+  } catch (err: any) {
+    logger.error('retrospective error', { error: err.message, path: req.originalUrl });
+    res.status(500).json({ success: false, error: '复盘计算失败' });
   }
 });
 

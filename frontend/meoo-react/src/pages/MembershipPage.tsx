@@ -5,6 +5,7 @@ import { Check, Crown, X, Clock, AlertCircle, RefreshCw, Copy } from 'lucide-rea
 import { useAuth } from '../App';
 import { isFullMember, getMembershipLabel } from '../utils/permission';
 import { rechargeApi, RechargeRecord } from '../../api/rechargeApi';
+import { apiClient } from '../../api/client';
 
 const PRICES = {
   pro: { monthly: 29, yearly: 299 },
@@ -76,6 +77,8 @@ export default function MembershipPage() {
   const [selectedPlan, setSelectedPlan] = useState<'pro' | 'enterprise'>('pro');
   const [selectedDuration, setSelectedDuration] = useState<'monthly' | 'yearly'>('monthly');
   const [wechatNickname, setWechatNickname] = useState('');
+  const [qrCodes, setQrCodes] = useState<any[]>([]);
+  useEffect(() => { apiClient.get('/admin/qrcode/payment').then(r => { if (r.success && Array.isArray(r.data)) setQrCodes(r.data); }).catch(()=>{}); }, []);
   const [remark, setRemark] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -85,7 +88,7 @@ export default function MembershipPage() {
   const fullMember = isFullMember(user);
 
   useEffect(() => {
-    rechargeApi.getMyRecords().then(setRecords).catch(() => {});
+    apiClient.get('/admin/my-recharges').then(r => { if (r.success) setRecords(r.data || []); }).catch(() => {});
     setRecordsLoading(false);
   }, []);
 
@@ -100,28 +103,23 @@ export default function MembershipPage() {
 
   const handleSubmit = async () => {
     if (!wechatNickname.trim()) {
-      setMessage({ type: 'error', text: '请输入您的微信昵称，方便管理员核对转账' });
+      setMessage({ type: 'error', text: '请输入微信昵称方便管理员核对' });
       return;
     }
     setSubmitting(true);
     setMessage(null);
-
     try {
       const amount = PRICES[selectedPlan][selectedDuration];
-      const res = await rechargeApi.apply({
-        plan: selectedPlan,
-        duration: selectedDuration,
-        amount,
-        wechatNickname: wechatNickname.trim(),
-        remark: remark.trim(),
+      const res = await apiClient.post('/admin/recharges', {
+        plan: selectedPlan, duration: selectedDuration, amount,
+        wechatNickname: wechatNickname.trim(), remark: remark.trim(),
       });
-
       if (res.success) {
-        setMessage({ type: 'success', text: '充值申请已提交！请完成微信转账后等待管理员确认，通常24小时内处理。' });
-        const updated = await rechargeApi.getMyRecords();
-        setRecords(updated);
+        setMessage({ type: 'success', text: '充值申请已提交！等待管理员审核。' });
+        const r2 = await apiClient.get('/admin/my-recharges');
+        if (r2.success) setRecords(r2.data || []);
       } else {
-        setMessage({ type: 'error', text: res.error || '提交失败，请稍后再试' });
+        setMessage({ type: 'error', text: res.error || '提交失败' });
       }
     } catch {
       setMessage({ type: 'error', text: '网络错误，请检查连接后重试' });
@@ -328,19 +326,27 @@ export default function MembershipPage() {
                 </div>
               </div>
 
-              {/* 微信收款码占位 */}
-              <div className="bg-[var(--pdd-bg)] rounded-lg p-4 mb-4 text-center border-2 border-dashed border-[var(--pdd-border)]">
-                <div className="w-40 h-40 mx-auto bg-white rounded-lg flex items-center justify-center mb-2">
-                  <div className="text-center">
-                    <div className="text-4xl mb-1">💬</div>
-                    <div className="text-xs text-[var(--pdd-text-secondary)]">微信收款码</div>
-                    <div className="text-[10px] text-[var(--pdd-text-secondary)] mt-1">
-                      （请联系管理员获取）
+              {/* 收款码展示 */}
+              <div className="bg-[var(--pdd-bg)] rounded-lg p-4 mb-4 text-center">
+                {qrCodes.length > 0 ? (
+                  <div className="flex flex-wrap justify-center gap-3">
+                    {qrCodes.map((q: any, i: number) => (
+                      <div key={i} className="text-center">
+                        <img src={q.imageData} alt={q.name || '收款码'} className="w-40 h-40 mx-auto rounded-lg border" />
+                        <p className="text-xs text-[var(--pdd-text-secondary)] mt-1">{q.name || q.type || '收款码'}</p>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="w-40 h-40 mx-auto bg-pdd-card rounded-lg flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="text-4xl mb-1">💬</div>
+                      <div className="text-xs text-[var(--pdd-text-secondary)]">收款码</div>
+                      <div className="text-[10px] text-[var(--pdd-text-secondary)] mt-1">（请联系管理员设置）</div>
                     </div>
                   </div>
-                </div>
-                <p className="text-xs text-[var(--pdd-text-secondary)]">
-                  请使用微信扫描收款码完成转账
+                )}
+                <p className="text-xs text-[var(--pdd-text-secondary)] mt-2">
                 </p>
               </div>
 

@@ -9,7 +9,11 @@
  * 5. 多设备会话管理 + 异地登录检测
  */
 import { Request, Response, NextFunction } from 'express';
+import { AsyncLocalStorage } from 'async_hooks';
 import { db } from '../db';
+
+// ─── AsyncLocalStorage 租户上下文容器 ─────────────────
+export const tenantStorage = new AsyncLocalStorage<TenantContext>();
 
 // ─── 类型定义 ────────────────────────────────────────
 
@@ -77,10 +81,14 @@ const TENANT_SCOPED_TABLES = [
  * 原理：监听 'query' 事件，在 SQL 发送到 MySQL 前检查并注入 user_id。
  * 管理员(admin/test)自动跳过，已有 user_id 的查询不重复注入。
  * 仅对 TENANT_SCOPED_TABLES 生效，insert 语句跳过。
+ *
+ * ★ 使用 AsyncLocalStorage 替代全局变量，彻底消除并发竞态。
+ * ★ 使用参数化绑定替代模板字符串拼接，杜绝 SQL 注入。
+ * ★ 使用全局替换标记 g，确保子查询中的 WHERE 也被注入。
  */
 export function installTenantQueryScope(): void {
   db.on('query', function (queryData: any) {
-    const ctx = (globalThis as any).__currentTenantContext as TenantContext | undefined;
+    const ctx = tenantStorage.getStore();
     if (!ctx || ctx.isAdmin()) return;
 
     const sql = queryData.sql || '';
@@ -91,16 +99,19 @@ export function installTenantQueryScope(): void {
     const hasTargetTable = TENANT_SCOPED_TABLES.some(t => sql.includes(t));
     if (!hasTargetTable) return;
 
-    // 在 WHERE 子句前注入 user_id
-    const injectClause = `\`user_id\` = '${ctx.userId}'`;
+    // 在 WHERE 子句前注入 user_id（使用参数化绑定，杜绝 SQL 注入）
+    const injectClause = '`user_id` = ?';
+    queryData.bindings.unshift(ctx.userId);
+
     if (/\bwhere\b/i.test(sql)) {
-      queryData.sql = sql.replace(/\bwhere\b/i, `WHERE ${injectClause} AND `);
+      // 全局替换 g 标志确保子查询中也注入
+      queryData.sql = sql.replace(/\bwhere\b/gi, `WHERE ${injectClause} AND `);
     } else if (/\bgroup\b/i.test(sql)) {
-      queryData.sql = sql.replace(/\bgroup\b/i, `WHERE ${injectClause} GROUP`);
+      queryData.sql = sql.replace(/\bgroup\b/gi, `WHERE ${injectClause} GROUP`);
     } else if (/\border\b/i.test(sql)) {
-      queryData.sql = sql.replace(/\border\b/i, `WHERE ${injectClause} ORDER`);
+      queryData.sql = sql.replace(/\border\b/gi, `WHERE ${injectClause} ORDER`);
     } else if (/\blimit\b/i.test(sql)) {
-      queryData.sql = sql.replace(/\blimit\b/i, `WHERE ${injectClause} LIMIT`);
+      queryData.sql = sql.replace(/\blimit\b/gi, `WHERE ${injectClause} LIMIT`);
     } else {
       // 没有 WHERE/GROUP/ORDER/LIMIT，追加到末尾
       queryData.sql = sql + ` WHERE ${injectClause}`;
@@ -186,15 +197,8 @@ export function tenantContext(req: Request, res: Response, next: NextFunction): 
 
   // 注入到 request
   (req as any).tenantCtx = ctx;
-  // 同时挂到全局供 Knex 拦截器使用
-  (globalThis as any).__currentTenantContext = ctx;
-
-  // 响应后清除
-  res.on('finish', () => {
-    (globalThis as any).__currentTenantContext = undefined;
-  });
-
-  next();
+  // 使用 AsyncLocalStorage 传递到 Knex 查询事件（消除并发竞态）
+  tenantStorage.run(ctx, next);
 }
 
 // 扩展 Express Request 类型

@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Package, Edit3, Calculator, Save, AlertCircle, AlertTriangle, Check, ChevronDown, ChevronUp,
+  Package, Edit3, Save, AlertCircle, AlertTriangle, Check, ChevronDown, ChevronUp,
   Eye, EyeOff, X, Settings, DollarSign, Plus, Trash2, Shield, Calculator as CalcIcon,
   Upload, History, ArrowUp, ArrowDown, Download, Search, LayoutDashboard,
   TrendingUp, Percent, BarChart3, Zap, Truck, Wrench, MessageSquare, RotateCcw, Filter,
@@ -9,18 +9,21 @@ import {
 } from 'lucide-react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 import * as XLSX from 'xlsx';
-import { useData } from '../App';
-import type { TaxConfig, CustomDeduction } from '../components/ProductLinkStats';
+import { useData, useStore } from '../App';
+import type { CustomDeduction } from '../components/ProductLinkStats';
 import { findField } from '../utils';
 import { getBestPlatformFee, getBestInsuranceFee, getPenaltyFees, matchLateShipmentPenalties, calcLateShipmentPenalty, isLateShipment } from '../utils/financialActuals';
 import { evaluateFormula, validateFormula, getVarOptions, FormulaContext } from '../utils/formulaEngine';
-import TimeFilter, { TimeRange, TimeGranularity, filterByTimeRange, getAllDateGroups, useTimeFilter } from '../components/TimeFilter';
+import { TimeRange, TimeGranularity, filterByTimeRange, getAllDateGroups, useTimeFilter } from '../components/TimeFilter';
+import { UnifiedFilterBar } from '../components/FilterToolbar';
+import { analyticsApi } from '../../api/analyticsApi';
+import type { CostTrendResponse, CostSummary as ApiCostSummary } from '../../api/analyticsApi';
+import SpecGroupCostEditor from '../components/SpecGroupCostEditor';
 
 const TABS = [
-  { key: 'overview', label: '成本概览', Icon: LayoutDashboard },
+  { key: 'overview', label: '成本总览', Icon: LayoutDashboard },
   { key: 'costs', label: '商品成本', Icon: Package },
-  { key: 'pricing', label: '定价计算器', Icon: Calculator },
-  { key: 'tax', label: '税务配置', Icon: Shield },
+  { key: 'shipping', label: '快递配置', Icon: Truck },
   { key: 'deductions', label: '自定义扣费', Icon: CalcIcon },
   { key: 'alerts', label: '成本预警', Icon: AlertTriangle },
 ];
@@ -79,7 +82,7 @@ function ProcessPanel({ alertData, alertType, onProcess, onCancel, existingData 
   return (
     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden">
       <div className="mt-3 pt-3 border-t border-pdd-border">
-        <p className="text-xs font-semibold text-pdd-text mb-2 flex items-center gap-1.5"><Edit3 size={12} />处理异常订单</p>
+        <p className="text-xs font-bold text-gray-700 flex items-center gap-1.5 mb-2"><Edit3 size={12} />处理异常订单</p>
         <div className="space-y-3">
           <div className="flex items-center gap-3">
             <label className="text-xs text-pdd-text-secondary">处理方式:</label>
@@ -162,7 +165,7 @@ export default function CostManagementPage() {
     localStorage.setItem('dianfx_cost_active_tab', activeTab);
   }, [activeTab]);
   const tf = useTimeFilter('7', 'day');
-  const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
+  const { timeRange, granularity, compareEnabled, useNaturalDate, setUseNaturalDate, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
 
   const {
     currentDisplayData,
@@ -172,12 +175,6 @@ export default function CostManagementPage() {
     setCostConfig,
     packagingFeePerOrder,
     setPackagingFeePerOrder,
-    pricingPresets,
-    addPricingPreset,
-    taxConfigs,
-    addTaxConfig,
-    removeTaxConfig,
-    updateTaxConfig,
     customDeductions,
     addCustomDeduction,
     removeCustomDeduction,
@@ -209,7 +206,7 @@ export default function CostManagementPage() {
   const financialRecords = currentDisplayData?.financialRecords || [];
   const allDates = useMemo(() => getAllDateGroups(allOrders), [allOrders]);
   const filteredOrders = useMemo(() => {
-    const timeFiltered = filterByTimeRange(allOrders, allDates, timeRange, customStart, customEnd, quickRange);
+    const timeFiltered = filterByTimeRange(allOrders, allDates, timeRange, customStart, customEnd, quickRange, useNaturalDate);
     return timeFiltered.filter((o: any) => {
       // 排除已取消订单
       const orderStatus = String(findField(o, '订单状态') || '').trim();
@@ -226,6 +223,67 @@ export default function CostManagementPage() {
   }, [allOrders, allDates, timeRange, abnormalOrders, customStart, customEnd, quickRange]);
   const orders = filteredOrders;
 
+  // ─── 服务端成本概览 & 环比趋势 ────────────
+  // 设计原则：服务器计算，前端仅展示（原始设计要求）
+  // 时间范围参数由前端提供（纯日期，不涉及计算逻辑）
+  const { currentStore } = useStore();
+  const storeId = currentStore?.id || '';
+  const [serverCostSummary, setServerCostSummary] = useState<ApiCostSummary | null>(null);
+  const [serverTrendData, setServerTrendData] = useState<CostTrendResponse | null>(null);
+  const [costsServerLoading, setCostsServerLoading] = useState(false);
+
+  useEffect(() => {
+    if (!storeId || storeId === '__all__') return;
+
+    // 从 allOrders + 时间范围参数推算日期范围
+    // getAllDateGroups 返回 [dateString, orders[]][]
+    const dateGroups = getAllDateGroups(allOrders);
+    if (!dateGroups.length) return;
+
+    const sorted = dateGroups.map(([d]) => d).filter(Boolean).sort();
+    const dataEnd = sorted[sorted.length - 1] || '';
+    const dataStart = sorted[0] || '';
+    if (!dataStart || !dataEnd) return;
+
+    let minDate = dataStart, maxDate = dataEnd;
+
+    if (timeRange === 'custom' && customStart && customEnd) {
+      minDate = customStart;
+      maxDate = customEnd;
+    } else if (quickRange) {
+      // 从结束日期往前推
+      const match = quickRange.match(/^(\d+)([dDwWmMyY])$/);
+      if (match) {
+        const num = parseInt(match[1]);
+        const unit = match[2].toLowerCase();
+        const d = new Date(dataEnd);
+        if (unit === 'd') d.setDate(d.getDate() - num);
+        else if (unit === 'w') d.setDate(d.getDate() - num * 7);
+        else if (unit === 'm') d.setMonth(d.getMonth() - num);
+        else if (unit === 'y') d.setFullYear(d.getFullYear() - num);
+        const calcStart = d.toISOString().slice(0, 10);
+        if (calcStart > minDate) minDate = calcStart;
+      }
+    } else if (timeRange && !isNaN(Number(timeRange))) {
+      const days = Number(timeRange);
+      const d = new Date(dataEnd);
+      d.setDate(d.getDate() - days);
+      const calcStart = d.toISOString().slice(0, 10);
+      if (calcStart > minDate) minDate = calcStart;
+    }
+
+    setCostsServerLoading(true);
+    Promise.all([
+      analyticsApi.getCosts(storeId, minDate, maxDate),
+      analyticsApi.getCostTrend(storeId, minDate, maxDate),
+    ]).then(([costs, trend]) => {
+      if (costs) setServerCostSummary(costs);
+      if (trend) setServerTrendData(trend);
+    }).catch(() => {
+      // 静默失败，本地计算 fallback
+    }).finally(() => setCostsServerLoading(false));
+  }, [storeId, timeRange, customStart, customEnd, quickRange, allOrders]); // 时间范围或数据变化时重新获取
+
   const maxAnalysisDate = useMemo(() => {
     let maxDate = '';
     filteredOrders.forEach((o: any) => {
@@ -241,7 +299,7 @@ export default function CostManagementPage() {
     return matchLateShipmentPenalties(
       filteredOrders,
       orderFinancialActuals,
-      unlinkedFinancials || { penalties: 0, marketingFees: 0, shippingInsurance: 0, records: [] },
+      unlinkedFinancials || { penalties: 0, marketingFees: 0, experiencePlan: 0, adTransfer: 0, lateShipment: 0, records: [] },
       findField
     );
   }, [filteredOrders, orderFinancialActuals, unlinkedFinancials]);
@@ -333,7 +391,7 @@ export default function CostManagementPage() {
 
       // 快递费统计：仅有快递单号的订单才计入（未发货不产生快递费）
       const trackingNo = String(findField(o, '快递单号') || '').trim();
-      const actualPostage = parseFloat(String(o['邮费(元)'] || '0')) || 0;
+      const actualPostage = parseFloat(String(findField(o, '邮费(元)', '邮费', '快递费', '运费') || '0')) || 0;
       if (trackingNo) {
         sku.shippingOrderCount++;
         sku.actualShippingCost = (sku.actualShippingCost || 0) + actualPostage;
@@ -354,11 +412,13 @@ export default function CostManagementPage() {
   const [selectedItems, setSelectedItems] = useState<Set<string>>(new Set());
   const [batchCost, setBatchCost] = useState('');
   const [costRatio, setCostRatio] = useState('40');
+  // ★ F6: 批量操作确认状态
+  const [batchConfirm, setBatchConfirm] = useState<{ cost: number; count: number } | null>(null);
   const [expandedProducts, setExpandedProducts] = useState<Set<string>>(new Set());
   const [expandedPrices, setExpandedPrices] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
-  const [showSettings, setShowSettings] = useState(false);
   const [showQuickSettings, setShowQuickSettings] = useState(false);
+  const [quickSettingsTab, setQuickSettingsTab] = useState<'fees' | 'couriers'>('fees');
   const [tempPackagingFee, setTempPackagingFee] = useState(String(packagingFeePerOrder));
   const [tempDefaultCostRatio, setTempDefaultCostRatio] = useState(String(defaultCostRatio ?? 30));
   const [tempShippingFee, setTempShippingFee] = useState(String(shippingFeePerOrder || 0));
@@ -366,7 +426,6 @@ export default function CostManagementPage() {
   const [tempLaborFee, setTempLaborFee] = useState(String(laborFeePerOrder || 0));
   const [tempInsuranceFee, setTempInsuranceFee] = useState(String(insuranceFeePerOrder || 0));
   const [tempPromotionFee, setTempPromotionFee] = useState(String(promotionFeePerOrder || 0));
-  const [showImportHelp, setShowImportHelp] = useState(false);
   const [showCostHistory, setShowCostHistory] = useState(false);
   const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -384,22 +443,6 @@ export default function CostManagementPage() {
   const [missingSortOrder, setMissingSortOrder] = useState<'asc' | 'desc'>('desc');
   const [showMissingFilters, setShowMissingFilters] = useState(false);
 
-  // Pricing preset filters
-  const [pricingSearchQuery, setPricingSearchQuery] = useState('');
-  const [pricingCostMin, setPricingCostMin] = useState('');
-  const [pricingCostMax, setPricingCostMax] = useState('');
-  const [pricingSortBy, setPricingSortBy] = useState<'name' | 'cost' | 'suggestedPrice'>('name');
-  const [pricingSortOrder, setPricingSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [showPricingFilters, setShowPricingFilters] = useState(false);
-
-  // Tax filters
-  const [taxSearchQuery, setTaxSearchQuery] = useState('');
-  const [taxRateMin, setTaxRateMin] = useState('');
-  const [taxRateMax, setTaxRateMax] = useState('');
-  const [taxSortBy, setTaxSortBy] = useState<'name' | 'rate' | 'type'>('name');
-  const [taxSortOrder, setTaxSortOrder] = useState<'asc' | 'desc'>('asc');
-  const [showTaxFilters, setShowTaxFilters] = useState(false);
-
   // Deduction filters
   const [deductionSearchQuery, setDeductionSearchQuery] = useState('');
   const [deductionAmountMin, setDeductionAmountMin] = useState('');
@@ -407,12 +450,6 @@ export default function CostManagementPage() {
   const [deductionSortBy, setDeductionSortBy] = useState<'name' | 'scope' | 'order'>('order');
   const [deductionSortOrder, setDeductionSortOrder] = useState<'asc' | 'desc'>('asc');
   const [showDeductionFilters, setShowDeductionFilters] = useState(false);
-
-  // Tax form
-  const [showTaxForm, setShowTaxForm] = useState(false);
-  const [taxForm, setTaxForm] = useState<Partial<TaxConfig>>({
-    name: '', taxType: 'vat', rate: 0, base: 'revenue', enabled: true, description: ''
-  });
 
   // Deduction form
   const [showDeductionForm, setShowDeductionForm] = useState(false);
@@ -434,37 +471,6 @@ export default function CostManagementPage() {
     }));
     return keys;
   };
-
-  // Overview KPI calculations
-  const overviewStats = useMemo(() => {
-    const allSkus = getAllSkuKeys(productGroups);
-    const skusWithCost = allSkus.filter(k => (productCosts[k] || 0) > 0);
-    const productsWithCode = productGroups.filter(g =>
-      g.skus.some(s => s.hasProductCode || s.hasSkuCode)
-    ).length;
-    const totalEstimatedCost = skusWithCost.reduce((sum, k) => {
-      const sku = productGroups.flatMap(g => g.skus).find(s =>
-        (s.skuId ? `${s.productId}_${s.skuId}` : s.productId) === k
-      );
-      if (!sku) return sum;
-      const rawCost = productCosts[k] || 0;
-      const uniqueCnt = sku.uniqueOrderNos?.size || sku.orderCount;
-      return sum + rawCost * sku.itemCount + packagingFeePerOrder * uniqueCnt + (shippingFeePerOrder || 0) * uniqueCnt;
-    }, 0);
-    const avgUnitCost = skusWithCost.length > 0
-      ? skusWithCost.reduce((sum, k) => sum + (productCosts[k] || 0), 0) / skusWithCost.length
-      : 0;
-
-    return {
-      totalProducts: productGroups.length,
-      productsWithCode,
-      totalSkus: allSkus.length,
-      skusWithCost: skusWithCost.length,
-      costCoverage: allSkus.length > 0 ? (skusWithCost.length / allSkus.length) * 100 : 0,
-      totalEstimatedCost,
-      avgUnitCost,
-    };
-  }, [productGroups, productCosts, packagingFeePerOrder, shippingFeePerOrder]);
 
   const filteredMissingProducts = useMemo(() => {
     let result = missingCodeProducts;
@@ -500,55 +506,6 @@ export default function CostManagementPage() {
     });
     return result;
   }, [missingCodeProducts, missingSearchQuery, missingPriceMin, missingPriceMax, missingOrderMin, missingOrderMax, missingSortBy, missingSortOrder]);
-
-  const filteredPricingPresets = useMemo(() => {
-    let result = [...pricingPresets];
-    if (pricingSearchQuery) {
-      const query = pricingSearchQuery.toLowerCase();
-      result = result.filter(p =>
-        (p.name && p.name.toLowerCase().includes(query)) ||
-        (p.code && p.code.toLowerCase().includes(query))
-      );
-    }
-    const minCost = parseFloat(pricingCostMin) || 0;
-    const maxCost = parseFloat(pricingCostMax) || Infinity;
-    if (minCost > 0 || maxCost < Infinity) {
-      result = result.filter(p => p.rawCost >= minCost && p.rawCost <= maxCost);
-    }
-    result.sort((a, b) => {
-      let comparison = 0;
-      switch (pricingSortBy) {
-        case 'name': comparison = (a.name || a.code || '').localeCompare(b.name || b.code || ''); break;
-        case 'cost': comparison = a.rawCost - b.rawCost; break;
-        case 'suggestedPrice': comparison = (a.suggestedPrice || 0) - (b.suggestedPrice || 0); break;
-      }
-      return pricingSortOrder === 'asc' ? comparison : -comparison;
-    });
-    return result;
-  }, [pricingPresets, pricingSearchQuery, pricingCostMin, pricingCostMax, pricingSortBy, pricingSortOrder]);
-
-  const filteredTaxConfigs = useMemo(() => {
-    let result = [...(taxConfigs || [])];
-    if (taxSearchQuery) {
-      const query = taxSearchQuery.toLowerCase();
-      result = result.filter(t => t.name.toLowerCase().includes(query));
-    }
-    const minRate = parseFloat(taxRateMin) || 0;
-    const maxRate = parseFloat(taxRateMax) || Infinity;
-    if (minRate > 0 || maxRate < Infinity) {
-      result = result.filter(t => t.rate >= minRate && t.rate <= maxRate);
-    }
-    result.sort((a, b) => {
-      let comparison = 0;
-      switch (taxSortBy) {
-        case 'name': comparison = a.name.localeCompare(b.name); break;
-        case 'rate': comparison = a.rate - b.rate; break;
-        case 'type': comparison = a.taxType.localeCompare(b.taxType); break;
-      }
-      return taxSortOrder === 'asc' ? comparison : -comparison;
-    });
-    return result;
-  }, [taxConfigs, taxSearchQuery, taxRateMin, taxRateMax, taxSortBy, taxSortOrder]);
 
   const filteredDeductions = useMemo(() => {
     let result = [...(customDeductions || [])];
@@ -623,7 +580,14 @@ export default function CostManagementPage() {
 
   const applyBatchCost = () => {
     const cost = parseFloat(batchCost);
-    if (isNaN(cost)) return;
+    if (isNaN(cost) || selectedItems.size === 0) return;
+    // ★ F6: 先确认再执行
+    setBatchConfirm({ cost, count: selectedItems.size });
+  };
+
+  const executeBatchCost = () => {
+    if (!batchConfirm) return;
+    const { cost } = batchConfirm;
     selectedItems.forEach(key => {
       const oldCost = productCosts[key] || 0;
       setProductCost(key, cost);
@@ -639,6 +603,7 @@ export default function CostManagementPage() {
     });
     setSelectedItems(new Set());
     setBatchCost('');
+    setBatchConfirm(null);
   };
 
   const clearSelection = () => { setSelectedItems(new Set()); setBatchCost(''); };
@@ -655,13 +620,6 @@ export default function CostManagementPage() {
     setExpandedPrices(newSet);
   };
 
-  const savePackagingFee = () => {
-    setPackagingFeePerOrder(parseFloat(tempPackagingFee) || 0);
-    setDefaultCostRatio(parseFloat(tempDefaultCostRatio) ?? 30);
-    setShippingFeePerOrder(parseFloat(tempShippingFee) || 0);
-    setShowSettings(false);
-  };
-
   const saveQuickSettings = () => {
     setPackagingFeePerOrder(parseFloat(tempPackagingFee) || 0);
     setDefaultCostRatio(parseFloat(tempDefaultCostRatio) ?? 0);
@@ -671,6 +629,9 @@ export default function CostManagementPage() {
     setInsuranceFeePerOrder(parseFloat(tempInsuranceFee) || 0);
     setPromotionFeePerOrder(parseFloat(tempPromotionFee) || 0);
     setShowQuickSettings(false);
+    // ★ 清除服务端缓存，下次 useEffect 重新获取时使用新配置
+    setServerCostSummary(null);
+    setServerTrendData(null);
   };
 
   const formatPriceRange = (min: number, max: number) => {
@@ -699,31 +660,31 @@ export default function CostManagementPage() {
     const totalRawCost = rawCost > 0 ? rawCost * sku.itemCount : effectiveRawCost * sku.itemCount;
     const totalPackaging = packagingFeePerOrder * uniqueOrderCnt;
     const totalLabor = laborFeePerOrder * uniqueOrderCnt;
-    // 快递费：优先用订单实际邮费；其次按快递公司费率；最后用默认费率
-    let totalShipping: number;
-    if (sku.actualShippingCost > 0) {
-      totalShipping = sku.actualShippingCost;
-    } else {
-      // 按快递公司分别计算
-      const courierRates = JSON.parse(localStorage.getItem('dianfx_courier_rates') || '{}');
-      let shippingTotal = 0;
-      // 遍历该SKU的订单，按快递公司匹配费率
-      const skuOrders = orders.filter(o => {
-        const oId = String(findField(o, '商品id', '商品ID', 'productId') || '');
-        const skuId = String(findField(o, '商家编码-SKU维度', '规格编码', 'SKU编码') || '');
-        const key = skuId ? `${oId}_${skuId}` : oId;
-        return key === skuKey;
-      });
-      skuOrders.forEach(o => {
-        const trackingNo = String(findField(o, '快递单号') || '').trim();
-        if (!trackingNo) return; // 无快递单号不计
+    // ★ F3: 快递费逐单计算 — 有实际邮费的取邮费，没有的按快递公司费率或默认费率
+    let totalShipping = 0;
+    const courierRates = JSON.parse(localStorage.getItem('dianfx_courier_rates') || '{}');
+    const skuOrders = orders.filter(o => {
+      const oId = String(findField(o, '商品id', '商品ID', 'productId') || '');
+      const sId = String(findField(o, '商家编码-SKU维度', '规格编码', 'SKU编码') || '');
+      const key = sId ? `${oId}_${sId}` : oId;
+      return key === skuKey;
+    });
+    // 按SKU遍历每一个订单，逐单计算快递费
+    skuOrders.forEach(o => {
+      const trackingNo = String(findField(o, '快递单号') || '').trim();
+      if (!trackingNo) return; // 无快递单号不计
+      const actualPostage = parseFloat(String(findField(o, '邮费(元)', '邮费', '快递费', '运费') || '0')) || 0;
+      if (actualPostage > 0) {
+        totalShipping += actualPostage; // 有实际邮费的用实际值
+      } else {
         const courier = String(findField(o, '快递公司') || '').trim();
         const rate = courierRates[courier] || shippingFeePerOrder || 0;
-        shippingTotal += rate;
-      });
-      totalShipping = shippingTotal;
-    }
-    const totalPromotionFee = (promotionFeePerOrder || 0) * uniqueOrderCnt;
+        totalShipping += rate; // 无实际邮费的按费率算
+      }
+    });
+    // ★ F2: 推广费 — 有实际财务营销数据的用实际值，没有的才全局均摊
+    let totalPromotionFee = 0;
+    let useGlobalPromotionFee = true;
 
     // 实际财务数据覆盖：以公式为基准，有货款明细的订单用实际值替换
     const positivePrices = sku.prices.filter(p => p > 0);
@@ -754,7 +715,10 @@ export default function CostManagementPage() {
           totalInsurance += actual.shippingInsurance - (insuranceFeePerOrder || 0);
         }
         totalPenalties += actual.penalties;
-        totalMarketingFees += actual.marketingFees;
+        if (actual.marketingFees > 0) {
+          totalMarketingFees += actual.marketingFees;
+          useGlobalPromotionFee = false; // ★ F2: 有实际营销费数据的订单，跳过全局推广费均摊
+        }
       }
 
       // 延迟发货罚款匹配（独立于 financialActuals 索引）
@@ -765,7 +729,14 @@ export default function CostManagementPage() {
       }
     });
 
-    // 注意：商家实收已扣平台费，成本汇总不含 platformFee
+    // 在循环后得到 totalPromotionFee（仅当无实际营销费时才使用全局均摊）
+    if (useGlobalPromotionFee) {
+      totalPromotionFee = (promotionFeePerOrder || 0) * uniqueOrderCnt;
+    } else {
+      totalPromotionFee = 0; // ★ F2: 有实际财务营销数据，跳过全局均摊避免双重计算
+    }
+
+    // 注意：商家实收已扣平台费，成本汇总不含 platformFee（totalPlatformCommission 仅供展示）
     const subtotal = totalRawCost + totalPackaging + totalLabor + totalShipping + totalInsurance + totalPenalties + totalMarketingFees + totalPromotionFee;
 
     // 自定义扣费：使用统一的安全公式引擎，含范围/条件/有效期检查
@@ -845,6 +816,20 @@ export default function CostManagementPage() {
   const [alertProcessedFilter, setAlertProcessedFilter] = useState<'all' | 'unprocessed' | 'processed'>('all');
   const [dismissedAlerts, setDismissedAlerts] = useState<Set<string>>(new Set());
   const [alertActionOpen, setAlertActionOpen] = useState<Set<string>>(new Set());
+  // ★ 批量操作
+  const [batchSelected, setBatchSelected] = useState<Set<string>>(new Set());
+  const [showBatchAdjust, setShowBatchAdjust] = useState(false);
+  const [batchAdjAmount, setBatchAdjAmount] = useState('');
+
+  const batchProcess = (status: 'excluded' | 'adjusted') => {
+    batchSelected.forEach(orderNo => {
+      const adjFields: any = { itemCount: 1, merchantAmount: parseFloat(batchAdjAmount) || 0, rawCost: 0 };
+      setAbnormalOrder(orderNo, { orderNo, status, note: '', adjustedFields: adjFields, alertTypes: ['batch'], processedAt: new Date().toISOString() });
+    });
+    setBatchSelected(new Set());
+    setShowBatchAdjust(false);
+    setBatchAdjAmount('');
+  };
 
   // ========== 成本预警计算 ==========
 
@@ -914,10 +899,10 @@ export default function CostManagementPage() {
           const rno = String(findField(r, '订单编号', '订单号') || '').trim();
           return rno && rno === orderNo;
         });
-        // knownCost 是单件成本，defaultCostRatio 估算的是行总成本
+        // ★ F4: 用 merchant（实收）替代 productTotal（原价），优惠券/满减使原价失真
         const estimatedRawCost = knownCost > 0
           ? knownCost * qty
-          : (productTotal * (defaultCostRatio / 100));
+          : (merchant * (defaultCostRatio / 100));
         if (estimatedRawCost <= 0 && knownCost <= 0 && defaultCostRatio <= 0) return false;
         const orderActual = orderFinancialActuals[orderNo];
         const platformCost = (orderActual?.hasData && (orderActual.baseTechFee > 0 || orderActual.subTechFee > 0))
@@ -948,7 +933,6 @@ export default function CostManagementPage() {
         const product = String(findField(o, '商品', '商品名称') || '').slice(0, 30);
         const merchant = ab?.adjustedFields?.merchantAmount != null ? ab.adjustedFields.merchantAmount : (parseFloat(String(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额') || '0').replace(/[^\d.\-]/g, '')) || 0);
         const qty = ab?.adjustedFields?.itemCount != null ? ab.adjustedFields.itemCount : (parseInt(String(findField(o, '商品数量(件)', '商品数量', '数量') || '1')) || 1);
-        const productTotal = parseFloat(String(findField(o, '商品总价(元)', '商品总价') || '0').replace(/[^\d.\-]/g, '')) || 0;
         const skuKey = (String(findField(o, '样式ID') || '').trim()) ? `${String(findField(o, '商品id', '商品ID') || '').trim()}_${String(findField(o, '样式ID') || '').trim()}` : String(findField(o, '商品id', '商品ID') || '').trim();
         const adjustedRawCost = ab?.adjustedFields?.rawCost;
         const knownCost = adjustedRawCost != null ? adjustedRawCost : (productCosts[skuKey] || 0);
@@ -956,9 +940,10 @@ export default function CostManagementPage() {
           const rno = String(findField(r, '订单编号', '订单号') || '').trim();
           return rno && rno === orderNo;
         });
+        // ★ F4: 同filter逻辑一致，用merchant替代productTotal
         const estimatedRawCost = knownCost > 0
           ? knownCost * qty
-          : (productTotal * (defaultCostRatio / 100));
+          : (merchant * (defaultCostRatio / 100));
         const orderActual2 = orderFinancialActuals[orderNo];
         const platformCost2 = (orderActual2?.hasData && (orderActual2.baseTechFee > 0 || orderActual2.subTechFee > 0))
           ? orderActual2.baseTechFee + orderActual2.subTechFee
@@ -1052,40 +1037,184 @@ export default function CostManagementPage() {
   // Apply dismissed filter
   const activeMultiSkuAlerts = useMemo(() => multiSkuAlerts.filter(a => !dismissedAlerts.has(`multiSku_${a.orderNo}`)), [multiSkuAlerts, dismissedAlerts]);
   const activeMultiItemAlerts = useMemo(() => multiItemAlerts.filter(a => !dismissedAlerts.has(`multiItem_${a.orderNo}_${a.product}`)), [multiItemAlerts, dismissedAlerts]);
+
+  // ★ F7: 多SKU订单号集合，用于在成本拆解中标注重复计费
+  const multiSkuOrderNos = useMemo(() => {
+    const nos = new Set<string>();
+    multiSkuAlerts.forEach(a => nos.add(a.orderNo));
+    return nos;
+  }, [multiSkuAlerts]);
   const activeLossAlerts = useMemo(() => lossAlerts.filter(a => !dismissedAlerts.has(`loss_${a.orderNo}`)), [lossAlerts, dismissedAlerts]);
   const activeLowPayAlerts = useMemo(() => lowPayAlerts.filter(a => !dismissedAlerts.has(`lowPay_${a.orderNo}`)), [lowPayAlerts, dismissedAlerts]);
   const activeHighQtyAlerts = useMemo(() => highQtyAlerts.filter(a => !dismissedAlerts.has(`highQty_${a.orderNo}`)), [highQtyAlerts, dismissedAlerts]);
 
-  // Enhanced pricing form
-  const [pricingForm, setPricingForm] = useState({
-    name: '', code: '', rawCost: 0, shipping: 0, promotion: 0,
-    packagingFee: 0, platformCommissionRate: 0, miscFees: 0, profitRate: 30,
-  });
-  const [savedMsg, setSavedMsg] = useState('');
-
-  const totalPricingCosts = pricingForm.rawCost + pricingForm.shipping + pricingForm.promotion + pricingForm.packagingFee + pricingForm.miscFees + (laborFeePerOrder || 0) + (insuranceFeePerOrder || 0);
-  const commissionRate = pricingForm.platformCommissionRate / 100;
-  const targetProfitRate = pricingForm.profitRate / 100;
-  const totalDeductRate = commissionRate + targetProfitRate;
-  const pricingError = totalDeductRate >= 1 ? '佣金率+目标利润率不能超过100%' : '';
-  const denominator = 1 - totalDeductRate;
-  const suggestedPrice = pricingForm.rawCost > 0 && denominator > 0
-    ? totalPricingCosts / denominator
-    : 0;
-  const estimatedProfit = suggestedPrice > 0
-    ? suggestedPrice - totalPricingCosts - (suggestedPrice * commissionRate)
-    : 0;
-
-  const handleSavePricing = () => {
-    if (!pricingForm.code.trim()) return;
-    addPricingPreset({
-      ...pricingForm, suggestedPrice, createdAt: new Date().toISOString()
+  // ★ F10: 比较期数据（环比趋势）
+  const comparisonOrders = useMemo(() => {
+    if (!tf.compareEnabled || !tf.compareStart || !tf.compareEnd) return [];
+    const timeFiltered = filterByTimeRange(allOrders, allDates, tf.timeRange, tf.compareStart, tf.compareEnd, tf.quickRange, tf.useNaturalDate);
+    return timeFiltered.filter((o: any) => {
+      const orderStatus = String(findField(o, '订单状态') || '').trim();
+      if (orderStatus === '已取消') return false;
+      const afterSaleStatus = String(findField(o, '售后状态') || '').trim();
+      if (afterSaleStatus.includes('退款')) return false;
+      return true;
     });
-    if (pricingForm.rawCost > 0) setProductCost(pricingForm.code, pricingForm.rawCost);
-    setSavedMsg('保存成功');
-    setTimeout(() => setSavedMsg(''), 2000);
-    setPricingForm({ name: '', code: '', rawCost: 0, shipping: 0, promotion: 0, packagingFee: 0, platformCommissionRate: 0, miscFees: 0, profitRate: 30 });
-  };
+  }, [allOrders, allDates, tf.timeRange, tf.compareStart, tf.compareEnd, tf.quickRange, tf.useNaturalDate, tf.compareEnabled]);
+
+  // ★ F10: 成本趋势（环比）
+  const costTrend = useMemo(() => {
+    if (comparisonOrders.length === 0) return null;
+    const calcSummary = (ords: any[]) => {
+      let revenue = 0, cost = 0;
+      ords.forEach((o: any) => {
+        const merchant = parseFloat(String(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额') || '0').replace(/[^\d.\-]/g, '')) || 0;
+        revenue += merchant;
+        const skuId = String(findField(o, '样式ID') || '').trim();
+        const pId = String(findField(o, '商品id', '商品ID') || '').trim();
+        const skuKey = skuId ? `${pId}_${skuId}` : pId;
+        const rawCost = productCosts[skuKey] || 0;
+        const qty = parseInt(String(findField(o, '商品数量(件)', '商品数量', '数量') || '1')) || 1;
+        const estRaw = rawCost > 0 ? rawCost * qty : merchant * (defaultCostRatio / 100);
+        cost += estRaw + packagingFeePerOrder + (laborFeePerOrder || 0) + (shippingFeePerOrder || 0) + (insuranceFeePerOrder || 0) + (promotionFeePerOrder || 0);
+      });
+      return { revenue, cost, profit: revenue - cost };
+    };
+    const current = calcSummary(filteredOrders);
+    const prev = calcSummary(comparisonOrders);
+    return {
+      costChange: prev.cost > 0 ? ((current.cost - prev.cost) / prev.cost) * 100 : 0,
+      profitChange: prev.profit !== 0 ? ((current.profit - prev.profit) / Math.abs(prev.profit)) * 100 : 0,
+      revenueChange: prev.revenue > 0 ? ((current.revenue - prev.revenue) / prev.revenue) * 100 : 0,
+      currentCost: current.cost, prevCost: prev.cost,
+      currentProfit: current.profit, prevProfit: prev.profit,
+      currentRevenue: current.revenue, prevRevenue: prev.revenue,
+    };
+  }, [comparisonOrders, filteredOrders, productCosts, defaultCostRatio, packagingFeePerOrder, laborFeePerOrder, shippingFeePerOrder, insuranceFeePerOrder, promotionFeePerOrder]);
+
+  // ★ F9: 独立计算罚款和营销费（per-order数据，不能在SKU循环中计算）
+  const totalPenaltiesAndMarketing = useMemo(() => {
+    let penalties = 0, marketing = 0;
+    filteredOrders.forEach((o: any) => {
+      const orderNo = String(findField(o, '订单号') || '').trim();
+      if (!orderNo) return;
+      const actual = orderFinancialActuals[orderNo];
+      const lateMatch = latePenaltyMap[orderNo];
+      if (actual?.penalties) penalties += actual.penalties;
+      if (lateMatch?.amount) penalties += lateMatch.amount;
+      if (actual?.marketingFees) marketing += actual.marketingFees;
+    });
+    return { penalties, marketing };
+  }, [filteredOrders, orderFinancialActuals, latePenaltyMap]);
+
+  // ★ F11: 多SKU重复扣费汇总
+  const totalDuplicateFees = useMemo(() => {
+    return multiSkuAlerts.reduce((sum, a) => sum + a.duplicateFee, 0);
+  }, [multiSkuAlerts]);
+
+  // ★ F12: 退款总额（用于净利润计算）
+  const totalRefundAmount = useMemo(() => {
+    return afterSaleRecords.reduce((sum: number, r: any) => {
+      return sum + (Number(findField(r, '退款金额(元)', '退款金额', '售后金额') || 0) || 0);
+    }, 0);
+  }, [afterSaleRecords]);
+
+  // ★ overviewStats — 放在所有依赖之后
+  const overviewStats = useMemo(() => {
+    const allSkus = getAllSkuKeys(productGroups);
+    const skusWithCost = allSkus.filter(k => (productCosts[k] || 0) > 0);
+    const productsWithCode = productGroups.filter(g =>
+      g.skus.some(s => s.hasProductCode || s.hasSkuCode)
+    ).length;
+    const productsWithoutCode = productGroups.filter(g =>
+      !g.skus.some(s => s.hasProductCode || s.hasSkuCode)
+    ).length;
+    const skusWithoutCost = allSkus.filter(k => !(productCosts[k] || 0));
+
+    let totalCost = 0;
+    let totalRevenue = 0;
+
+    productGroups.forEach(g => {
+      g.skus.forEach(sku => {
+        const skuKey = sku.skuId ? `${sku.productId}_${sku.skuId}` : sku.productId;
+        const rawCost = productCosts[skuKey] || 0;
+        const uniqueCnt = sku.uniqueOrderNos?.size || sku.orderCount;
+        const totalRaw = rawCost > 0
+          ? rawCost * sku.itemCount
+          : (defaultCostRatio > 0
+            ? (defaultCostRatio / 100) * (sku.prices.filter(p => p > 0).reduce((a, b) => a + b, 0) / (sku.prices.length || 1)) * sku.itemCount
+            : 0);
+
+        totalCost += totalRaw
+          + packagingFeePerOrder * uniqueCnt
+          + (laborFeePerOrder || 0) * uniqueCnt
+          + (shippingFeePerOrder || 0) * sku.shippingOrderCount
+          + (insuranceFeePerOrder || 0) * sku.insuredOrderCount
+          + (promotionFeePerOrder || 0) * uniqueCnt;
+
+        totalRevenue += sku.prices.filter(p => p > 0).reduce((a, b) => a + b, 0);
+      });
+    });
+
+    // ★ F9: 加入罚款和营销费
+    const totalWithPenalties = totalCost + totalPenaltiesAndMarketing.penalties + totalPenaltiesAndMarketing.marketing;
+    const profit = totalRevenue - totalWithPenalties;
+    const profitMargin = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
+
+    const avgUnitCost = skusWithCost.length > 0
+      ? skusWithCost.reduce((sum, k) => sum + (productCosts[k] || 0), 0) / skusWithCost.length
+      : 0;
+
+    return {
+      totalProducts: productGroups.length,
+      productsWithCode,
+      productsWithoutCode,
+      totalSkus: allSkus.length,
+      skusWithCost: skusWithCost.length,
+      skusWithoutCost: skusWithoutCost.length,
+      costCoverage: allSkus.length > 0 ? (skusWithCost.length / allSkus.length) * 100 : 0,
+      totalEstimatedCost: totalWithPenalties,
+      avgUnitCost,
+      totalRevenue,
+      profit,
+      profitMargin,
+      lossOrderCount: activeLossAlerts.length,
+      penalties: totalPenaltiesAndMarketing.penalties,
+      marketingFees: totalPenaltiesAndMarketing.marketing,
+    };
+  }, [productGroups, productCosts, packagingFeePerOrder, shippingFeePerOrder,
+      laborFeePerOrder, insuranceFeePerOrder, promotionFeePerOrder,
+      defaultCostRatio, activeLossAlerts, totalPenaltiesAndMarketing]);
+
+  // ★ 合并服务端数据（优先，符合"服务器计算"设计原则）
+  // 当服务端数据可用时，用服务端值覆盖本地计算的概览数值
+  const displayOverview = useMemo(() => {
+    if (!serverCostSummary) return overviewStats;
+    return {
+      ...overviewStats,
+      totalRevenue: serverCostSummary.totalRevenue,
+      totalEstimatedCost: serverCostSummary.totalCost,
+      profit: serverCostSummary.profit,
+      profitMargin: serverCostSummary.profitMargin,
+      lossOrderCount: serverCostSummary.lossOrderCount,
+      penalties: serverCostSummary.penalties,
+      marketingFees: serverCostSummary.marketingFees,
+      totalRefundAmount: serverCostSummary.totalRefundAmount,
+      duplicateFees: serverCostSummary.duplicateFees,
+    };
+  }, [overviewStats, serverCostSummary]);
+
+  // ★ 服务端环比趋势（优先），fallback 到前端计算
+  const displayTrend = serverTrendData ? {
+    costChange: serverTrendData.changes.cost,
+    profitChange: serverTrendData.changes.profit,
+    revenueChange: serverTrendData.changes.revenue,
+    currentCost: serverTrendData.current.cost,
+    prevCost: serverTrendData.previous.cost,
+    currentProfit: serverTrendData.current.profit,
+    prevProfit: serverTrendData.previous.profit,
+    currentRevenue: serverTrendData.current.revenue,
+    prevRevenue: serverTrendData.previous.revenue,
+  } : costTrend;
 
   const exportSkuTemplate = () => {
     const headers = ['商品ID', 'SKU_ID', '商品名称', '规格', '商家编码', '当前成本(元/件)', '订单数', '件数'];
@@ -1238,48 +1367,6 @@ export default function CostManagementPage() {
     }
   };
 
-  // Tax handlers
-  const handleAddTax = () => {
-    if (!taxForm.name || !taxForm.rate) return;
-    addTaxConfig({
-      id: Date.now().toString(), name: taxForm.name, taxType: taxForm.taxType || 'vat',
-      rate: taxForm.rate || 0, base: taxForm.base || 'revenue', enabled: taxForm.enabled ?? true,
-      description: taxForm.description
-    });
-    setTaxForm({ name: '', taxType: 'vat', rate: 0, base: 'revenue', enabled: true, description: '' });
-    setShowTaxForm(false);
-  };
-
-  const applyTaxTemplate = (type: 'small' | 'general') => {
-    const existingNames = new Set((taxConfigs || []).map(t => t.name));
-    if (type === 'small') {
-      if (!existingNames.has('增值税(小规模)')) addTaxConfig({ id: Date.now().toString() + '1', name: '增值税(小规模)', taxType: 'vat', rate: 1, base: 'revenue', enabled: true });
-      if (!existingNames.has('附加税')) addTaxConfig({ id: Date.now().toString() + '2', name: '附加税', taxType: 'surcharge', rate: 6, base: 'vat', enabled: true });
-    } else {
-      if (!existingNames.has('增值税(一般纳税人)')) addTaxConfig({ id: Date.now().toString() + '1', name: '增值税(一般纳税人)', taxType: 'vat', rate: 6, base: 'revenue', enabled: true });
-      if (!existingNames.has('附加税')) addTaxConfig({ id: Date.now().toString() + '2', name: '附加税', taxType: 'surcharge', rate: 12, base: 'vat', enabled: true });
-      if (!existingNames.has('企业所得税')) addTaxConfig({ id: Date.now().toString() + '3', name: '企业所得税', taxType: 'income', rate: 25, base: 'profit', enabled: true });
-    }
-  };
-
-  const calculateTaxPreview = (revenue: number) => {
-    let vatAmount = 0;
-    // 估算利润：用配置的默认成本比例 + 履约费
-    const estimatedCost = revenue * ((defaultCostRatio ?? 30) / 100) + (packagingFeePerOrder || 0) + (shippingFeePerOrder || 0);
-    const estimatedProfit = Math.max(0, revenue - estimatedCost);
-    const results: { name: string; amount: number; rate: number; base: number }[] = [];
-    (taxConfigs || []).forEach(tax => {
-      if (!tax.enabled) return;
-      let base = revenue;
-      if (tax.base === 'vat') base = vatAmount;
-      if (tax.base === 'profit') base = estimatedProfit;
-      const amount = base * (tax.rate / 100);
-      if (tax.taxType === 'vat') vatAmount = amount;
-      results.push({ name: tax.name, amount, rate: tax.rate, base });
-    });
-    return results;
-  };
-
   // Deduction handlers
   const handleValidateFormula = () => {
     if (!deductionForm.formula) return;
@@ -1323,6 +1410,8 @@ export default function CostManagementPage() {
     const hasMultiplePrices = sku.prices.length > 1 && new Set(sku.prices.map(p => Math.round(p * 100) / 100)).size > 1;
     const costInfo = calculateTotalCost(sku);
     const isMissingCode = !sku.hasProductCode && !sku.hasSkuCode;
+    // ★ F7: 计算该SKU的订单与多SKU订单的重叠数
+    const multiSkuOverlap = [...(sku.uniqueOrderNos || [])].filter(no => multiSkuOrderNos.has(no)).length;
 
     return (
       <div key={skuKey} className={`p-4 border-b border-pdd-border last:border-0 transition-colors ${isSelected ? 'bg-pdd-danger/10' : 'hover:bg-pdd-bg/80'}`}>
@@ -1370,7 +1459,7 @@ export default function CostManagementPage() {
         </div>
 
         {costInfo && (
-          <div className="mt-3 ml-7 p-3 bg-pdd-card rounded-xl border border-pdd-border">
+          <div className="mt-3 ml-7 p-3 bg-pdd-card rounded-lg border border-pdd-border">
             <p className="text-xs font-semibold text-pdd-text mb-2">成本拆解</p>
             <div className="space-y-1 text-xs">
               <div className="flex items-center justify-between py-0.5">
@@ -1381,7 +1470,7 @@ export default function CostManagementPage() {
               </div>
               {packagingFeePerOrder > 0 && (
                 <div className="flex items-center justify-between py-0.5">
-                  <span className="text-pdd-text-secondary">包装费</span>
+                  <span className="text-pdd-text-secondary">包装费{multiSkuOverlap > 0 ? <span className="text-[10px] text-pdd-warning ml-1">⚠{multiSkuOverlap}单多SKU可能重复</span> : ''}</span>
                   <span className="font-mono text-pdd-text">
                     ¥{packagingFeePerOrder.toFixed(2)} × {sku.orderCount}单 = <b>¥{costInfo.totalPackaging.toFixed(2)}</b>
                   </span>
@@ -1389,7 +1478,7 @@ export default function CostManagementPage() {
               )}
               {laborFeePerOrder > 0 && (
                 <div className="flex items-center justify-between py-0.5">
-                  <span className="text-pdd-text-secondary">人工费</span>
+                  <span className="text-pdd-text-secondary">人工费{multiSkuOverlap > 0 ? <span className="text-[10px] text-pdd-warning ml-1">⚠{multiSkuOverlap}单多SKU可能重复</span> : ''}</span>
                   <span className="font-mono text-pdd-text">
                     ¥{laborFeePerOrder.toFixed(2)} × {sku.orderCount}单 = <b>¥{costInfo.totalLabor.toFixed(2)}</b>
                   </span>
@@ -1397,7 +1486,7 @@ export default function CostManagementPage() {
               )}
               {shippingFeePerOrder > 0 && (
                 <div className="flex items-center justify-between py-0.5">
-                  <span className="text-pdd-text-secondary">快递费</span>
+                  <span className="text-pdd-text-secondary">快递费{multiSkuOverlap > 0 ? <span className="text-[10px] text-pdd-warning ml-1">⚠{multiSkuOverlap}单多SKU可能重复</span> : ''}</span>
                   <span className="font-mono text-pdd-text">
                     {sku.actualShippingCost > 0 ? (
                       <span>实际邮费 <b>¥{costInfo.totalShipping.toFixed(2)}</b> ({costInfo.shippingOrderCount}单有快递)</span>
@@ -1492,7 +1581,7 @@ export default function CostManagementPage() {
         )}
 
         {isPriceExpanded && hasMultiplePrices && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="mt-3 ml-7 p-3 bg-pdd-bg rounded-xl border border-pdd-border">
+          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="mt-3 ml-7 p-3 bg-pdd-bg rounded-lg border border-pdd-border">
             <p className="text-xs font-semibold text-pdd-text mb-2">价格分布 (共{sku.prices.length}单)</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-32 overflow-y-auto">
               {priceDist.map(([price, count]) => (
@@ -1508,27 +1597,184 @@ export default function CostManagementPage() {
     );
   };
 
-  const taxPreview = calculateTaxPreview(1000);
   const fmt = (v: number) => v >= 10000 ? `¥${(v / 10000).toFixed(1)}万` : `¥${v.toFixed(0)}`;
 
   // ========== Tab: 成本概览 ==========
-  const renderOverview = () => (
+  const renderOverview = () => {
+    // F8: 待办清单 — 计算有多少待处理事项
+    const todoItems: { label: string; severity: 'danger' | 'warning' | 'info'; action: () => void }[] = [];
+    if (overviewStats.skusWithoutCost > 0) {
+      todoItems.push({
+        label: `${overviewStats.skusWithoutCost} 个 SKU 未填写裸货成本，影响成本核算精度`,
+        severity: 'danger',
+        action: () => setActiveTab('costs'),
+      });
+    }
+    if (overviewStats.productsWithoutCode > 0) {
+      todoItems.push({
+        label: `${overviewStats.productsWithoutCode} 个商品缺商家编码，无法与财务记录精确匹配`,
+        severity: 'warning',
+        action: () => setActiveTab('costs'),
+      });
+    }
+    if (displayOverview.lossOrderCount > 0) {
+      todoItems.push({
+        label: `${displayOverview.lossOrderCount} 笔订单亏损（实收 < 成本），建议核查`,
+        severity: 'danger',
+        action: () => setActiveTab('alerts'),
+      });
+    }
+    const hasNoFeeSettings = !packagingFeePerOrder && !(shippingFeePerOrder || 0) && !(laborFeePerOrder || 0) && !(insuranceFeePerOrder || 0) && !(promotionFeePerOrder || 0) && !platformCommissionRate;
+    if (hasNoFeeSettings && orders.length > 0) {
+      todoItems.push({
+        label: '未设置任何费用参数（包装/快递/人工等），成本计算结果不完整',
+        severity: 'warning',
+        action: () => setShowQuickSettings(true),
+      });
+    }
+
+    return (
     <motion.div key="overview" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+      {/* F8: 待办清单 */}
+      {todoItems.length > 0 && (
+        <div className="space-y-1.5">
+          {todoItems.map((item, i) => (
+            <motion.div key={i} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
+              className={`flex items-center gap-2 px-3.5 py-2.5 rounded-lg border cursor-pointer transition-all hover:shadow-sm ${
+                item.severity === 'danger' ? 'bg-red-50 border-red-200' :
+                item.severity === 'warning' ? 'bg-amber-50 border-amber-200' :
+                'bg-blue-50 border-blue-200'
+              }`}
+              onClick={item.action}>
+              <div className={`w-2 h-2 rounded-full shrink-0 ${
+                item.severity === 'danger' ? 'bg-red-500' :
+                item.severity === 'warning' ? 'bg-amber-500' : 'bg-blue-500'
+              }`} />
+              <span className={`text-xs ${
+                item.severity === 'danger' ? 'text-red-700' :
+                item.severity === 'warning' ? 'text-amber-700' : 'text-blue-700'
+              }`}>{item.label}</span>
+              <span className="text-xs ml-auto opacity-60 hover:opacity-100">→</span>
+            </motion.div>
+          ))}
+        </div>
+      )}
+
+      {/* ★ F13: 配置状态条（当前费用一目了然） */}
+      <div className="flex items-center gap-2 px-3.5 py-2 bg-pdd-card border border-pdd-border rounded-lg text-[11px] text-pdd-text-secondary flex-wrap">
+        <span className="font-medium text-pdd-text">当前配置：</span>
+        {packagingFeePerOrder > 0 && <span className="bg-pdd-bg px-2 py-0.5 rounded">包装¥{packagingFeePerOrder.toFixed(1)}</span>}
+        {(laborFeePerOrder || 0) > 0 && <span className="bg-pdd-bg px-2 py-0.5 rounded">人工¥{(laborFeePerOrder || 0).toFixed(1)}</span>}
+        {(shippingFeePerOrder || 0) > 0 && <span className="bg-pdd-bg px-2 py-0.5 rounded">快递¥{(shippingFeePerOrder || 0).toFixed(1)}</span>}
+        {(insuranceFeePerOrder || 0) > 0 && <span className="bg-pdd-bg px-2 py-0.5 rounded">运费险¥{(insuranceFeePerOrder || 0).toFixed(1)}</span>}
+        {(promotionFeePerOrder || 0) > 0 && <span className="bg-pdd-bg px-2 py-0.5 rounded">推广¥{(promotionFeePerOrder || 0).toFixed(1)}</span>}
+        {defaultCostRatio > 0 && <span className="bg-pdd-bg px-2 py-0.5 rounded">成本比{defaultCostRatio}%</span>}
+        {platformCommissionRate > 0 && <span className="bg-pdd-bg px-2 py-0.5 rounded">扣点{platformCommissionRate}%</span>}
+        <button onClick={() => setShowQuickSettings(true)} className="ml-auto text-pdd-primary-light hover:underline flex items-center gap-0.5">
+          <Settings size={12} />修改
+        </button>
+      </div>
+
+      {/* ★ F5: 收入/利润/成本仪表盘 */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: '商品总数', value: overviewStats.totalProducts, sub: `${overviewStats.productsWithCode} 个有编码`, icon: Package, color: 'var(--pdd-primary)', bg: 'rgba(59,130,246,0.1)' },
-          { label: '成本覆盖率', value: `${overviewStats.costCoverage.toFixed(0)}%`, sub: `${overviewStats.skusWithCost}/${overviewStats.totalSkus} SKU`, icon: Percent, color: 'var(--pdd-success)', bg: 'rgba(34,197,94,0.1)' },
-          { label: '总预估成本', value: fmt(overviewStats.totalEstimatedCost), sub: '基于已填成本计算', icon: DollarSign, color: 'var(--pdd-warning)', bg: 'rgba(245,158,11,0.1)' },
-          { label: '平均单品成本', value: overviewStats.avgUnitCost > 0 ? `¥${overviewStats.avgUnitCost.toFixed(2)}` : '--', sub: '已填成本SKU均值', icon: TrendingUp, color: '#722ed1', bg: 'rgba(114,46,209,0.1)' },
-        ].map((item, i) => (
-          <motion.div key={item.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}
-            className="pdd-card px-4 py-3 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ backgroundColor: item.bg }}>
-              <item.icon size={18} style={{ color: item.color }} />
+          { label: '总收入', value: fmt(displayOverview.totalRevenue), sub: `${displayOverview.totalSkus} SKU`, icon: TrendingUp, color: 'text-green-600'
+          },
+          { label: '总成本（实际）', value: fmt(displayOverview.totalEstimatedCost), sub: `含罚款¥${(displayOverview.penalties || 0).toFixed(0)}·营销¥${(displayOverview.marketingFees || 0).toFixed(0)}`, icon: DollarSign, color: 'text-red-500'
+          },
+          { label: '估算利润', value: fmt(displayOverview.profit), sub: `${displayOverview.profitMargin >= 0 ? '+' : ''}${displayOverview.profitMargin.toFixed(1)}% 利润率`, icon: TrendingUp,
+            color: displayOverview.profit >= 0 ? 'text-green-600' : 'text-red-600'
+          },
+          { label: '亏损订单', value: displayOverview.lossOrderCount, sub: displayOverview.lossOrderCount > 0 ? '建议查看' : '无', icon: AlertTriangle,
+            color: displayOverview.lossOrderCount > 0 ? 'text-red-500' : 'text-gray-400'
+          },
+        ].map((item, i) => {
+          // ★ F10: 趋势箭头
+          let trendEl: React.ReactNode = null;
+          if (displayTrend && (item.label === '总收入' || item.label === '总成本（实际）' || item.label === '估算利润')) {
+            const pct = item.label === '总收入' ? displayTrend.revenueChange
+              : item.label === '总成本（实际）' ? displayTrend.costChange
+              : displayTrend.profitChange;
+            const isUp = pct > 0;
+            const isBad = item.label === '总成本（实际）' ? isUp : !isUp;
+            trendEl = (
+              <span className={`inline-flex items-center gap-0.5 text-[10px] ml-1 ${isUp ? 'text-red-500' : 'text-green-500'}`}>
+                {isUp ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
+                {Math.abs(pct).toFixed(1)}%
+              </span>
+            );
+          }
+          return (
+            <motion.div key={item.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}
+              className="pdd-card px-4 py-3 flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-pdd-gray-100">
+                <item.icon size={18} className={item.color} />
+              </div>
+              <div>
+                <div className="text-[11px] font-medium text-pdd-text-secondary/80">{item.label}{trendEl}</div>
+                <div className={`text-xl font-semibold tracking-tight ${item.color}`}>{item.value}</div>
+                <div className="text-[10px] text-pdd-text-secondary">{item.sub}</div>
+              </div>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* ★ F12: 净利润（扣除退款损失）— 优先服务端数据 */}
+      {(serverCostSummary?.totalRefundAmount ?? totalRefundAmount) > 0 && (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="pdd-card px-4 py-3 flex items-center gap-3 border-2 border-green-100">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-green-50">
+              <TrendingUp size={18} className="text-green-600" />
             </div>
             <div>
-              <div className="text-[11px] text-pdd-text-secondary">{item.label}</div>
-              <div className="text-base font-bold text-pdd-text">{item.value}</div>
+              <div className="text-[11px] font-medium text-pdd-text-secondary/80">净利润（扣除退款）</div>
+              <div className={`text-xl font-semibold tracking-tight ${(displayOverview.profit - (serverCostSummary?.totalRefundAmount ?? totalRefundAmount)) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                {fmt(displayOverview.profit - (serverCostSummary?.totalRefundAmount ?? totalRefundAmount))}
+              </div>
+              <div className="text-[10px] text-pdd-text-secondary">
+                利润¥{displayOverview.profit.toFixed(0)} - 退款¥{(serverCostSummary?.totalRefundAmount ?? totalRefundAmount).toFixed(0)}
+                {displayOverview.profit > 0 && (serverCostSummary?.totalRefundAmount ?? totalRefundAmount) / displayOverview.profit > 0.1 && (
+                  <span className="text-red-500 ml-1">⚠退款侵蚀{((serverCostSummary?.totalRefundAmount ?? totalRefundAmount) / displayOverview.profit * 100).toFixed(0)}%利润</span>
+                )}
+              </div>
+            </div>
+          </div>
+          {/* ★ F11: 多SKU重复扣费预警 — 优先服务端数据 */}
+          {(serverCostSummary?.duplicateFees ?? totalDuplicateFees) > 0 && (
+            <div className="pdd-card px-4 py-3 flex items-center gap-3 border-2 border-amber-100">
+              <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-amber-50">
+                <AlertTriangle size={18} className="text-amber-600" />
+              </div>
+              <div>
+                <div className="text-[11px] font-medium text-pdd-text-secondary/80">多SKU订单重复扣费</div>
+                <div className="text-xl font-semibold tracking-tight text-amber-600">¥{(serverCostSummary?.duplicateFees ?? totalDuplicateFees).toFixed(0)}</div>
+                <div className="text-[10px] text-pdd-text-secondary">
+                  因多SKU合并按单计费可能多扣
+                  <button onClick={() => setActiveTab('alerts')} className="text-pdd-primary-light hover:underline ml-1">查看详情→</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 成本构成占比（简版饼图） */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { label: '商品总数', value: overviewStats.totalProducts, sub: `${overviewStats.productsWithCode} 个有编码`, icon: Package },
+          { label: '成本覆盖率', value: `${overviewStats.costCoverage.toFixed(0)}%`, sub: `${overviewStats.skusWithCost}/${overviewStats.totalSkus} SKU`, icon: Percent },
+          { label: '平均单品成本', value: overviewStats.avgUnitCost > 0 ? `¥${overviewStats.avgUnitCost.toFixed(2)}` : '--', sub: '已填成本SKU均值', icon: TrendingUp },
+          { label: '成本占收入比', value: displayOverview.totalRevenue > 0 ? `${(displayOverview.totalEstimatedCost / displayOverview.totalRevenue * 100).toFixed(0)}%` : '--', sub: `收入 ¥${displayOverview.totalRevenue.toFixed(0)}`, icon: Percent },
+        ].map((item, i) => (
+          <motion.div key={item.label} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + i * 0.06 }}
+            className="pdd-card px-4 py-3 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 bg-pdd-gray-100">
+              <item.icon size={18} className="text-pdd-text-secondary" />
+            </div>
+            <div>
+              <div className="text-[11px] font-medium text-pdd-text-secondary/80">{item.label}</div>
+              <div className="text-xl font-semibold text-pdd-text tracking-tight">{item.value}</div>
               <div className="text-[10px] text-pdd-text-secondary">{item.sub}</div>
             </div>
           </motion.div>
@@ -1537,16 +1783,16 @@ export default function CostManagementPage() {
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: '管理商品成本', desc: '查看/编辑SKU裸货成本，批量导入', icon: Package, tab: 'costs', color: 'var(--pdd-primary)', bg: 'rgba(59,130,246,0.06)' },
-          { label: '新品定价计算', desc: '输入成本因子，自动计算建议售价', icon: Calculator, tab: 'pricing', color: 'var(--pdd-success)', bg: 'rgba(34,197,94,0.06)' },
-          { label: '税务配置', desc: '增值税/所得税/附加税设置', icon: Shield, tab: 'tax', color: 'var(--pdd-warning)', bg: 'rgba(245,158,11,0.06)' },
-          { label: '自定义扣费', desc: '公式引擎，灵活定义扣费规则', icon: CalcIcon, tab: 'deductions', color: '#722ed1', bg: 'rgba(114,46,209,0.06)' },
+          { label: '管理商品成本', desc: '查看/编辑SKU裸货成本，批量导入', icon: Package, tab: 'costs' },
+          { label: '快递配置', desc: '设置快递公司单价，分析运费效益', icon: Truck, tab: 'shipping' },
+          { label: '自定义扣费', desc: '公式引擎，灵活定义扣费规则', icon: CalcIcon, tab: 'deductions' },
+          { label: '成本预警', desc: '异常订单检测与处理', icon: AlertTriangle, tab: 'alerts' },
         ].map((card, i) => (
           <motion.div key={card.tab} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 + i * 0.05 }}
             onClick={() => setActiveTab(card.tab)}
             className="pdd-card p-4 cursor-pointer hover:border-pdd-primary-light transition-all group">
             <div className="flex items-center gap-2 mb-2">
-              <card.icon size={16} style={{ color: card.color }} />
+              <card.icon size={16} className="text-pdd-text-secondary" />
               <span className="text-sm font-semibold text-pdd-text">{card.label}</span>
             </div>
             <p className="text-xs text-pdd-text-secondary">{card.desc}</p>
@@ -1557,7 +1803,7 @@ export default function CostManagementPage() {
 
       {(costHistory || []).length > 0 && (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.35 }} className="pdd-card p-3">
-          <h4 className="text-sm font-semibold mb-2 flex items-center gap-2"><History size={14} className="text-pdd-text-secondary" />最近修改</h4>
+          <h4 className="text-xs font-bold text-gray-700 flex items-center gap-1.5 mb-2"><History size={14} className="text-pdd-text-secondary" />最近修改</h4>
           <div className="space-y-1">
             {(costHistory || []).slice(0, 5).map((record, idx) => (
               <div key={idx} className="flex items-center gap-3 py-1.5 border-b border-pdd-border last:border-0 text-xs">
@@ -1572,8 +1818,9 @@ export default function CostManagementPage() {
       )}
     </motion.div>
   );
+};
 
-  // ========== Tab: 商品成本（合并 missing + costs）==========
+// ========== Tab: 商品成本（合并 missing + costs）==========
   const renderCosts = () => (
     <motion.div key="costs" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
       {productGroups.length === 0 ? (
@@ -1726,6 +1973,29 @@ export default function CostManagementPage() {
                 </button>
               </div>
             )}
+            {/* ★ F6: 批量操作确认弹窗 */}
+            {batchConfirm && (
+              <div className="mb-3 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-center gap-3">
+                <AlertTriangle size={16} className="text-amber-600 shrink-0" />
+                <div className="flex-1">
+                  <p className="text-sm font-medium text-amber-800">确认批量操作</p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    即将为 <b>{batchConfirm.count}</b> 个 SKU 设置成本为 <b>¥{batchConfirm.cost.toFixed(2)}</b>/件。
+                    {batchConfirm.count > 0 && (
+                      <span className="block mt-0.5">覆盖前旧值：共 {selectedItems.size} 项将被新值取代，此操作不可撤销。</span>
+                    )}
+                  </p>
+                </div>
+                <button onClick={executeBatchCost}
+                  className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 transition-colors">
+                  确认执行
+                </button>
+                <button onClick={() => setBatchConfirm(null)}
+                  className="px-3 py-1.5 border border-amber-300 rounded-lg text-xs text-amber-700 hover:bg-amber-100 transition-colors">
+                  取消
+                </button>
+              </div>
+            )}
             {/* 全选快捷操作（始终显示） */}
             <div className="flex items-center gap-2 mb-3 text-xs text-pdd-text-secondary">
               <button onClick={() => {
@@ -1791,8 +2061,7 @@ export default function CostManagementPage() {
 
                 return (
                   <div key={group.productId} className="border border-pdd-border rounded-lg overflow-hidden">
-                    <div className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-pdd-bg transition-colors ${isExpanded ? 'bg-pdd-bg' : ''}`}
-                      onClick={() => hasMultipleSku && toggleProductExpand(group.productId)}>
+                    <div className={`flex items-center gap-3 px-3 py-2.5 ${!hasMultipleSku ? '' : ''}`}>
                       <input type="checkbox"
                         checked={hasMultipleSku
                           ? group.skus.every(s => selectedItems.has(s.skuId ? `${s.productId}_${s.skuId}` : s.productId))
@@ -1823,7 +2092,7 @@ export default function CostManagementPage() {
                           商品ID: {group.productId}{hasMultipleSku ? ` · ${group.skus.length}个SKU` : ''} · {group.totalOrders}单/{group.totalItems}件
                         </p>
                       </div>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         {firstSku.skuCode && <span className="text-[10px] text-pdd-success bg-pdd-success/10 px-2 py-0.5 rounded font-mono">{firstSku.skuCode}</span>}
                         {firstSku.productCode && !firstSku.skuCode && <span className="text-[10px] text-pdd-text-secondary bg-pdd-bg px-2 py-0.5 rounded font-mono">{firstSku.productCode}</span>}
                         <span className="text-sm text-pdd-text shrink-0">{formatPriceRange(group.minPrice, group.maxPrice)}</span>
@@ -1833,9 +2102,6 @@ export default function CostManagementPage() {
                           </button>
                         )}
                       </div>
-                      {hasMultipleSku && (
-                        isExpanded ? <ChevronUp size={16} className="text-pdd-text-secondary shrink-0" /> : <ChevronDown size={16} className="text-pdd-text-secondary shrink-0" />
-                      )}
                       {!hasMultipleSku && (
                         <>
                           <input type="number" placeholder="裸货成本" className="w-28 px-2 py-1.5 border border-pdd-border rounded-lg text-sm shrink-0"
@@ -1846,11 +2112,29 @@ export default function CostManagementPage() {
                         </>
                       )}
                     </div>
-                    {hasMultipleSku && isExpanded && (
-                      <div className="border-t border-pdd-border bg-pdd-card">
-                        {group.skus.map(sku => renderSkuRow(sku, false))}
+                    {/* 多SKU → 规格压缩编辑器 */}
+                    {hasMultipleSku && (
+                      <div className="border-t border-pdd-border">
+                        <SpecGroupCostEditor
+                          productId={group.productId}
+                          productName={group.productName}
+                          skus={group.skus.map(s => ({
+                            skuKey: s.skuId ? `${s.productId}_${s.skuId}` : s.productId,
+                            skuName: s.skuName,
+                            skuCode: s.skuCode || s.productCode || '',
+                            prices: s.prices,
+                            orderCount: s.orderCount,
+                            itemCount: s.itemCount,
+                            uniqueOrderNos: s.uniqueOrderNos,
+                          }))}
+                          productCosts={productCosts}
+                          setProductCost={handleCostChange}
+                          isMissingCode={isMissingCode}
+                          allSkusHaveCost={allSkusHaveCost}
+                        />
                       </div>
                     )}
+                    {/* 单SKU价格分布 */}
                     {!hasMultipleSku && expandedPrices.has(skuKey) && hasMultiplePrices && (
                       <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="border-t border-pdd-border p-3 bg-pdd-bg">
                         <p className="text-xs font-medium mb-2">价格分布 (共{firstSku.prices.length}单):</p>
@@ -1905,289 +2189,307 @@ export default function CostManagementPage() {
     </motion.div>
   );
 
-  // ========== Tab: 定价计算器（增强版）==========
-  const renderPricing = () => (
-    <motion.div key="pricing" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="pdd-card p-4">
-          <h3 className="font-semibold text-sm mb-4 flex items-center gap-2"><Calculator size={16} className="text-pdd-primary" />成本因子</h3>
-          <div className="bg-pdd-bg rounded-lg p-3 mb-4">
-            <p className="text-xs text-pdd-text-secondary">公式: <span className="font-mono text-pdd-text">建议售价 = 总成本 / (1 - 佣金率 - 目标利润率)</span></p>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-pdd-text-secondary">商品名称</label>
-              <input className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={pricingForm.name}
-                onChange={e => setPricingForm(f => ({ ...f, name: e.target.value }))} placeholder="选填" />
-            </div>
-            <div>
-              <label className="text-xs text-pdd-text-secondary">商家编码 <span className="text-pdd-danger">*</span></label>
-              <input className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={pricingForm.code}
-                onChange={e => setPricingForm(f => ({ ...f, code: e.target.value }))} placeholder="必填" />
-            </div>
-            <div>
-              <label className="text-xs text-pdd-text-secondary">裸货成本(元)</label>
-              <input type="number" className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={pricingForm.rawCost || ''}
-                onChange={e => setPricingForm(f => ({ ...f, rawCost: parseFloat(e.target.value) || 0 }))} placeholder="0" />
-            </div>
-            <div>
-              <label className="text-xs text-pdd-text-secondary">运费(元)</label>
-              <input type="number" className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={pricingForm.shipping || ''}
-                onChange={e => setPricingForm(f => ({ ...f, shipping: parseFloat(e.target.value) || 0 }))} placeholder="0" />
-            </div>
-            <div>
-              <label className="text-xs text-pdd-text-secondary">推广费(元)</label>
-              <input type="number" className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={pricingForm.promotion || ''}
-                onChange={e => setPricingForm(f => ({ ...f, promotion: parseFloat(e.target.value) || 0 }))} placeholder="0" />
-            </div>
-            <div>
-              <label className="text-xs text-pdd-text-secondary">包装费(元)</label>
-              <input type="number" className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={pricingForm.packagingFee || ''}
-                onChange={e => setPricingForm(f => ({ ...f, packagingFee: parseFloat(e.target.value) || 0 }))} placeholder="0" />
-            </div>
-            <div>
-              <label className="text-xs text-pdd-text-secondary">平台佣金率(%)</label>
-              <input type="number" className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={pricingForm.platformCommissionRate || ''}
-                onChange={e => setPricingForm(f => ({ ...f, platformCommissionRate: parseFloat(e.target.value) || 0 }))} placeholder="0" />
-            </div>
-            <div>
-              <label className="text-xs text-pdd-text-secondary">其他杂费(元)</label>
-              <input type="number" className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={pricingForm.miscFees || ''}
-                onChange={e => setPricingForm(f => ({ ...f, miscFees: parseFloat(e.target.value) || 0 }))} placeholder="0" />
-            </div>
-            <div className="col-span-2">
-              <label className="text-xs text-pdd-text-secondary">目标利润率(%)</label>
-              <input type="number" className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={pricingForm.profitRate || ''}
-                onChange={e => setPricingForm(f => ({ ...f, profitRate: parseFloat(e.target.value) || 0 }))} placeholder="30" />
-            </div>
-          </div>
-          <button onClick={handleSavePricing}
-            className="mt-4 w-full flex items-center justify-center gap-2 px-4 py-2 bg-pdd-primary text-white rounded-lg text-sm hover:opacity-90 transition-opacity font-medium">
-            <Save size={14} />保存预设
-          </button>
-          {savedMsg && <p className="text-pdd-success text-sm mt-2 text-center">{savedMsg}</p>}
-        </div>
+  // ========== Tab: 快递配置（新增）==========
+  const [newCourierName, setNewCourierName] = useState('');
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [shippingSearch, setShippingSearch] = useState('');
 
+  const [courierRates, setCourierRates] = useState<Record<string, number>>(() => {
+    try { return JSON.parse(localStorage.getItem('dianfx_courier_rates') || '{}'); }
+    catch { return {}; }
+  });
+  const [newCourierRate, setNewCourierRate] = useState('5');
+
+  const saveCourierRate = (name: string, rate: number) => {
+    const updated = { ...courierRates, [name]: rate };
+    setCourierRates(updated);
+    localStorage.setItem('dianfx_courier_rates', JSON.stringify(updated));
+  };
+
+  const getRate = (name: string) => courierRates[name] || shippingFeePerOrder || 0;
+
+  const courierData = useMemo(() => {
+    const map = new Map<string, { count: number; totalCost: number; orders: any[] }>();
+    orders.forEach((o: any) => {
+      const trackingNo = String(findField(o, '快递单号') || '').trim();
+      if (!trackingNo) return;
+      const courier = String(findField(o, '快递公司') || '').trim() || '其他';
+      const postage = parseFloat(String(findField(o, '邮费(元)', '邮费', '快递费', '运费') || '0')) || 0;
+      if (!map.has(courier)) map.set(courier, { count: 0, totalCost: 0, orders: [] });
+      const entry = map.get(courier)!;
+      entry.count++;
+      entry.totalCost += postage;
+      entry.orders.push(o);
+    });
+    const sorted = Array.from(map.entries()).sort((a, b) => b[1].count - a[1].count);
+    const totalShipped = sorted.reduce((s, [_, v]) => s + v.count, 0);
+    const totalShippingCost = sorted.reduce((s, [_, v]) => s + v.totalCost, 0);
+    return { couriers: sorted, totalShipped, totalShippingCost, avgCost: totalShipped > 0 ? totalShippingCost / totalShipped : 0 };
+  }, [orders]);
+
+  const shippingDetails = useMemo(() => {
+    const details: { orderNo: string; courier: string; trackingNo: string; rate: number; cost: number }[] = [];
+    courierData.couriers.forEach(([name, data]) => {
+      data.orders.forEach((o: any) => {
+        const orderNo = String(findField(o, '订单号') || '').trim();
+        const trackingNo = String(findField(o, '快递单号') || '').trim();
+        const postage = parseFloat(String(findField(o, '邮费(元)', '邮费', '快递费', '运费') || '0')) || 0;
+        details.push({
+          orderNo, courier: name, trackingNo,
+          rate: getRate(name),
+          cost: postage || getRate(name),
+        });
+      });
+    });
+    if (shippingSearch) {
+      const q = shippingSearch.toLowerCase();
+      return details.filter(d => d.orderNo.toLowerCase().includes(q) || d.trackingNo.toLowerCase().includes(q));
+    }
+    return details;
+  }, [courierData, courierRates, shippingFeePerOrder, shippingSearch]);
+
+  const benefitAnalysis = useMemo(() => {
+    if (courierData.couriers.length === 0) return null;
+    const rates = Object.values(courierRates).filter(r => r > 0);
+    const minRate = rates.length > 0 ? Math.min(...rates) : 0;
+    const currentTotal = courierData.totalShippingCost;
+    let ifUseCheapest = 0;
+    courierData.couriers.forEach(([name, data]) => {
+      ifUseCheapest += data.count * (minRate || shippingFeePerOrder || 5);
+    });
+    const savings = currentTotal - ifUseCheapest;
+    const refundedShippedOrders = orders.filter((o: any) => {
+      const orderNo = String(findField(o, '订单号') || '').trim();
+      const hasTracking = String(findField(o, '快递单号') || '').trim();
+      const afterSaleStatus = String(findField(o, '售后状态') || '').trim();
+      return hasTracking && afterSaleStatus.includes('退款');
+    });
+    const returnShippingCost = refundedShippedOrders.reduce((s: number, o: any) => {
+      return s + (parseFloat(String(findField(o, '邮费(元)', '邮费', '快递费', '运费') || '0')) || 0);
+    }, 0);
+    return { currentTotal, minRate, ifUseCheapest, savings, returnShippingCost, returnCount: refundedShippedOrders.length };
+  }, [courierData, courierRates, shippingFeePerOrder, orders]);
+
+  const renderShipping = () => {
+    const addCourier = () => {
+      if (!newCourierName.trim()) return;
+      saveCourierRate(newCourierName.trim(), parseFloat(newCourierRate) || 5);
+      setNewCourierName('');
+      setNewCourierRate('5');
+      setShowAddForm(false);
+    };
+
+    // 获取未匹配的快递公司（在订单中存在但未配置）
+    const unmatchedCouriers = courierData.couriers.filter(([name]) => !courierRates[name] && name !== '其他');
+
+    return (
+      <motion.div key="shipping" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+        {/* 快递公司单价配置 */}
         <div className="pdd-card p-4">
-          <h3 className="font-semibold text-sm mb-4 flex items-center gap-2"><TrendingUp size={16} className="text-pdd-success" />计算结果</h3>
-          {pricingError ? (
-            <div className="h-64 flex items-center justify-center text-sm text-pdd-danger">
-              {pricingError}
-            </div>
-          ) : suggestedPrice > 0 ? (
-            <div className="space-y-4">
-              <div className="bg-gradient-to-br from-pdd-primary/10 to-pdd-success/10 rounded-xl p-5 text-center">
-                <p className="text-xs text-pdd-text-secondary mb-1">建议售价</p>
-                <p className="text-3xl font-bold text-pdd-primary">¥{suggestedPrice.toFixed(2)}</p>
-              </div>
-              <div className="space-y-2">
-                {[
-                  { label: '成本合计', value: totalPricingCosts, color: 'var(--pdd-text)' },
-                  { label: '平台佣金', value: suggestedPrice * commissionRate, color: 'var(--pdd-warning)' },
-                  { label: '毛利润', value: estimatedProfit, color: estimatedProfit > 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' },
-                ].map(row => (
-                  <div key={row.label} className="flex items-center justify-between py-1.5 border-b border-pdd-border last:border-0">
-                    <span className="text-xs text-pdd-text-secondary">{row.label}</span>
-                    <span className="text-sm font-semibold" style={{ color: row.color }}>¥{row.value.toFixed(2)}</span>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold text-sm flex items-center gap-2"><Truck size={16} className="text-pdd-primary" />快递公司单价配置</h3>
+            <button onClick={() => setShowAddForm(!showAddForm)}
+              className="flex items-center gap-1 px-3 py-1.5 bg-pdd-primary text-white rounded-lg text-xs hover:opacity-90 transition-opacity">
+              <Plus size={14} /> 新增快递公司
+            </button>
+          </div>
+          <p className="text-xs text-pdd-text-secondary mb-4">
+            设置在各个快递公司的发货单价，系统自动按订单匹配计算快递费。<br />
+            有快递单号 → 按快递公司匹配单价 → 计算快递费；无快递单号 → 未发货，不计快递费。
+          </p>
+
+          {/* 新增快递公司表单 */}
+          <AnimatePresence>
+            {showAddForm && (
+              <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
+                className="mb-4 p-3 bg-pdd-bg rounded-lg border border-pdd-border">
+                <div className="flex items-center gap-3">
+                  <input type="text" placeholder="快递公司名称" className="flex-1 px-3 py-1.5 border border-pdd-border rounded-lg text-sm"
+                    value={newCourierName} onChange={e => setNewCourierName(e.target.value)} />
+                  <input type="number" step="0.1" placeholder="单价(元)" className="w-24 px-3 py-1.5 border border-pdd-border rounded-lg text-sm"
+                    value={newCourierRate} onChange={e => setNewCourierRate(e.target.value)} />
+                  <button onClick={addCourier} className="px-3 py-1.5 bg-pdd-primary text-white rounded-lg text-sm">添加</button>
+                  <button onClick={() => setShowAddForm(false)} className="px-3 py-1.5 border border-pdd-border rounded-lg text-sm">取消</button>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-pdd-border text-xs text-pdd-text-secondary">
+                  <th className="py-2 text-left font-medium w-8">#</th>
+                  <th className="py-2 text-left font-medium">快递公司</th>
+                  <th className="py-2 text-right font-medium">发货单数</th>
+                  <th className="py-2 text-right font-medium">当前单价(元)</th>
+                  <th className="py-2 text-right font-medium">总费用(元)</th>
+                  <th className="py-2 text-right font-medium">状态</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-pdd-border">
+                {courierData.couriers.map(([name, data], idx) => {
+                  const rate = getRate(name);
+                  const totalByRate = data.count * rate;
+                  return (
+                    <tr key={name} className="hover:bg-pdd-bg/50 transition-colors">
+                      <td className="py-2.5 text-pdd-text-secondary">{idx + 1}</td>
+                      <td className="py-2.5 font-medium text-pdd-text">
+                        <span className="flex items-center gap-1.5">
+                          <Truck size={14} className="text-pdd-text-secondary" />
+                          {name}
+                        </span>
+                      </td>
+                      <td className="py-2.5 text-right font-mono text-pdd-text">{data.count}单</td>
+                      <td className="py-2.5 text-right">
+                        <input type="number" step="0.1" className="w-20 px-2 py-1 border border-pdd-border rounded-lg text-sm text-right font-mono"
+                          value={rate}
+                          onChange={e => saveCourierRate(name, parseFloat(e.target.value) || 0)}
+                          onFocus={e => e.target.select()} />
+                      </td>
+                      <td className="py-2.5 text-right font-mono text-pdd-text">¥{totalByRate.toFixed(2)}</td>
+                      <td className="py-2.5 text-right">
+                        {courierRates[name] ? (
+                          <span className="text-[11px] text-pdd-success bg-pdd-success/10 px-2 py-0.5 rounded-full">✅已配置</span>
+                        ) : (
+                          <span className="text-[11px] text-pdd-primary bg-pdd-primary/10 px-2 py-0.5 rounded-full">🔵默认</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr className="border-t-2 border-pdd-border font-semibold">
+                  <td colSpan={2} className="py-2.5 text-pdd-text">合计</td>
+                  <td className="py-2.5 text-right font-mono text-pdd-text">{courierData.totalShipped}单</td>
+                  <td className="py-2.5 text-right font-mono text-pdd-text">¥{courierData.avgCost.toFixed(2)}/单</td>
+                  <td className="py-2.5 text-right font-mono text-pdd-primary">¥{courierData.totalShippingCost.toFixed(2)}</td>
+                  <td></td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          {/* 未匹配的快递公司 */}
+          {unmatchedCouriers.length > 0 && (
+            <div className="mt-3 p-3 bg-pdd-warning/10 border border-pdd-warning/20 rounded-lg">
+              <p className="text-xs font-medium text-pdd-warning mb-1">⚠️ 以下快递公司未找到匹配，使用了默认价 ¥{(shippingFeePerOrder || 5).toFixed(2)}/单</p>
+              <div className="space-y-0.5">
+                {unmatchedCouriers.map(([name, data]) => (
+                  <div key={name} className="flex items-center gap-2 text-xs text-pdd-text-secondary">
+                    <span>× {name} {data.count}单</span>
+                    <button onClick={() => { saveCourierRate(name, parseFloat(newCourierRate) || 5); }}
+                      className="text-pdd-primary-light hover:underline">立即配置</button>
                   </div>
                 ))}
               </div>
-              {/* Cost structure mini pie */}
-              <div className="h-36">
-                <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie data={[
-                      { name: '裸货成本', value: pricingForm.rawCost },
-                      { name: '运费', value: pricingForm.shipping },
-                      { name: '推广费', value: pricingForm.promotion },
-                      { name: '包装费', value: pricingForm.packagingFee },
-                      { name: '佣金', value: suggestedPrice * commissionRate },
-                      { name: '其他', value: pricingForm.miscFees },
-                    ].filter(d => d.value > 0)} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={55} innerRadius={35}>
-                      <Cell fill="var(--pdd-danger)" />
-                      <Cell fill="var(--pdd-primary)" />
-                      <Cell fill="var(--pdd-warning)" />
-                      <Cell fill="var(--pdd-success)" />
-                      <Cell fill="#722ed1" />
-                      <Cell fill="var(--pdd-text)" />
-                    </Pie>
-                    <Tooltip formatter={(v: number) => `¥${v.toFixed(2)}`} />
-                  </PieChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          ) : (
-            <div className="h-64 flex items-center justify-center text-sm text-pdd-text-secondary">
-              输入裸货成本后开始计算
             </div>
           )}
         </div>
-      </div>
 
-      {pricingPresets.length > 0 && (
+        {/* 快递费明细 */}
         <div className="pdd-card p-4">
-          <div className="flex items-center gap-3 mb-4 p-3 bg-pdd-bg rounded-lg border border-pdd-border">
-            <Search size={16} className="text-pdd-text-secondary" />
-            <input type="text" placeholder="搜索名称/编码..." className="flex-1 text-sm outline-none bg-transparent"
-              value={pricingSearchQuery} onChange={e => setPricingSearchQuery(e.target.value)} />
-            {pricingSearchQuery && (
-              <button onClick={() => setPricingSearchQuery('')} className="text-xs text-pdd-text-secondary hover:text-pdd-danger">重置</button>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-sm flex items-center gap-2"><Search size={14} className="text-pdd-text-secondary" />快递费明细</h3>
+            <div className="flex items-center gap-2">
+              <Search size={14} className="text-pdd-text-secondary" />
+              <input type="text" placeholder="搜索单号..." className="w-48 px-2 py-1.5 border border-pdd-border rounded-lg text-sm"
+                value={shippingSearch} onChange={e => setShippingSearch(e.target.value)} />
+              {shippingSearch && (
+                <button onClick={() => setShippingSearch('')} className="text-xs text-pdd-text-secondary hover:text-pdd-danger">清除</button>
+              )}
+            </div>
+          </div>
+          <div className="max-h-64 overflow-y-auto">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-pdd-card">
+                <tr className="border-b border-pdd-border text-xs text-pdd-text-secondary">
+                  <th className="py-2 text-left font-medium">订单号</th>
+                  <th className="py-2 text-left font-medium">快递公司</th>
+                  <th className="py-2 text-left font-medium">快递单号</th>
+                  <th className="py-2 text-right font-medium">单价(元)</th>
+                  <th className="py-2 text-right font-medium">费用(元)</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-pdd-border">
+                {shippingDetails.slice(0, 200).map((d, i) => (
+                  <tr key={i} className="hover:bg-pdd-bg/50 transition-colors text-xs">
+                    <td className="py-1.5 font-mono text-pdd-text">#{d.orderNo.slice(-8)}</td>
+                    <td className="py-1.5 text-pdd-text">{d.courier}</td>
+                    <td className="py-1.5 font-mono text-pdd-text-secondary">{d.trackingNo.slice(-8)}</td>
+                    <td className="py-1.5 text-right font-mono text-pdd-text">¥{d.rate.toFixed(2)}</td>
+                    <td className="py-1.5 text-right font-mono text-pdd-text">¥{d.cost.toFixed(2)}</td>
+                  </tr>
+                ))}
+                {shippingDetails.length === 0 && (
+                  <tr><td colSpan={5} className="py-8 text-center text-pdd-text-secondary text-xs">暂无数据</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-pdd-text-secondary mt-2">
+            共 {shippingDetails.length} 条记录{courierData.totalShipped > 0 && ` · 已发货 ${courierData.totalShipped} 单 · 均单运费 ¥${courierData.avgCost.toFixed(2)}`}
+          </p>
+        </div>
+
+        {/* 快递成本效益分析 */}
+        {benefitAnalysis && (
+          <div className="pdd-card p-4">
+            <h3 className="font-semibold text-sm mb-3 flex items-center gap-2"><BarChart3 size={16} className="text-pdd-success" />快递成本效益分析</h3>
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              <div className="bg-pdd-bg rounded-lg p-3">
+                <p className="text-xs text-pdd-text-secondary">当前快递总成本</p>
+                <p className="text-lg font-bold text-pdd-text">¥{benefitAnalysis.currentTotal.toFixed(2)}</p>
+              </div>
+              <div className="bg-pdd-bg rounded-lg p-3">
+                <p className="text-xs text-pdd-text-secondary">均单运费</p>
+                <p className="text-lg font-bold text-pdd-text">¥{courierData.avgCost.toFixed(2)}</p>
+              </div>
+              <div className="bg-pdd-bg rounded-lg p-3">
+                <p className="text-xs text-pdd-text-secondary">退货额外运费</p>
+                <p className="text-lg font-bold text-pdd-danger">¥{benefitAnalysis.returnShippingCost.toFixed(2)}</p>
+                <p className="text-[10px] text-pdd-text-secondary">{benefitAnalysis.returnCount}单已发货退款</p>
+              </div>
+              <div className="bg-pdd-bg rounded-lg p-3">
+                <p className="text-xs text-pdd-text-secondary">如果用最低价</p>
+                <p className="text-lg font-bold" style={{ color: benefitAnalysis.savings > 0 ? 'var(--pdd-success)' : 'var(--pdd-text)' }}>
+                  可省 ¥{benefitAnalysis.savings.toFixed(2)}
+                </p>
+              </div>
+            </div>
+            {/* 省钱建议 */}
+            {benefitAnalysis.savings > 5 && (
+              <div className="bg-pdd-success/10 border border-pdd-success/20 rounded-lg p-3">
+                <p className="text-xs font-medium text-pdd-success mb-1">💡 省钱建议</p>
+                <div className="space-y-1 text-xs text-pdd-text-secondary">
+                  {courierData.couriers
+                    .filter(([name, data]) => {
+                      const rate = getRate(name);
+                      const minR = benefitAnalysis.minRate || shippingFeePerOrder || 5;
+                      return rate > minR && data.count >= 5;
+                    })
+                    .map(([name, data]) => {
+                      const rate = getRate(name);
+                      const minR = benefitAnalysis.minRate || shippingFeePerOrder || 5;
+                      const potential = data.count * (rate - minR);
+                      return (
+                        <div key={name} className="flex items-center gap-2">
+                          <span>★ 把 {name}(¥{rate.toFixed(1)}) 的 {data.count} 单改为最低价(¥{minR.toFixed(1)}) → 省 ¥{potential.toFixed(2)}</span>
+                        </div>
+                      );
+                    })}
+                  <div className="border-t border-pdd-border pt-1 mt-1 font-medium text-pdd-text">
+                    如果全部改用最低价快递，可节省 ¥{benefitAnalysis.savings.toFixed(2)}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
-          <h3 className="font-medium text-sm mb-3">已保存预设 ({filteredPricingPresets.length})</h3>
-          <div className="space-y-1">
-            {filteredPricingPresets.map((p, i) => (
-              <div key={i} className="flex items-center justify-between py-2.5 px-3 border-b border-pdd-border last:border-0 text-sm hover:bg-pdd-bg rounded-lg transition-colors">
-                <div>
-                  <span className="font-medium text-pdd-text">{p.name || p.code}</span>
-                  {p.name && <span className="text-xs text-pdd-text-secondary ml-2">{p.code}</span>}
-                </div>
-                <div className="flex items-center gap-3 text-xs">
-                  <span className="text-pdd-text-secondary">成本 ¥{p.rawCost}</span>
-                  <span className="text-pdd-text-secondary">→</span>
-                  <span className="text-pdd-primary font-semibold">售价 ¥{p.suggestedPrice?.toFixed(2)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </motion.div>
-  );
-
-  // ========== Tab: 税务配置 ==========
-  const renderTax = () => (
-    <motion.div key="tax" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-      <div className="pdd-card p-4">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-sm">税务配置</h3>
-          <div className="flex items-center gap-2">
-            <button onClick={() => applyTaxTemplate('small')} className="px-3 py-1.5 border border-pdd-border rounded-lg text-xs hover:bg-pdd-bg transition-colors">
-              小规模纳税人
-            </button>
-            <button onClick={() => applyTaxTemplate('general')} className="px-3 py-1.5 border border-pdd-border rounded-lg text-xs hover:bg-pdd-bg transition-colors">
-              一般纳税人
-            </button>
-            <button onClick={() => setShowTaxForm(!showTaxForm)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-pdd-primary text-white rounded-lg text-xs hover:opacity-90 transition-opacity">
-              <Plus size={14} /> 添加税种
-            </button>
-          </div>
-        </div>
-
-        {showTaxForm && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="bg-pdd-bg rounded-lg p-4 mb-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-pdd-text-secondary">税种名称</label>
-                <input className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={taxForm.name}
-                  onChange={e => setTaxForm(f => ({ ...f, name: e.target.value }))} placeholder="如: 增值税" />
-              </div>
-              <div>
-                <label className="text-xs text-pdd-text-secondary">税率(%)</label>
-                <input type="number" className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={taxForm.rate || ''}
-                  onChange={e => setTaxForm(f => ({ ...f, rate: parseFloat(e.target.value) || 0 }))} placeholder="如: 13" />
-              </div>
-              <div>
-                <label className="text-xs text-pdd-text-secondary">税种类型</label>
-                <select className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1"
-                  value={taxForm.taxType} onChange={e => setTaxForm(f => ({ ...f, taxType: e.target.value as TaxConfig['taxType'] }))}>
-                  <option value="vat">增值税</option>
-                  <option value="income">所得税</option>
-                  <option value="surcharge">附加税</option>
-                  <option value="custom">自定义</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-pdd-text-secondary">计税基数</label>
-                <select className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1"
-                  value={taxForm.base} onChange={e => setTaxForm(f => ({ ...f, base: e.target.value as TaxConfig['base'] }))}>
-                  <option value="revenue">实收金额</option>
-                  <option value="profit">利润</option>
-                  <option value="vat">增值税额</option>
-                  <option value="gmv">GMV</option>
-                  <option value="orders">订单数</option>
-                </select>
-              </div>
-              <div className="col-span-2">
-                <label className="text-xs text-pdd-text-secondary">备注</label>
-                <input className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1" value={taxForm.description || ''}
-                  onChange={e => setTaxForm(f => ({ ...f, description: e.target.value }))} placeholder="可选" />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 mt-3">
-              <button onClick={handleAddTax} className="px-4 py-1.5 bg-pdd-primary text-white rounded-lg text-sm hover:opacity-90">保存</button>
-              <button onClick={() => setShowTaxForm(false)} className="px-4 py-1.5 border border-pdd-border rounded-lg text-sm hover:bg-pdd-bg">取消</button>
-            </div>
-          </motion.div>
         )}
-
-        {(taxConfigs || []).length > 0 && (
-          <div className="flex items-center gap-3 mb-4 p-3 bg-pdd-bg rounded-lg border border-pdd-border">
-            <Search size={16} className="text-pdd-text-secondary" />
-            <input type="text" placeholder="搜索税种名称..." className="flex-1 text-sm outline-none bg-transparent"
-              value={taxSearchQuery} onChange={e => setTaxSearchQuery(e.target.value)} />
-            {taxSearchQuery && <button onClick={() => setTaxSearchQuery('')} className="text-xs text-pdd-text-secondary hover:text-pdd-danger">重置</button>}
-          </div>
-        )}
-
-        {(taxConfigs || []).length === 0 ? (
-          <div className="text-center py-8 text-pdd-text-secondary text-sm">暂无税务配置，使用模板快速开始或手动添加</div>
-        ) : filteredTaxConfigs.length === 0 ? (
-          <div className="text-center py-8 text-pdd-text-secondary text-sm">无匹配数据</div>
-        ) : (
-          <div className="grid gap-2">
-            {filteredTaxConfigs.map(tax => (
-              <div key={tax.id} className="flex items-center gap-3 p-3 border border-pdd-border rounded-lg hover:bg-pdd-bg transition-colors">
-                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{
-                  backgroundColor: tax.taxType === 'vat' ? 'rgba(59,130,246,0.1)' : tax.taxType === 'income' ? 'rgba(34,197,94,0.1)' : tax.taxType === 'surcharge' ? 'rgba(245,158,11,0.1)' : 'rgba(100,116,139,0.1)'
-                }}>
-                  <Shield size={16} style={{
-                    color: tax.taxType === 'vat' ? 'var(--pdd-primary)' : tax.taxType === 'income' ? 'var(--pdd-success)' : tax.taxType === 'surcharge' ? 'var(--pdd-warning)' : 'var(--pdd-text)'
-                  }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-pdd-text">{tax.name}</p>
-                  <p className="text-xs text-pdd-text-secondary">
-                    {tax.taxType === 'vat' ? '增值税' : tax.taxType === 'income' ? '所得税' : tax.taxType === 'surcharge' ? '附加税' : '自定义'}
-                    {' · '}计税基数: {tax.base === 'revenue' ? '实收金额' : tax.base === 'profit' ? '利润' : tax.base === 'vat' ? '增值税额' : tax.base === 'gmv' ? 'GMV' : '订单数'}
-                  </p>
-                </div>
-                <span className="text-lg font-bold text-pdd-primary shrink-0">{tax.rate}%</span>
-                <input type="checkbox" checked={tax.enabled} onChange={() => updateTaxConfig(tax.id, { enabled: !tax.enabled })}
-                  className="w-4 h-4 rounded shrink-0 cursor-pointer" />
-                <button onClick={() => removeTaxConfig(tax.id)} className="p-1.5 hover:bg-pdd-danger/10 rounded-lg text-pdd-danger shrink-0">
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        <div className="mt-4 bg-pdd-bg rounded-lg p-4">
-          <h4 className="font-medium text-sm mb-2">实时预览 (假设实收 ¥1,000)</h4>
-          {taxPreview.length === 0 ? (
-            <p className="text-sm text-pdd-text-secondary">未配置启用的税费</p>
-          ) : (
-            <>
-              <div className="space-y-1 text-sm">
-                {taxPreview.map((t, i) => (
-                  <div key={i} className="flex items-center justify-between">
-                    <span className="text-pdd-text-secondary">{t.name} ({t.rate}% × ¥{t.base.toFixed(2)})</span>
-                    <span className="font-medium text-pdd-text">¥{t.amount.toFixed(2)}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="border-t border-pdd-border pt-2 mt-2 flex items-center justify-between font-bold">
-                <span>合计税费</span>
-                <span className="text-pdd-danger">¥{taxPreview.reduce((s, t) => s + t.amount, 0).toFixed(2)}</span>
-              </div>
-            </>
-          )}
-        </div>
-      </div>
-    </motion.div>
-  );
+      </motion.div>
+    );
+  };
 
   // ========== Tab: 自定义扣费 ==========
   const renderDeductions = () => (
@@ -2302,8 +2604,8 @@ export default function CostManagementPage() {
             {(customDeductions || []).sort((a, b) => a.sortOrder - b.sortOrder).map((ded, idx) => (
               <div key={ded.id} className="flex items-center gap-3 p-3 border border-pdd-border rounded-lg hover:bg-pdd-bg transition-colors">
                 <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: ded.scope === 'global' ? 'rgba(59,130,246,0.1)' : 'rgba(114,46,209,0.1)' }}>
-                  <CalcIcon size={16} style={{ color: ded.scope === 'global' ? 'var(--pdd-primary)' : '#722ed1' }} />
+                  style={{ backgroundColor: ded.scope === 'global' ? 'var(--pdd-gray-100)' : 'var(--pdd-primary)' }}>
+                  <CalcIcon size={16} style={{ color: ded.scope === 'global' ? 'var(--pdd-primary)' : 'var(--pdd-primary)' }} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -2588,11 +2890,11 @@ export default function CostManagementPage() {
       {/* 汇总统计 */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2">
         {[
-          { label: '一单多SKU', count: activeMultiSkuAlerts.length, color: 'var(--pdd-warning)', bg: 'rgba(245,158,11,0.1)', desc: '包装/快递费重复计算', type: 'multiSku' as const },
-          { label: '一单多件', count: activeMultiItemAlerts.length, color: 'var(--pdd-primary)', bg: 'rgba(59,130,246,0.1)', desc: '数量>1单品成本', type: 'multiItem' as const },
-          { label: '亏损订单', count: activeLossAlerts.length, color: 'var(--pdd-danger)', bg: 'rgba(239,68,68,0.1)', desc: '实收 < 预估成本', type: 'loss' as const },
-          { label: '低支付金额', count: activeLowPayAlerts.length, color: '#722ed1', bg: 'rgba(114,46,209,0.1)', desc: '实收<¥5或比<10%', type: 'lowPay' as const },
-          { label: '高数量异常', count: activeHighQtyAlerts.length, color: '#fa541c', bg: 'rgba(250,84,28,0.1)', desc: '件数≥50异常数据', type: 'highQty' as const },
+          { label: '一单多SKU', count: activeMultiSkuAlerts.length, color: 'var(--pdd-warning)', bg: '#FFFAEB', desc: '包装/快递费重复计算', type: 'multiSku' as const },
+          { label: '一单多件', count: activeMultiItemAlerts.length, color: 'var(--pdd-primary)', bg: 'var(--pdd-gray-100)', desc: '数量>1单品成本', type: 'multiItem' as const },
+          { label: '亏损订单', count: activeLossAlerts.length, color: 'var(--pdd-danger)', bg: '#FFF1F2', desc: '实收 < 预估成本', type: 'loss' as const },
+          { label: '低支付金额', count: activeLowPayAlerts.length, color: 'var(--pdd-primary)', bg: 'var(--pdd-primary)', desc: '实收<¥5或比<10%', type: 'lowPay' as const },
+          { label: '高数量异常', count: activeHighQtyAlerts.length, color: 'var(--pdd-warning)', bg: 'rgba(250,84,28,0.1)', desc: '件数≥50异常数据', type: 'highQty' as const },
           { label: '推广秒退', count: flashRefundBuckets.totalCount > 0 ? flashRefundBuckets.buckets[0]?.count || 0 : 0, color: '#0891b2', bg: 'rgba(8,145,178,0.1)', desc: flashRefundVerdict.level === 'warn' ? '⚠ 需关注' : flashRefundVerdict.level === 'safe' ? '✓ 正常' : '推广费秒退验证', type: 'flashRefund' as const },
         ].map((item, i) => (
           <motion.div key={item.label} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
@@ -2786,6 +3088,32 @@ export default function CostManagementPage() {
         </motion.div>
       )}
 
+      {/* ★ 批量操作栏 */}
+      {filteredAlerts.length > 0 && alertFilter !== 'flashRefund' && (
+        <div className="flex items-center gap-3 mb-2">
+          <label className="flex items-center gap-1 text-xs cursor-pointer">
+            <input type="checkbox" checked={batchSelected.size === filteredAlerts.filter(a => a.data?.orderNo).length && filteredAlerts.length > 0}
+              onChange={e => {
+                if (e.target.checked) setBatchSelected(new Set(filteredAlerts.map(a => a.data?.orderNo).filter(Boolean)));
+                else setBatchSelected(new Set());
+              }} className="w-3 h-3" /> 全选
+          </label>
+          {batchSelected.size > 0 && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-pdd-text-secondary">已选 {batchSelected.size} 单</span>
+              <button onClick={() => batchProcess('excluded')} className="px-2.5 py-1 rounded text-xs bg-pdd-danger text-white hover:opacity-90">批量排除</button>
+              <button onClick={() => setShowBatchAdjust(true)} className="px-2.5 py-1 rounded text-xs bg-pdd-primary text-white hover:opacity-90">批量调整</button>
+            </div>
+          )}
+          {showBatchAdjust && (
+            <div className="flex items-center gap-2">
+              <input type="number" placeholder="实收金额" className="w-20 px-2 py-0.5 border rounded text-xs" value={batchAdjAmount} onChange={e => setBatchAdjAmount(e.target.value)} />
+              <button onClick={() => batchProcess('adjusted')} className="px-2.5 py-1 rounded text-xs bg-pdd-primary text-white">确认</button>
+              <button onClick={() => { setShowBatchAdjust(false); setBatchAdjAmount(''); }} className="text-xs text-pdd-text-secondary">取消</button>
+            </div>
+          )}
+        </div>
+      )}
       {/* 异常列表 */}
       {alertFilter === 'flashRefund' ? (
         <div className="text-center py-6 text-pdd-text-secondary">
@@ -2802,11 +3130,11 @@ export default function CostManagementPage() {
           {filteredAlerts.map((alert, idx) => {
             const a = alert.data;
             const typeConfig = {
-              multiSku: { label: '一单多SKU', color: 'var(--pdd-warning)', bg: 'rgba(245,158,11,0.06)', borderColor: 'rgba(245,158,11,0.25)', icon: Package },
-              multiItem: { label: '一单多件', color: 'var(--pdd-primary)', bg: 'rgba(59,130,246,0.06)', borderColor: 'rgba(59,130,246,0.25)', icon: Package },
-              loss: { label: '亏损订单', color: 'var(--pdd-danger)', bg: 'rgba(239,68,68,0.06)', borderColor: 'rgba(239,68,68,0.25)', icon: TrendingUp },
-              lowPay: { label: '低支付金额', color: '#722ed1', bg: 'rgba(114,46,209,0.06)', borderColor: 'rgba(114,46,209,0.25)', icon: DollarSign },
-              highQty: { label: '高数量异常', color: '#fa541c', bg: 'rgba(250,84,28,0.06)', borderColor: 'rgba(250,84,28,0.25)', icon: AlertTriangle },
+              multiSku: { label: '一单多SKU', color: 'var(--pdd-warning)', bg: '#FFFAEB', borderColor: '#FFEBA6', icon: Package },
+              multiItem: { label: '一单多件', color: 'var(--pdd-primary)', bg: 'var(--pdd-gray-100)', borderColor: '#B2D0FF', icon: Package },
+              loss: { label: '亏损订单', color: 'var(--pdd-danger)', bg: '#FFF1F2', borderColor: '#FFC2C2', icon: TrendingUp },
+              lowPay: { label: '低支付金额', color: 'var(--pdd-primary)', bg: 'rgba(114,46,209,0.06)', borderColor: 'rgba(114,46,209,0.25)', icon: DollarSign },
+              highQty: { label: '高数量异常', color: 'var(--pdd-warning)', bg: 'rgba(250,84,28,0.06)', borderColor: 'rgba(250,84,28,0.25)', icon: AlertTriangle },
             }[alert.type]!;
 
             const record = abnormalOrders[a.orderNo];
@@ -2814,9 +3142,14 @@ export default function CostManagementPage() {
             const actionOpen = alertActionOpen.has(`${a.orderNo}_${alert.type}`);
 
             return (
-              <div key={`${alert.type}_${a.orderNo}`} className={`pdd-card p-3 border rounded-xl transition-all ${isProcessed ? 'opacity-75' : ''}`} style={{ borderColor: isProcessed ? 'rgba(34,197,94,0.3)' : typeConfig.borderColor, backgroundColor: isProcessed ? 'rgba(34,197,94,0.02)' : typeConfig.bg }}>
+              <div key={`${alert.type}_${a.orderNo}`} className={`pdd-card p-3 border rounded-xl transition-all ${isProcessed ? 'opacity-75' : ''}`} style={{ borderColor: isProcessed ? '#ABEFC6' : typeConfig.borderColor, backgroundColor: isProcessed ? 'var(--pdd-success)' : typeConfig.bg }}>
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex items-center gap-2 shrink-0">
+                    <input type="checkbox" checked={batchSelected.has(a.orderNo)} onChange={e => {
+                      const next = new Set(batchSelected);
+                      e.target.checked ? next.add(a.orderNo) : next.delete(a.orderNo);
+                      setBatchSelected(next);
+                    }} className="w-3 h-3" />
                     <span className="text-[10px] px-2 py-0.5 rounded-full font-medium" style={{ color: typeConfig.color, backgroundColor: typeConfig.bg }}>
                       {typeConfig.label}
                     </span>
@@ -2920,22 +3253,22 @@ export default function CostManagementPage() {
                     )}
                     {alert.type === 'lowPay' && (
                       <>
-                        <div><span className="text-pdd-text-secondary">实收: </span><span className="font-semibold" style={{ color: '#722ed1' }}>¥{a.merchant.toFixed(2)}</span></div>
+                        <div><span className="text-pdd-text-secondary">实收: </span><span className="font-semibold" style={{ color: 'var(--pdd-primary)' }}>¥{a.merchant.toFixed(2)}</span></div>
                         <div><span className="text-pdd-text-secondary">商品总价: </span><span className="font-semibold text-pdd-text">¥{a.productTotal.toFixed(2)}</span></div>
                         <div><span className="text-pdd-text-secondary">实收比: </span>
-                          <span className="font-semibold" style={{ color: a.productTotal > 0 && a.merchant / a.productTotal < 0.1 ? 'var(--pdd-danger)' : '#722ed1' }}>
+                          <span className="font-semibold" style={{ color: a.productTotal > 0 && a.merchant / a.productTotal < 0.1 ? 'var(--pdd-danger)' : 'var(--pdd-primary)' }}>
                             {a.productTotal > 0 ? (a.merchant / a.productTotal * 100).toFixed(1) : '--'}%
                           </span>
                         </div>
                         <div className="col-span-3 mt-1 p-2 bg-purple-500/10 rounded-lg">
-                          <span className="text-[11px] font-medium" style={{ color: '#722ed1' }}>建议: 确认订单性质</span>
+                          <span className="text-[11px] font-medium" style={{ color: 'var(--pdd-primary)' }}>建议: 确认订单性质</span>
                           <span className="text-[10px] text-pdd-text-secondary ml-2">（实收 ¥{a.merchant.toFixed(2)}{a.merchant < 5 ? ' < ¥5' : '，比率偏低'}，可能为促销/刷单/异常数据，确认后可标记忽略）</span>
                         </div>
                       </>
                     )}
                     {alert.type === 'highQty' && (
                       <>
-                        <div><span className="text-pdd-text-secondary">数量: </span><span className="font-semibold" style={{ color: '#fa541c' }}>{a.qty}件</span></div>
+                        <div><span className="text-pdd-text-secondary">数量: </span><span className="font-semibold" style={{ color: 'var(--pdd-warning)' }}>{a.qty}件</span></div>
                         <div><span className="text-pdd-text-secondary">实收: </span><span className="font-semibold text-pdd-text">¥{a.merchant.toFixed(2)}</span></div>
                         <div><span className="text-pdd-text-secondary">单价: </span>
                           <span className="font-semibold" style={{ color: a.unitPrice < 1 ? 'var(--pdd-danger)' : 'var(--pdd-text)' }}>
@@ -2943,7 +3276,7 @@ export default function CostManagementPage() {
                           </span>
                         </div>
                         <div className="col-span-3 mt-1 p-2 bg-orange-500/10 rounded-lg">
-                          <span className="text-[11px] font-medium" style={{ color: '#fa541c' }}>建议: 核实是否异常数据</span>
+                          <span className="text-[11px] font-medium" style={{ color: 'var(--pdd-warning)' }}>建议: 核实是否异常数据</span>
                           <span className="text-[10px] text-pdd-text-secondary ml-2">（单行{a.qty}件，裸货成本 {a.cost > 0 ? `¥${a.cost}/件` : '未填写'}，均价¥{a.unitPrice.toFixed(2)}，可能为批发/异常单）</span>
                         </div>
                       </>
@@ -2985,110 +3318,9 @@ export default function CostManagementPage() {
   );
 
   return (
-    <div className="p-6 space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-pdd-text">成本管理</h1>
-        <div className="flex items-center gap-2">
-          <button onClick={() => setShowQuickSettings(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-pdd-primary text-white rounded-lg text-sm hover:opacity-90 transition-opacity">
-            <Zap size={14} /> 快速设置
-          </button>
-          <button onClick={() => setShowSettings(!showSettings)}
-            className="flex items-center gap-1.5 px-3 py-1.5 border border-pdd-border rounded-lg text-sm hover:bg-pdd-bg transition-colors">
-            <Settings size={14} /> 全局设置
-          </button>
-        </div>
-      </div>
+    <div className="p-4 lg:p-6 space-y-4">
 
-      {/* Global settings panel */}
-      <AnimatePresence>
-        {showSettings && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-            className="pdd-card overflow-hidden">
-            <div className="p-4">
-              <h3 className="font-medium mb-3 flex items-center gap-2"><DollarSign size={16} />成本计算设置</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-xs text-pdd-text-secondary">每单包装/人工费(元)</label>
-                    <input type="number" className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1"
-                      value={tempPackagingFee} onChange={e => setTempPackagingFee(e.target.value)} placeholder="0.00" />
-                    <p className="text-xs text-pdd-text-secondary mt-1">每个订单只收一次包装费</p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-pdd-text-secondary">默认成本比例(%)</label>
-                    <input type="number" className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1"
-                      value={tempDefaultCostRatio} onChange={e => setTempDefaultCostRatio(e.target.value)} placeholder="30" />
-                    <p className="text-xs text-pdd-text-secondary mt-1">无成本数据时按实收金额的比例估算</p>
-                  </div>
-                  <div>
-                    <label className="text-xs text-pdd-text-secondary">快递费/单(元)</label>
-                    <input type="number" className="w-full px-2 py-1.5 border border-pdd-border rounded-lg text-sm mt-1"
-                      value={tempShippingFee} onChange={e => setTempShippingFee(e.target.value)} placeholder="0.00" />
-                    <p className="text-xs text-pdd-text-secondary mt-1">默认快递费（未匹配快递公司时使用）</p>
-                  </div>
-                  {/* 按快递公司费率 */}
-                  {(() => {
-                    const couriers = [...new Set(orders.map((o: any) => String(findField(o, '快递公司') || '').trim()).filter(Boolean))].sort();
-                    if (!couriers.length) return null;
-                    return (
-                      <div>
-                        <label className="text-xs text-pdd-text-secondary">按快递公司费率 (元/单)</label>
-                        <div className="mt-1 space-y-1 max-h-32 overflow-y-auto">
-                          {couriers.map((c: string) => {
-                            const saved = JSON.parse(localStorage.getItem('dianfx_courier_rates') || '{}');
-                            const val = saved[c] || shippingFeePerOrder || 0;
-                            return (
-                              <div key={c} className="flex items-center gap-2">
-                                <span className="text-xs text-pdd-text w-20 truncate">{c}</span>
-                                <input type="number" step="0.1" className="w-20 px-1.5 py-0.5 border border-pdd-border rounded text-xs"
-                                  defaultValue={val}
-                                  onBlur={e => {
-                                    const rates = JSON.parse(localStorage.getItem('dianfx_courier_rates') || '{}');
-                                    rates[c] = parseFloat(e.target.value) || 0;
-                                    localStorage.setItem('dianfx_courier_rates', JSON.stringify(rates));
-                                  }} />
-                                <span className="text-[10px] text-pdd-text-secondary">元/单</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  <div className="flex items-center gap-2 pt-2">
-                    <button onClick={savePackagingFee} className="px-4 py-1.5 bg-pdd-primary text-white rounded-lg text-sm hover:opacity-90">
-                      保存设置
-                    </button>
-                    <button onClick={() => setShowImportHelp(!showImportHelp)}
-                      className="flex items-center gap-1 px-3 py-1.5 border border-pdd-border rounded-lg text-sm hover:bg-pdd-bg">
-                      <Upload size={14} /> 批量导入成本
-                    </button>
-                  </div>
-                  {showImportHelp && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
-                      className="bg-pdd-primary/10 rounded-lg p-3 text-xs">
-                      <p className="font-medium mb-1">CSV格式说明:</p>
-                      <p className="text-pdd-text-secondary mb-1">商品ID/SKU编码,成本单价</p>
-                      <p className="text-pdd-text-secondary">示例: 12345,15.50 或 12345_SKU001,20.00</p>
-                    </motion.div>
-                  )}
-                </div>
-                <div className="bg-pdd-bg rounded-lg p-3">
-                  <p className="text-xs text-pdd-text-secondary mb-2">成本计算公式:</p>
-                  <p className="text-sm font-medium">总成本 = 裸货成本×件数 + (包装+人工+快递+运费险+推广费)×订单数 + 自定义扣费</p>
-                  <p className="text-xs text-pdd-text-secondary mt-1">注：平台技术服务费已包含在商家实收中，不重复计为成本</p>
-                  <p className="text-xs text-pdd-text-secondary mt-2">示例: 裸货成本10元/件，包装2元/单，快递3元/单，人工1元/单</p>
-                  <p className="text-xs text-pdd-text-secondary">1单2件 = 10×2 + (2+1+3)×1 = 26元</p>
-                  <p className="text-xs text-pdd-text-secondary mt-3">税费和自定义扣费将在利润计算中自动扣除（平台费已含在实收中）</p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Quick-settings modal */}
+      {/* ★ F8: 统一设置弹窗 — 合并原快速设置+全局设置 */}
       <AnimatePresence>
         {showQuickSettings && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
@@ -3096,67 +3328,122 @@ export default function CostManagementPage() {
             <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} exit={{ scale: 0.9 }}
               className="bg-pdd-card border border-pdd-border rounded-2xl p-6 max-w-lg w-full max-h-[85vh] overflow-auto shadow-2xl" onClick={e => e.stopPropagation()}>
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-base font-semibold text-pdd-text flex items-center gap-2"><Zap size={18} className="text-pdd-warning" />通用费用快速设置</h3>
+                <h3 className="text-base font-semibold text-pdd-text flex items-center gap-2"><Settings size={18} className="text-pdd-primary" />成本计算设置</h3>
                 <button onClick={() => setShowQuickSettings(false)} className="p-1 hover:bg-pdd-bg rounded-lg text-pdd-text-secondary hover:text-pdd-text transition-colors"><X size={18} /></button>
               </div>
-              <p className="text-xs text-pdd-text-secondary mb-4">这些费用将应用于所有商品成本计算，均为选填。</p>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-pdd-text">快递费/单 (元)</label>
-                  <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempShippingFee}
-                    onChange={e => setTempShippingFee(e.target.value)} placeholder="选填" step="0.01" />
-                  <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Truck size={10} />每个订单固定快递成本</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-pdd-text">平台扣点 (%)</label>
-                  <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempPlatformCommissionRate}
-                    onChange={e => setTempPlatformCommissionRate(e.target.value)} placeholder="选填" step="0.1" />
-                  <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Percent size={10} />按商家实收金额 × 比例计算</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-pdd-text">包装费/单 (元)</label>
-                  <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempPackagingFee}
-                    onChange={e => setTempPackagingFee(e.target.value)} placeholder="选填" step="0.01" />
-                  <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Package size={10} />每个订单固定包装成本</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-pdd-text">人工费/单 (元)</label>
-                  <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempLaborFee}
-                    onChange={e => setTempLaborFee(e.target.value)} placeholder="选填" step="0.01" />
-                  <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Wrench size={10} />拣货/打包/发货人工成本</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-pdd-text">默认成本比例 (%)</label>
-                  <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempDefaultCostRatio}
-                    onChange={e => setTempDefaultCostRatio(e.target.value)} placeholder="选填" step="0.1" />
-                  <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Percent size={10} />无裸货成本时，按实收金额 × 此比例估算</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-pdd-text">运费险/单 (元)</label>
-                  <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempInsuranceFee}
-                    onChange={e => setTempInsuranceFee(e.target.value)} placeholder="选填" step="0.01" />
-                  <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Shield size={10} />仅当订单有运费险记录时计入</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-pdd-text">推广费/单 (元)</label>
-                  <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempPromotionFee}
-                    onChange={e => setTempPromotionFee(e.target.value)} placeholder="选填" step="0.01" />
-                  <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><DollarSign size={10} />推广花费平均到每单的成本</p>
-                </div>
+
+              {/* Tab switcher */}
+              <div className="flex gap-1 mb-4 bg-pdd-bg rounded-lg p-0.5">
+                <button onClick={() => setQuickSettingsTab('fees')}
+                  className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${quickSettingsTab === 'fees' ? 'bg-pdd-card text-pdd-text shadow-sm' : 'text-pdd-text-secondary hover:text-pdd-text'}`}>
+                  <DollarSign size={12} className="inline mr-1" />通用费用
+                </button>
+                <button onClick={() => setQuickSettingsTab('couriers')}
+                  className={`flex-1 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${quickSettingsTab === 'couriers' ? 'bg-pdd-card text-pdd-text shadow-sm' : 'text-pdd-text-secondary hover:text-pdd-text'}`}>
+                  <Truck size={12} className="inline mr-1" />快递费率
+                </button>
               </div>
-              <button onClick={saveQuickSettings}
-                className="mt-5 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-pdd-primary to-indigo-500 text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity">
-                <Save size={15} /> 保存设置
-              </button>
+
+              {quickSettingsTab === 'fees' && (
+                <div className="space-y-4">
+                  <p className="text-xs text-pdd-text-secondary">通用费用将应用于所有商品成本计算，均为选填。</p>
+                  <div>
+                    <label className="text-xs font-medium text-pdd-text">快递费/单 (元)</label>
+                    <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempShippingFee}
+                      onChange={e => setTempShippingFee(e.target.value)} placeholder="选填" step="0.01" />
+                    <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Truck size={10} />每个订单固定快递成本</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-pdd-text">平台扣点 (%)</label>
+                    <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempPlatformCommissionRate}
+                      onChange={e => setTempPlatformCommissionRate(e.target.value)} placeholder="选填" step="0.1" />
+                    <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Percent size={10} />按商家实收金额 × 比例计算</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-pdd-text">包装费/单 (元)</label>
+                    <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempPackagingFee}
+                      onChange={e => setTempPackagingFee(e.target.value)} placeholder="选填" step="0.01" />
+                    <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Package size={10} />每个订单固定包装成本</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-pdd-text">人工费/单 (元)</label>
+                    <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempLaborFee}
+                      onChange={e => setTempLaborFee(e.target.value)} placeholder="选填" step="0.01" />
+                    <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Wrench size={10} />拣货/打包/发货人工成本</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-pdd-text">默认成本比例 (%)</label>
+                    <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempDefaultCostRatio}
+                      onChange={e => setTempDefaultCostRatio(e.target.value)} placeholder="选填" step="0.1" />
+                    <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Percent size={10} />无裸货成本时，按实收金额 × 此比例估算</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-pdd-text">运费险/单 (元)</label>
+                    <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempInsuranceFee}
+                      onChange={e => setTempInsuranceFee(e.target.value)} placeholder="选填" step="0.01" />
+                    <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><Shield size={10} />仅当订单有运费险记录时计入</p>
+                  </div>
+                  <div>
+                    <label className="text-xs font-medium text-pdd-text">推广费/单 (元)</label>
+                    <input type="number" className="w-full px-3 py-2 border border-pdd-border rounded-lg text-sm mt-1" value={tempPromotionFee}
+                      onChange={e => setTempPromotionFee(e.target.value)} placeholder="选填" step="0.01" />
+                    <p className="text-[10px] text-pdd-text-secondary mt-1 flex items-center gap-1"><DollarSign size={10} />推广花费平均到每单的成本</p>
+                  </div>
+                  <button onClick={saveQuickSettings}
+                    className="mt-5 w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-pdd-primary to-indigo-500 text-white rounded-xl text-sm font-medium hover:opacity-90 transition-opacity">
+                    <Save size={15} /> 保存设置
+                  </button>
+                </div>
+              )}
+
+              {quickSettingsTab === 'couriers' && (
+                <div>
+                  <p className="text-xs text-pdd-text-secondary mb-3">按快递公司单独设置费率（元/单），留空则使用上方默认快递费。</p>
+                  {(() => {
+                    const couriers = [...new Set(orders.map((o: any) => String(findField(o, '快递公司') || '').trim()).filter(Boolean))].sort();
+                    if (!couriers.length) return <p className="text-xs text-pdd-text-secondary">暂无快递公司数据，请先上传包含「快递公司」列的订单数据。</p>;
+                    return (
+                      <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                        {couriers.map((c: string) => {
+                          const val = courierRates[c] || '';
+                          return (
+                            <div key={c} className="flex items-center gap-2">
+                              <span className="text-xs text-pdd-text w-24 truncate" title={c}>{c}</span>
+                              <input type="number" step="0.1" className="flex-1 px-2 py-1.5 border border-pdd-border rounded text-xs"
+                                defaultValue={val || ''}
+                                placeholder="默认"
+                                onBlur={e => {
+                                  const v = parseFloat(e.target.value);
+                                  if (isNaN(v) || v <= 0) {
+                                    saveCourierRate(c, 0);
+                                  } else {
+                                    saveCourierRate(c, v);
+                                  }
+                                }} />
+                              <span className="text-[10px] text-pdd-text-secondary w-10">元/单</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  })()}
+                  <p className="text-[10px] text-pdd-text-secondary mt-3">{'快递费优先级：实际邮费 > 快递公司费率 > 默认快递费'}</p>
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}
       </AnimatePresence>
 
-      <TimeFilter state={tf} />
+      <UnifiedFilterBar
+        timeFilter={tf}
+        actions={[
+          { label: '成本设置', icon: <Settings size={13} />, onClick: () => setShowQuickSettings(true) },
+        ]}
+      />
 
       {/* Tab navigation */}
-      <div className="flex gap-1 bg-pdd-card rounded-xl px-1.5 py-1 border border-pdd-border shadow-sm overflow-x-auto">
+      <div className="flex gap-1 bg-pdd-card rounded-lg px-1.5 py-1 border border-pdd-border overflow-x-auto">
         {TABS.map(tab => (
           <button key={tab.key} onClick={() => setActiveTab(tab.key)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
@@ -3171,8 +3458,7 @@ export default function CostManagementPage() {
       {/* Tab content */}
       {activeTab === 'overview' && renderOverview()}
       {activeTab === 'costs' && renderCosts()}
-      {activeTab === 'pricing' && renderPricing()}
-      {activeTab === 'tax' && renderTax()}
+      {activeTab === 'shipping' && renderShipping()}
       {activeTab === 'deductions' && renderDeductions()}
       {activeTab === 'alerts' && renderAlerts()}
     </div>

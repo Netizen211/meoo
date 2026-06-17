@@ -108,7 +108,7 @@ export default function ChinaMap({ provinceStats, logisticsByProvince, selectedP
     const d = provMap[name];
     if (!d) return '#e8e8e8';
     const intensity = Math.max(0.12, d[metricMode] / maxMetric);
-    return `rgba(224,46,36,${0.12 + intensity * 0.88})`;
+    return `rgba(31,107,255,${0.12 + intensity * 0.88})`;
   };
 
   const handleProvinceHover = (e: React.MouseEvent, name: string) => {
@@ -171,7 +171,7 @@ export default function ChinaMap({ provinceStats, logisticsByProvince, selectedP
         <div className="flex items-center gap-0.5 bg-[var(--pdd-border)] rounded-md p-0.5">
           {(['revenue', 'count', 'buyers'] as const).map(m => (
             <button key={m} onClick={() => setMetricMode(m)}
-              className={`px-1.5 py-0.5 rounded text-[11px] transition-colors ${metricMode === m ? 'bg-white text-[var(--pdd-danger)] font-medium shadow-sm' : 'text-[var(--pdd-text-muted)]'}`}>
+              className={`px-1.5 py-0.5 rounded text-[11px] transition-colors ${metricMode === m ? 'bg-pdd-card text-[var(--pdd-danger)] font-medium shadow-sm' : 'text-[var(--pdd-text-muted)]'}`}>
               {m === 'revenue' ? 'GMV' : m === 'count' ? '订单' : '买家'}
             </button>
           ))}
@@ -209,8 +209,8 @@ export default function ChinaMap({ provinceStats, logisticsByProvince, selectedP
 
                 let borderColor = '#adadad';
                 let borderWidth = 1 * s;
-                if (isDetail) { borderColor = '#E02E24'; borderWidth = 2.5 * s; }
-                else if (isSelected) { borderColor = '#E02E24'; borderWidth = 2 * s; }
+                if (isDetail) { borderColor = 'var(--pdd-danger)'; borderWidth = 2.5 * s; }
+                else if (isSelected) { borderColor = 'var(--pdd-danger)'; borderWidth = 2 * s; }
                 else if (isHovered) { borderColor = '#555'; borderWidth = 1.8 * s; }
 
                 return (
@@ -348,7 +348,7 @@ export default function ChinaMap({ provinceStats, logisticsByProvince, selectedP
               <div className="flex-1 flex gap-0.5">
                 {[0.15, 0.35, 0.55, 0.75, 1.0].map((v, i) => (
                   <div key={i} className="flex-1 h-2.5 rounded-sm"
-                    style={{ backgroundColor: `rgba(224,46,36,${0.12 + v * 0.88})` }} />
+                    style={{ backgroundColor: `rgba(31,107,255,${0.12 + v * 0.88})` }} />
                 ))}
               </div>
               <span className="text-[10px] text-[var(--pdd-text-muted)]">高</span>

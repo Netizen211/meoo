@@ -13,3 +13,64 @@ Thumbs.db
 *.log
 .idea/
 .vscode/
+
+# 临时脚本 / 一次性工具
+fix_*.js
+fix_*.py
+tmp_*.py
+tmp_*.js
+append_*.py
+test_*.txt
+temp_*.txt
+temp_*.py
+index_fix.html
+
+# 大文件 / 数据文件
+*.xlsx
+*.csv
+mysql-data/
+test-results/
+
+# 一次性生成脚本
+_*_gen.py
+_tmp_*
+
+# 临时输出文件
+*.out.txt
+*filelen.txt
+
+# AI辅助生成的临时文件
+promo_*.txt
+meoo-nginx.conf
+write_*.mjs
+test.py
+
+# Python 辅助脚本（非项目代码）
+_*_part*.py
+_*_part*.txt
+*.tar
+*.zip
+
+# 项目文档 / AI辅助文件
+docs/
+*.md
+*.txt
+*.b64
+*.html
+*.py
+*.sh
+.claude/
+screenshot.png
+*.orig
+*.bak2
+.deploy-config.json
+PROJECT_MAP.md
+SESSION_SUMMARY.md
+deploy-to-hk.sh
+问题排查.txt
+live_raw.json
+matches_raw.json
+scorers_raw.json
+sim_results.json
+standings_raw.json
+teams_raw.json

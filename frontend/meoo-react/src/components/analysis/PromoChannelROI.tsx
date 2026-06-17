@@ -59,8 +59,8 @@ export default function PromoChannelROI({ promoProducts, promotionSummary, starS
   const pieGMV = channels.map(c => ({ name: c.channel, value: Math.round(c.gmv) }));
 
   return (
-    <div className="pdd-card rounded-xl border border-pdd-border p-4">
-      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-3 flex items-center gap-1.5">
+    <div className="bg-pdd-card rounded-xl border border-pdd-border p-4">
+      <h3 className="text-xs font-semibold text-pdd-text-secondary mb-3 flex items-center gap-1.5">
         <Target size={13} color="#7c3aed" />推广渠道对比
       </h3>
       <div className="grid grid-cols-2 gap-4 mb-3">

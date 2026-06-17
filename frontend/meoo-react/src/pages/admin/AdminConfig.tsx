@@ -1,13 +1,12 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  adminApi, type FeeConfig, type ExpressRateItem, type DeductionFormula,
-  type TaxRateConfig, type ConfigHistoryItem, type GlobalConfig,
-} from '../../../api/adminApi';
+import type { FeeConfig, ExpressRateItem, DeductionFormula, TaxRateConfig, GlobalConfig } from '../../../api/adminApi';
 import {
   DollarSign, Truck, Calculator, Landmark, Download, Upload,
   History, Save, Plus, Pencil, Trash2, X, Check, Power, AlertCircle,
 } from 'lucide-react';
+import { useConfig, useUpdateConfig, useImportConfig, useConfigHistory } from '../../hooks/useAdminData';
+import { adminApi } from '../../../api/adminApi';
 
 /* ==================== 类型 ==================== */
 
@@ -34,11 +33,9 @@ const EXPRESS_COMPANIES = ['中通', '圆通', '申通', '韵达', '顺丰', '�
 
 export default function AdminConfig() {
   const [activeTab, setActiveTab] = useState<TabKey>('fees');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // 配置数据
+  // 配置数据 (local form state synced from server)
   const [fees, setFees] = useState<FeeConfig>(DEFAULT_FEES);
   const [expressRates, setExpressRates] = useState<ExpressRateItem[]>([]);
   const [formulas, setFormulas] = useState<DeductionFormula[]>([]);
@@ -48,28 +45,26 @@ export default function AdminConfig() {
   const [importing, setImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const { data: configData, isLoading } = useConfig();
+  const updateMutation = useUpdateConfig();
+  const importMutation = useImportConfig();
+
+  // sync server config into local form state once loaded
+  useEffect(() => {
+    if (configData) {
+      setFees(configData.fees || DEFAULT_FEES);
+      setExpressRates(configData.expressRates || []);
+      setFormulas(configData.deductionFormulas || []);
+      setTaxRates(configData.taxRates || DEFAULT_TAX);
+    }
+  }, [configData]);
+
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMsg({ type, text });
     setTimeout(() => setMsg(null), 3000);
   };
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const config = await adminApi.getConfig();
-        if (config) {
-          setFees(config.fees || DEFAULT_FEES);
-          setExpressRates(config.expressRates || []);
-          setFormulas(config.deductionFormulas || []);
-          setTaxRates(config.taxRates || DEFAULT_TAX);
-        }
-      } catch { /* ignore */ }
-      setLoading(false);
-    })();
-  }, []);
-
   const handleSave = async () => {
-    setSaving(true);
     try {
       const data: Partial<GlobalConfig> = {};
       if (activeTab === 'fees') data.fees = fees;
@@ -77,12 +72,11 @@ export default function AdminConfig() {
       if (activeTab === 'formulas') data.deductionFormulas = formulas;
       if (activeTab === 'tax') data.taxRates = taxRates;
 
-      const res = await adminApi.updateConfig(data);
+      const res = await updateMutation.mutateAsync(data);
       showMsg(res.success ? 'success' : 'error', res.success ? '配置保存成功' : (res.error || '保存失败'));
     } catch {
       showMsg('error', '保存失败，请检查网络连接');
     }
-    setSaving(false);
   };
 
   const handleExport = async () => {
@@ -98,17 +92,9 @@ export default function AdminConfig() {
       const text = await file.text();
       const data = JSON.parse(text);
       if (data.configs) {
-        const res = await adminApi.importConfigJSON(data.configs);
+        const res = await importMutation.mutateAsync(data.configs);
         if (res.success) {
           showMsg('success', (res as any).message || '导入成功');
-          // 刷新配置
-          const config = await adminApi.getConfig();
-          if (config) {
-            setFees(config.fees || DEFAULT_FEES);
-            setExpressRates(config.expressRates || []);
-            setFormulas(config.deductionFormulas || []);
-            setTaxRates(config.taxRates || DEFAULT_TAX);
-          }
         } else {
           showMsg('error', (res as any).error || '导入失败');
         }
@@ -120,7 +106,7 @@ export default function AdminConfig() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  if (loading) return <div className="text-pdd-text-secondary py-8 text-center">加载配置中...</div>;
+  if (isLoading) return <div className="text-pdd-text-secondary py-8 text-center">加载配置中...</div>;
 
   return (
     <div className="space-y-4 max-w-4xl">
@@ -204,12 +190,12 @@ export default function AdminConfig() {
         <div className="pt-2">
           <button
             onClick={handleSave}
-            disabled={saving}
+            disabled={updateMutation.isPending}
             className="px-6 py-2.5 bg-pdd-primary text-white rounded-lg text-sm font-medium
               disabled:opacity-50 hover:bg-pdd-primary/90 transition-colors flex items-center gap-2"
           >
             <Save size={14} />
-            {saving ? '保存中...' : '保存配置'}
+            {updateMutation.isPending ? '保存中...' : '保存配置'}
           </button>
         </div>
       )}
@@ -526,22 +512,12 @@ function TaxTab({ rates, onChange }: { rates: TaxRateConfig; onChange: (r: TaxRa
 /* ==================== 变更历史 Tab ==================== */
 
 function HistoryTab() {
-  const [history, setHistory] = useState<ConfigHistoryItem[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
   const pageSize = 20;
 
-  useEffect(() => {
-    setLoading(true);
-    adminApi.getConfigHistory({ page, pageSize }).then(res => {
-      if (res.success) {
-        setHistory(res.data ?? []);
-        setTotal((res as any).total ?? 0);
-      }
-      setLoading(false);
-    });
-  }, [page]);
+  const { data: historyData, isLoading } = useConfigHistory(page, pageSize);
+  const history = historyData?.items ?? [];
+  const total = historyData?.total ?? 0;
 
   const formatValue = (raw: string | null): string => {
     if (!raw) return '(空)';
@@ -559,7 +535,7 @@ function HistoryTab() {
         <History size={16} className="text-cyan-400" /> 配置变更历史
       </h3>
 
-      {loading ? (
+      {isLoading ? (
         <div className="text-center py-8 text-pdd-text-secondary text-sm">加载中...</div>
       ) : history.length === 0 ? (
         <div className="text-center py-8 text-pdd-text-secondary text-sm">暂无变更记录</div>

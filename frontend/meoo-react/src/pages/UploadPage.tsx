@@ -1,18 +1,34 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { Upload, FileText, FileSpreadsheet, CheckCircle, AlertCircle, X, Loader2, Trash2, History, AlertTriangle, Store, ChevronDown, ChevronRight, Clock } from 'lucide-react';
+import { Upload, FileText, FileSpreadsheet, CheckCircle, AlertCircle, X, Loader2, Trash2, History, AlertTriangle, Store, ChevronDown, ChevronRight, Clock, Database, Search, Shield, RefreshCw, Trash, Settings, BarChart3, Activity, Info, FolderOpen } from 'lucide-react';
 
-import { useData, useStore } from '../App';
+import { useData, useStore, useAuth } from '../App';
+import { useDataStore } from '../store/dataStore';
 import { findField } from '../utils';
-import { syncStoreDelta } from '../../api/dataApi';
 
 import Papa from 'papaparse';
 
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { changelog } from '../data/changelog';
+import DataOverview from '../components/data-management/DataOverview';
+import DataQualityCheck from '../components/data-management/DataQualityCheck';
+import DataCleanup from '../components/data-management/DataCleanup';
+import SyncStatus from '../components/data-management/SyncStatus';
+
+// shadcn/ui 组件
+import { Card, CardContent } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Progress } from '../components/ui/progress';
+import { Badge } from '../components/ui/badge';
+import { Checkbox } from '../components/ui/checkbox';
+import { toast } from '../components/ui/toast';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+  DialogFooter,
+} from '../components/ui/dialog';
 
 
 interface DataMismatchWarning {
@@ -58,6 +74,10 @@ interface UploadedFile {
 
   errorMessage?: string;
 
+  /** 诊断信息 */
+  dateStart?: string; dateEnd?: string;
+  privacyFields?: string[];
+  jsonEstimateKB?: number;
 }
 
 
@@ -202,6 +222,8 @@ const FILE_TYPE_RULES: { keywords: string[]; label: string; icon: string }[] = [
 
   { keywords: ['售后', '退款', '退货'], label: '售后数据', icon: '🔄' },
 
+  { keywords: ['货款', 'bill', 'mall-bill'], label: '货款明细', icon: '💰' },
+
 ];
 
 
@@ -246,8 +268,8 @@ function detectFileTypeByContent(fields: string[], sheetName?: string, fileName?
 
 
   // ========== 0. 货款明细检测 ==========
-  // 拼多多货款明细CSV，字段：商户订单号、收入金额（+元）、支出金额（-元）、账务类型、业务描述
-  if (fieldSet.has('商户订单号') && hasAny('收入金额（+元）', '收入金额(元)', '收入金额') && hasAny('支出金额（-元）', '支出金额(元)', '支出金额') && fieldSet.has('账务类型')) {
+  // 拼多多货款明细CSV，字段：商户订单号/商家订单号、收入金额（+元）/收入（+元）、支出金额（-元）/支出（-元）、账务类型、业务描述
+  if ((fieldSet.has('商户订单号') || fieldSet.has('商家订单号')) && hasAny('收入金额（+元）', '收入金额(元)', '收入金额', '收入（+元）') && hasAny('支出金额（-元）', '支出金额(元)', '支出金额', '支出（-元）') && fieldSet.has('账务类型')) {
     return '货款明细';
   }
 
@@ -718,9 +740,13 @@ function getOrderRowKey(row: any): string {
   return String(findField(row, '订单号') || '').trim();
 }
 
-/** 获取货款明细行的唯一标识（商户订单号 + 发生时间） */
+/** 获取货款明细行的唯一标识（商户订单号/商家订单号 + 发生时间 + 交易类型 + 金额，防误删） */
 function getFinancialRowKey(row: any): string {
-  return `${String(findField(row, '商户订单号') || '').trim()}_${String(findField(row, '发生时间') || '').trim()}`;
+  const orderNo = String(findField(row, '商户订单号', '商家订单号') || '').trim();
+  const time = String(findField(row, '发生时间') || '').trim();
+  const type = String(findField(row, '交易类型') || findField(row, '业务描述') || '').trim();
+  const amount = String(findField(row, '收入金额（+元）', '收入金额(+元)', '收入金额(元)', '收入金额', '收入（+元）', '收入(+元)') || findField(row, '支出金额（-元）', '支出金额(-元)', '支出金额(元)', '支出金额', '支出（-元）', '支出(-元)') || '').trim();
+  return `${orderNo}_${time}_${type}_${amount}`;
 }
 
 /** 获取运费险行的唯一标识 */
@@ -756,6 +782,32 @@ const GLOBAL_SEEN_KEYS: Record<string, Set<string>> = (() => {
   } catch {}
   return { orders: new Set(), financial: new Set(), insurance: new Set(), afterSale: new Set(), promoProducts: new Set() };
 })();
+
+// ★ 上传字段归一化映射
+const UPLOAD_ALIASES: Record<string, string> = {
+  '下单日期': '支付时间', '下单时间': '支付时间', '订单创建时间': '支付时间',
+  '订单成交时间': '支付时间', '入账时间': '支付时间',
+  '商家实收(元)': '商家实收金额(元)', '用户实付(元)': '用户实付金额(元)',
+  '退款(元)': '退款金额(元)', '技术服务费(元)': '平台技术服务费(元)',
+  '成交量(件)': '商品数量(件)', '成交金额(元)': '交易额(元)',
+  '快递费(元)': '邮费(元)', '保费(元)': '保费(元)',
+};
+function normalizeUploadFields(row: any): any {
+  const out: any = {};
+  Object.keys(row).forEach(k => {
+    const val = row[k];
+    let key = typeof k === 'string' ? k.replace(/[﻿ \t\r\n]+/g, '').trim() : k;
+    key = UPLOAD_ALIASES[key] || key;
+    out[key] = typeof val === 'string' ? val.replace(/[﻿ \t\r\n]+/g, '').trim() : val;
+  });
+  return out;
+}
+
+/** 清空跨文件去重缓存 */
+function resetGlobalSeenKeys() {
+  Object.values(GLOBAL_SEEN_KEYS).forEach(s => s.clear());
+  try { sessionStorage.removeItem('dianfx_global_seen_keys'); } catch {}
+}
 
 function saveGlobalSeenKeys() {
   try {
@@ -830,6 +882,56 @@ function tripleDedup<T>(
   return { merged, intraDup, crossDup, mergeDup, newCount, totalNew: finalNew };
 }
 
+// ★ 上传诊断：提取日期范围、隐私字段、JSON 预估值
+const PRIVACY_FIELDS_LIST = ['收货人','收货人姓名','收件人','收货人手机','收货人电话','手机号','手机','联系电话','买家手机','电话','收货地址','详细地址','街道/镇','街道','镇','区','买家留言','买家信息','买家备注','商家备注','卖家备注','备注','身份证','身份证号','微信','QQ','邮箱','Email'];
+
+/** 从数据行中剥离隐私字段 */
+function stripPrivacyFields(rows: any[]): any[] {
+  const lowerMap: Record<string, string> = {};
+  if (rows.length === 0) return rows;
+  Object.keys(rows[0]).forEach(k => { lowerMap[k.replace(/[\s\-_]/g, '').toLowerCase()] = k; });
+  const toStrip = new Set<string>();
+  PRIVACY_FIELDS_LIST.forEach(pf => {
+    const key = pf.replace(/[\s\-_]/g, '').toLowerCase();
+    if (lowerMap[key]) toStrip.add(lowerMap[key]);
+    // 也匹配部分包含（如"手机号"匹配"买家手机号"）
+    Object.entries(lowerMap).forEach(([lk, ok]) => {
+      // ★ 短关键词(≤2字符)不做正向模糊匹配，避免误伤（如"区"匹配"地区"、"手机"匹配"手机壳"）
+      // ★ 反向匹配（关键词包含字段名）对所有长度开放，主要用于"收货人姓名"→"收货人"这类场景
+      if (key.length >= 3 && lk.includes(key)) { toStrip.add(ok); return; }
+      if (key.includes(lk)) { toStrip.add(ok); }
+    });
+  });
+  return rows.map(row => {
+    const clean: any = {};
+    Object.keys(row).forEach(k => {
+      if (!toStrip.has(k)) clean[k] = row[k];
+    });
+    return clean;
+  });
+}
+function extractDiagnostics(data: any[], fields: string[], detectedType?: string) {
+  const diag: { dateStart?: string; dateEnd?: string; privacyFields: string[]; jsonEstimateKB: number } = { privacyFields: [], jsonEstimateKB: 0 };
+  // 日期范围
+  const dateField = detectedType === '售后数据' ? '申请时间'
+    : detectedType === '货款明细' ? '入账时间'
+    : '支付时间';
+  // 货款明细降级：入账时间 → 发生时间 → 日期
+  const dateFallback = detectedType === '货款明细' ? ['发生时间', '日期'] : [];
+  const dates = data.map(r => {
+    let d = findField(r, dateField);
+    if (!d) for (const fb of dateFallback) { d = findField(r, fb); if (d) break; }
+    if (!d) d = findField(r, '日期') || findField(r, '下单时间');
+    return String(d || '').trim().slice(0, 10);
+  }).filter(d => /^\d{4}-\d{2}-\d{2}$/.test(d)).sort();
+  if (dates.length > 0) { diag.dateStart = dates[0]; diag.dateEnd = dates[dates.length - 1]; }
+  // 隐私字段
+  diag.privacyFields = PRIVACY_FIELDS_LIST.filter(pf => fields.some(f => f === pf));
+  // JSON 预估值 (KB)
+  try { diag.jsonEstimateKB = Math.round(JSON.stringify(data).length / 1024); } catch { diag.jsonEstimateKB = 0; }
+  return diag;
+}
+
 /** 通用去重合并：根据 getKey 去重，返回合并后的数组及统计 */
 function dedupMerge<T>(existing: T[], incoming: T[], getKey: (item: T) => string): { merged: T[]; newCount: number; dupCount: number } {
   const existingKeys = new Set(existing.map(getKey).filter(Boolean));
@@ -851,9 +953,17 @@ function dedupMerge<T>(existing: T[], incoming: T[], getKey: (item: T) => string
 
 export default function UploadPage() {
 
-  const { getStoreData, setStoreData, setStoreDataLocal, uploadRecords, addUploadRecord, deleteUploadRecord, setDataFilter, dataFilter } = useData();
+  const { getStoreData, setStoreData, setStoreDataLocal, uploadRecords, addUploadRecord, deleteUploadRecord, setDataFilter, dataFilter, clearOrderData, clearFinancialData, clearAllData } = useData();
 
+  const { user: authUser } = useAuth();
   const { currentStore } = useStore();
+  const lastSyncError = useDataStore(s => s.lastSyncError);
+  const clearSyncError = useDataStore(s => s.clearSyncError);
+  const storageMode = useDataStore(s => s.storageMode);
+  const setStorageMode = useDataStore(s => s.setStorageMode);
+  // ★ 上传模式选择
+  const [showModeDialog, setShowModeDialog] = useState(false);
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
 
   const [files, setFiles] = useState<UploadedFile[]>([]);
 
@@ -868,20 +978,68 @@ export default function UploadPage() {
   const [selectedRecords, setSelectedRecords] = useState<Set<string>>(new Set());
 
   const [batchDeleteConfirm, setBatchDeleteConfirm] = useState(false);
+  const [confirmFile, setConfirmFile] = useState<{ file: File; existingRecord: any } | null>(null);
   const [showChangelog, setShowChangelog] = useState(false);
   const [expandedVersion, setExpandedVersion] = useState<string | null>(null);
 
+  // --- ⭐ 权益1: 批量上传队列管理 ---
+  const [batchQueue, setBatchQueue] = useState<{ total: number; done: number; failed: number }>({ total: 0, done: 0, failed: 0 });
+  const [showBatchQueue, setShowBatchQueue] = useState(false);
+
+  // --- ⭐ 权益2: 上传历史搜索 ---
+  const [historySearch, setHistorySearch] = useState('');
+  const [historyTypeFilter, setHistoryTypeFilter] = useState<string>('all');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // ★ 最小解析时间（保证进度条可见）
+  const MIN_PARSE_MS = 500;
+  const parsingStartRef = useRef<Record<string, number>>({});
+  const ensureMinParseTime = async (fileName: string) => {
+    const start = parsingStartRef.current[fileName] || Date.now();
+    const elapsed = Date.now() - start;
+    if (elapsed < MIN_PARSE_MS) {
+      await new Promise(r => setTimeout(r, MIN_PARSE_MS - elapsed));
+    }
+  };
+
+  // ══════════════════════════════════════════════
+  // 数据管理 Tab 系统
+  // ══════════════════════════════════════════════
+  const [activeTab, setActiveTab] = useState<string>('upload');
+  const [qualityFilter, setQualityFilter] = useState<string>('all');
+  const [cleanupStore, setCleanupStore] = useState<string>('');
+  const [cleanupTypes, setCleanupTypes] = useState<Set<string>>(new Set());
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState('');
+  const [showCleanupConfirm, setShowCleanupConfirm] = useState(false);
+
+  const TABS = [
+    { key: 'upload', label: '上传', icon: '📤' },
+    { key: 'overview', label: '数据总览', icon: '📊' },
+    { key: 'quality', label: '数据质量检查', icon: '🔍' },
+    { key: 'cleanup', label: '数据清理', icon: '🧹' },
+    { key: 'sync', label: '同步状态', icon: '🔄' },
+  ];
 
   const currentStoreUploads = uploadRecords.filter(r => r.storeId === currentStore?.id);
 
+  // --- ⭐ 权益2: 上传历史搜索/筛选 ---
+  const filteredRecords = useMemo(() => {
+    return currentStoreUploads.filter(r => {
+      const matchSearch = !historySearch || r.fileName.toLowerCase().includes(historySearch.toLowerCase());
+      const matchType = historyTypeFilter === 'all' || r.fileType === historyTypeFilter;
+      return matchSearch && matchType;
+    });
+  }, [currentStoreUploads, historySearch, historyTypeFilter]);
 
-  /** 解析货款明细CSV原始内容：跳过元数据头，找到含"商户订单号"的真实表头行 */
+
+  /** 解析货款明细CSV原始内容：跳过元数据头，找到含"商户订单号"/"商家订单号"的真实表头行 */
   function parseFinancialCSV(rawContent: string): { fields: string[]; data: any[] } | null {
     const parsed = Papa.parse(rawContent, { header: false, skipEmptyLines: true });
     const rawRows = parsed.data as string[][];
     let headerIdx = -1;
     for (let i = 0; i < Math.min(rawRows.length, 20); i++) {
-      if (rawRows[i].some((cell: string) => cell && cell.includes('商户订单号'))) {
+      if (rawRows[i].some((cell: string) => cell && (cell.includes('商户订单号') || cell.includes('商家订单号')))) {
         headerIdx = i;
         break;
       }
@@ -928,6 +1086,9 @@ export default function UploadPage() {
 
       let data: any[] = [];
 
+      const toastId = `csv-${file.name}-${Date.now()}`;
+      toast.loading(`正在解析 ${file.name}...`, { id: toastId });
+
       try {
 
         const utf8 = await tryParse('UTF-8');
@@ -964,6 +1125,8 @@ export default function UploadPage() {
 
           setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error', errorMessage: errMsg } : f));
 
+          toast.error(errMsg, { id: toastId });
+
           return;
 
         }
@@ -971,6 +1134,14 @@ export default function UploadPage() {
       }
 
 
+
+      try {
+      // ★ 自动剥离隐私字段（手机号、收货地址、买家备注等）
+      const csvPrivacyFields = PRIVACY_FIELDS_LIST.filter(pf => fields.some(f => f === pf));
+      if (csvPrivacyFields.length > 0) {
+        data = stripPrivacyFields(data);
+        fields = Object.keys(data[0] || {});
+      }
       let detectedType = resolveType(detectFileTypeByContent(fields, undefined, file.name), file.name);
 
       // 如果检测结果是未知类型或字段异常少，尝试按货款明细CSV重新解析（跳过元数据头）
@@ -995,7 +1166,7 @@ export default function UploadPage() {
 
       // 数据一致性检测（使用当前快照，仅用于展示警告）
 
-      const existingSnapshot = getStoreData(targetStoreId) || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() } };
+      const existingSnapshot = getStoreData(targetStoreId) || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: [], promotion: [], insurance: [], afterSale: [], financial: [] } };
 
       const mismatchWarning = checkDataConsistency(data, detectedType, existingSnapshot);
 
@@ -1033,61 +1204,89 @@ export default function UploadPage() {
         });
       }
 
-      setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, fieldCount: fields.length, rowCount: data.length, detectedType, missingFields: missing, mismatchWarning, duplicateCount: approxDuplicateCount, newCount: approxNewCount } : f));
+      const diag = extractDiagnostics(data, fields, detectedType);
+      await ensureMinParseTime(file.name);
+      setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, fieldCount: fields.length, rowCount: data.length, detectedType, missingFields: missing, mismatchWarning, duplicateCount: approxDuplicateCount, newCount: approxNewCount, dateStart: diag.dateStart, dateEnd: diag.dateEnd, privacyFields: diag.privacyFields, jsonEstimateKB: diag.jsonEstimateKB } : f));
+
+      // ★ 针对 订单数据 用三重去重引擎计算精确统计（在 setStoreData 外执行 setFiles）
+      if (detectedType === '订单数据') {
+        const snapshot = getStoreData(targetStoreId);
+        const existingOrders = snapshot?.orders || [];
+        const cleanedData = data.map(normalizeUploadFields);
+        // ★ 传副本避免污染 GLOBAL_SEEN_KEYS —— 否则第二次调用（真正合并）时会误判全部为跨文件重复
+        const dedupResult = tripleDedup(cleanedData, getOrderRowKey, new Set(GLOBAL_SEEN_KEYS.orders), existingOrders);
+        setFiles(prev => prev.map(f => f.name === file.name ? {
+          ...f,
+          duplicateCount: dedupResult.intraDup + dedupResult.crossDup + dedupResult.mergeDup,
+          intraDupCount: dedupResult.intraDup,
+          crossDupCount: dedupResult.crossDup,
+          newCount: dedupResult.newCount,
+        } : f));
+      }
 
 
       // 使用函数式更新避免闭包陷阱，确保基于最新状态合并
 
-      setStoreData(targetStoreId, ((prevExisting: any) => {
+      // ★ 先记录上传，再同步数据（确保 uploadRecord 包含在 sync payload 中）
+      addUploadRecord({ fileName: file.name, fileType: detectedType, storeId: targetStoreId, storeName: targetStoreName, rowCount: data.length, fieldCount: fields.length });
 
-        const existing = prevExisting || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() } };
+      // ★ 增量同步：只发送变更的分类
+      const csvSyncCategories: string[] | undefined = (() => {
+        if (detectedType === '订单数据') return ['orders'];
+        if (detectedType === '货款明细') return ['financialRecords'];
+        if (detectedType === '运费险数据') return ['shippingInsurance'];
+        if (detectedType === '售后数据') return ['afterSaleRecords'];
+        if (detectedType === '商品推广数据') return ['promotionProducts', 'promotionSummary'];
+        if (detectedType === '明星店铺数据') return ['starStoreSummary'];
+        if (detectedType === '直播推广数据') return ['liveStreamSummary'];
+        return undefined;
+      })();
+
+      setStoreData(targetStoreId, (prevExisting: any) => {
+
+        const base = prevExisting || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: [], promotion: [], insurance: [], afterSale: [], financial: [] } };
+        // ★ 建立全新副本，避免直接突变 Zustand store 引用
+        const existing = {
+          ...base,
+          availableFields: { ...base.availableFields },
+          orders: [...(base.orders || [])],
+          promotionSummary: [...(base.promotionSummary || [])],
+          promotionProducts: [...(base.promotionProducts || [])],
+          starStoreSummary: [...(base.starStoreSummary || [])],
+          liveStreamSummary: [...(base.liveStreamSummary || [])],
+          shippingInsurance: [...(base.shippingInsurance || [])],
+          afterSaleRecords: [...(base.afterSaleRecords || [])],
+          financialRecords: [...(base.financialRecords || [])],
+        };
 
 
         if (detectedType === '订单数据') {
 
-          // 清洗字段名和值中的BOM/不可见字符（统一处理CSV和XLSX）
-          const cleanCsvRow = (row: any) => {
-            const cleaned: any = {};
-            Object.keys(row).forEach(k => {
-              const val = row[k];
-              const cleanKey = typeof k === "string" ? k.replace(/[﻿ \t\r\n]+/g, "").trim() : k;
-              cleaned[cleanKey] = typeof val === "string" ? val.replace(/[﻿ \t\r\n]+/g, "").trim() : val;
-            });
-            return cleaned;
-          };
-          const cleanedData = data.map(cleanCsvRow);
+          const cleanedData = data.map(normalizeUploadFields);
           // ★ 三层去重引擎
           const dedupResult = tripleDedup(cleanedData, getOrderRowKey, GLOBAL_SEEN_KEYS.orders, existing.orders);
           const mergedOrders = dedupResult.merged;
-          // 更新 UI 统计
-          setFiles(prev => prev.map(f => f.name === file.name ? {
-            ...f,
-            duplicateCount: dedupResult.intraDup + dedupResult.crossDup + dedupResult.mergeDup,
-            intraDupCount: dedupResult.intraDup,
-            crossDupCount: dedupResult.crossDup,
-            newCount: dedupResult.newCount,
-          } : f));
           existing.orders = mergedOrders;
 
-          existing.availableFields.csv = new Set(fields);
+          existing.availableFields.csv = [...fields];
 
         } else if (detectedType === '货款明细') {
 
           if (!existing.financialRecords) existing.financialRecords = [];
-          const { merged: mergedFinancial } = dedupMerge(existing.financialRecords, data, getFinancialRowKey);
+          const { merged: mergedFinancial } = dedupMerge(base.financialRecords, data, getFinancialRowKey);
           existing.financialRecords = mergedFinancial;
 
         } else if (detectedType === '运费险数据') {
-          const { merged: mergedIns } = dedupMerge(existing.shippingInsurance, data, getInsuranceRowKey);
+          const { merged: mergedIns } = dedupMerge(base.shippingInsurance, data, getInsuranceRowKey);
           existing.shippingInsurance = mergedIns;
-          existing.availableFields.insurance = new Set(fields);
+          existing.availableFields.insurance = [...fields];
 
         } else if (detectedType === '售后数据') {
           if (!existing.afterSaleRecords) existing.afterSaleRecords = [];
-          const { merged: mergedAS } = dedupMerge(existing.afterSaleRecords, data, getAfterSaleRowKey);
+          const { merged: mergedAS } = dedupMerge(base.afterSaleRecords, data, getAfterSaleRowKey);
           existing.afterSaleRecords = mergedAS;
-          if (!existing.availableFields.afterSale) existing.availableFields.afterSale = new Set();
-          existing.availableFields.afterSale = new Set(fields);
+          if (!existing.availableFields.afterSale) existing.availableFields.afterSale = [];
+          existing.availableFields.afterSale = [...fields];
 
         } else if (detectedType === '商品推广数据') {
           const hasProductId = fields.some((f: string) => {
@@ -1120,12 +1319,15 @@ export default function UploadPage() {
             });
             existing.promotionSummary = Array.from(summaryMap.values());
           }
-          fields.forEach((f: string) => existing.availableFields.promotion.add(f));
+          // ★ availableFields 已改为 string[]，不能用 Set.add
+          const promArr = existing.availableFields.promotion || [];
+          fields.forEach((f: string) => { if (!promArr.includes(f)) promArr.push(f); });
+          existing.availableFields.promotion = promArr;
 
         } else if (detectedType === '明星店铺数据') {
           const hasDistinguish = fields.includes('推广名称') || fields.includes('创意样式');
           const starMap = new Map<string, any>();
-          existing.starStoreSummary.forEach((r: any) => {
+          base.starStoreSummary.forEach((r: any) => {
             const d = String(findField(r, '日期') || '').trim();
             if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
               const suffix = hasDistinguish ? '-' + String(findField(r, '推广名称') || findField(r, '创意样式') || '').trim() : '';
@@ -1143,7 +1345,7 @@ export default function UploadPage() {
         } else if (detectedType === '直播推广数据') {
           const hasDistinguish = fields.includes('直播间') || fields.includes('推广名称');
           const liveMap = new Map<string, any>();
-          existing.liveStreamSummary.forEach((r: any) => {
+          base.liveStreamSummary.forEach((r: any) => {
             const d = String(findField(r, '日期') || '').trim();
             if (/^\d{4}-\d{2}-\d{2}$/.test(d)) {
               const suffix = hasDistinguish ? '-' + String(findField(r, '直播间') || findField(r, '推广名称') || '').trim() : '';
@@ -1161,23 +1363,24 @@ export default function UploadPage() {
         }
 
 
-        return { ...existing, availableFields: { ...existing.availableFields } };
+        return existing;
 
-      }) as any);
+      });
 
       setDataFilter(targetStoreId); // 上传后自动切换到该店铺的数据视图
 
       setFieldReport({ available: fields, missing, type: detectedType });
 
-      addUploadRecord({ fileName: file.name, fileType: detectedType, storeId: targetStoreId, storeName: targetStoreName, rowCount: data.length, fieldCount: fields.length });
+      // ★ 上传完成后留在当前页面（不上传自动跳转），改用 toast 提示
+      const privacyNote = csvPrivacyFields.length > 0 ? `，已自动剥离 ${csvPrivacyFields.length} 个隐私字段` : '';
+      toast.success(`${detectedType} 解析完成：${data.length} 行 × ${fields.length} 列${privacyNote}`, { id: toastId });
 
-      // ★ 零时差：上传完成后自动跳转到对应分析页面
-      setTimeout(() => {
-        if (detectedType === '订单数据') window.location.hash = '#/dashboard';
-        else if (['商品推广数据', '明星店铺数据', '直播推广数据'].includes(detectedType || '')) window.location.hash = '#/promotion';
-        else if (detectedType === '运费险数据') window.location.hash = '#/shipping-insurance';
-        else if (detectedType === '售后数据') window.location.hash = '#/after-sale';
-      }, 300); // 300ms小延迟让上传状态先渲染
+      } catch (err: any) {
+        const errMsg = `文件处理失败：${err?.message || '未知错误'}`;
+        console.error('processCsvFile error:', err, { fileName: file.name });
+        setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error', errorMessage: errMsg } : f));
+        toast.error(errMsg, { id: toastId });
+      }
 
     })();
 
@@ -1190,7 +1393,10 @@ export default function UploadPage() {
 
     reader.onprogress = (e) => { if (e.lengthComputable) setFiles(prev => prev.map(f => f.name === file.name ? { ...f, progress: Math.round((e.loaded / e.total) * 80) } : f)); };
 
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
+
+      const toastId = `xlsx-${file.name}-${Date.now()}`;
+      toast.loading(`正在解析 ${file.name}...`, { id: toastId });
 
       try {
 
@@ -1246,7 +1452,7 @@ export default function UploadPage() {
 
             return cleaned;
 
-          });
+          }).map(normalizeUploadFields);
 
         });
 
@@ -1282,7 +1488,7 @@ export default function UploadPage() {
         const missing = checkRequiredFields(allFields, primaryType);
 
         // 数据一致性检测（使用快照，仅用于展示警告）
-        const existingSnapshot = getStoreData(targetStoreId) || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() } };
+        const existingSnapshot = getStoreData(targetStoreId) || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: [], promotion: [], insurance: [], afterSale: [], financial: [] } };
         let mismatchWarning: DataMismatchWarning | undefined;
         if (primaryType === '商品推广数据') {
           const allPromoProducts = sheetInfos
@@ -1292,11 +1498,36 @@ export default function UploadPage() {
           mismatchWarning = checkDataConsistency(allPromoProducts, '商品推广数据', existingSnapshot);
         }
 
-        setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, fieldCount: allFields.length, rowCount: totalRows, detectedType: primaryType, missingFields: missing, mismatchWarning } : f));
+        const xlsxDiag = extractDiagnostics(sheetInfos.flatMap(info => info.data), allFields, primaryType);
+        await ensureMinParseTime(file.name);
+        setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, fieldCount: allFields.length, rowCount: totalRows, detectedType: primaryType, missingFields: missing, mismatchWarning, dateStart: xlsxDiag.dateStart, dateEnd: xlsxDiag.dateEnd, privacyFields: xlsxDiag.privacyFields, jsonEstimateKB: xlsxDiag.jsonEstimateKB } : f));
 
-        // 使用 functional updater 合并数据，避免并发上传时的竞态覆盖
+        // ★ 先记录上传，再同步数据
+        addUploadRecord({ fileName: file.name, fileType: primaryType, storeId: targetStoreId, storeName: targetStoreName, rowCount: totalRows, fieldCount: allFields.length });
+
+        // ★ 增量同步：从 sheetInfos 推导出变更的分类
+        const xlsxSyncCategories: string[] | undefined = (() => {
+          const cats = new Set<string>();
+          for (const info of sheetInfos) {
+            if (info.type === '订单数据') cats.add('orders');
+            else if (info.type === '货款明细') cats.add('financialRecords');
+            else if (info.type === '运费险数据') cats.add('shippingInsurance');
+            else if (info.type === '售后数据') cats.add('afterSaleRecords');
+            else if (info.type === '商品推广数据') { cats.add('promotionProducts'); cats.add('promotionSummary'); }
+            else if (info.type === '明星店铺数据') cats.add('starStoreSummary');
+            else if (info.type === '直播推广数据') cats.add('liveStreamSummary');
+          }
+          return cats.size > 0 ? Array.from(cats) : undefined;
+        })();
+
+        // ★ 自动剥离隐私字段
+        for (const info of sheetInfos) {
+          info.data = stripPrivacyFields(info.data);
+        }
+        // 重新计算总字段
+        allFields = sheetInfos.length > 0 && sheetInfos[0].data.length > 0 ? Object.keys(sheetInfos[0].data[0]) : [];
         setStoreData(targetStoreId, (prev: any) => {
-          const base = prev || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: new Set(), promotion: new Set(), insurance: new Set(), afterSale: new Set() } };
+          const base = prev || { orders: [], promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [], afterSaleRecords: [], financialRecords: [], availableFields: { csv: [], promotion: [], insurance: [], afterSale: [], financial: [] } };
           const merged = {
             ...base,
             orders: [...(base.orders || [])],
@@ -1308,17 +1539,19 @@ export default function UploadPage() {
             afterSaleRecords: [...(base.afterSaleRecords || [])],
             financialRecords: [...(base.financialRecords || [])],
             availableFields: {
-              csv: new Set(base.availableFields?.csv || []),
-              promotion: new Set(base.availableFields?.promotion || []),
-              insurance: new Set(base.availableFields?.insurance || []),
-              afterSale: new Set(base.availableFields?.afterSale || []),
+              csv: [...(base.availableFields?.csv || [])],
+              promotion: [...(base.availableFields?.promotion || [])],
+              insurance: [...(base.availableFields?.insurance || [])],
+              afterSale: [...(base.availableFields?.afterSale || [])],
             },
           };
 
+          // 仅用于推广产品 sheet 首次清空（多次推广 sheet 不清空已合并的产品列表）
           const processedTypes = new Set<string>();
+          // 跨 sheet 去重：推广产品 sheet 间按 日期+商品ID+推广名称 去重
+          const crossSheetPromoKeys = new Set<string>();
 
           for (const info of sheetInfos) {
-            if (processedTypes.has(info.type) && info.type !== '商品推广数据') continue;
 
             if (info.type === '商品推广数据') {
               const hasProductId = info.fields.includes('商品ID');
@@ -1326,16 +1559,17 @@ export default function UploadPage() {
                 if (!processedTypes.has('商品推广_产品')) {
                   merged.promotionProducts = [];
                 }
-                const seenKeys = new Set<string>();
                 info.data.forEach((item: any) => {
                   if (!isValidDateRow(item)) return;
                   const key = `${String(findField(item, '日期') || '').trim()}-${String(findField(item, '商品ID') || '').trim()}-${String(findField(item, '推广名称') || '').trim()}`;
-                  if (!seenKeys.has(key)) {
+                  if (!crossSheetPromoKeys.has(key)) {
                     merged.promotionProducts.push(item);
-                    seenKeys.add(key);
+                    crossSheetPromoKeys.add(key);
                   }
                 });
-                info.fields.forEach((f: string) => merged.availableFields.promotion.add(f));
+                const promArr1 = merged.availableFields.promotion || [];
+                info.fields.forEach((f: string) => { if (!promArr1.includes(f)) promArr1.push(f); });
+                merged.availableFields.promotion = promArr1;
                 processedTypes.add('商品推广_产品');
               } else {
                 const summaryMap = new Map<string, any>();
@@ -1348,9 +1582,10 @@ export default function UploadPage() {
                   summaryMap.set(String(findField(item, '日期') || '').trim(), item);
                 });
                 merged.promotionSummary = Array.from(summaryMap.values());
-                info.fields.forEach((f: string) => merged.availableFields.promotion.add(f));
+                const promArr2 = merged.availableFields.promotion || [];
+                info.fields.forEach((f: string) => { if (!promArr2.includes(f)) promArr2.push(f); });
+                merged.availableFields.promotion = promArr2;
               }
-              processedTypes.add(info.type);
             } else if (info.type === '明星店铺数据') {
               const hasDistinguishField = info.fields.includes('推广名称') || info.fields.includes('创意样式');
               const starMap = new Map<string, any>();
@@ -1368,8 +1603,6 @@ export default function UploadPage() {
                 starMap.set(key, item);
               });
               merged.starStoreSummary = Array.from(starMap.values());
-              // 明星店铺数据仅存入 starStoreSummary，不再混入 promotionProducts
-              processedTypes.add(info.type);
             } else if (info.type === '直播推广数据') {
               const hasDistinguishField = info.fields.includes('直播间') || info.fields.includes('推广名称');
               const liveMap = new Map<string, any>();
@@ -1387,25 +1620,21 @@ export default function UploadPage() {
                 liveMap.set(key, item);
               });
               merged.liveStreamSummary = Array.from(liveMap.values());
-              // 直播推广数据仅存入 liveStreamSummary，不再混入 promotionProducts
-              processedTypes.add(info.type);
             } else if (info.type === '运费险数据') {
               const { merged: mergedIns } = dedupMerge(merged.shippingInsurance, info.data, getInsuranceRowKey);
               merged.shippingInsurance = mergedIns;
-              merged.availableFields.insurance = new Set(info.fields);
-              processedTypes.add(info.type);
+              // 合并字段列表，不覆盖已有字段
+              info.fields.forEach((f: string) => { if (!merged.availableFields.insurance.includes(f)) merged.availableFields.insurance.push(f); });
             } else if (info.type === '售后数据') {
               if (!merged.afterSaleRecords) merged.afterSaleRecords = [];
               const { merged: mergedAS } = dedupMerge(merged.afterSaleRecords, info.data, getAfterSaleRowKey);
               merged.afterSaleRecords = mergedAS;
-              if (!merged.availableFields.afterSale) merged.availableFields.afterSale = new Set();
-              merged.availableFields.afterSale = new Set(info.fields);
-              processedTypes.add(info.type);
+              if (!merged.availableFields.afterSale) merged.availableFields.afterSale = [];
+              info.fields.forEach((f: string) => { if (!merged.availableFields.afterSale.includes(f)) merged.availableFields.afterSale.push(f); });
             } else if (info.type === '订单数据') {
               const odResult = tripleDedup(info.data, getOrderRowKey, GLOBAL_SEEN_KEYS.orders, merged.orders);
               merged.orders = odResult.merged;
-              merged.availableFields.csv = new Set(info.fields);
-              processedTypes.add(info.type);
+              info.fields.forEach((f: string) => { if (!merged.availableFields.csv.includes(f)) merged.availableFields.csv.push(f); });
               // 更新 UI 统计
               setFiles(prev => prev.map(f => {
                 if (f.name !== file.name) return f;
@@ -1425,18 +1654,12 @@ export default function UploadPage() {
           }
 
           return { ...merged, availableFields: { ...merged.availableFields } };
-        });
+        }, xlsxSyncCategories);
 
         setDataFilter(targetStoreId);
         setFieldReport({ available: allFields, missing, type: primaryType });
-        addUploadRecord({ fileName: file.name, fileType: primaryType, storeId: targetStoreId, storeName: targetStoreName, rowCount: totalRows, fieldCount: allFields.length });
-        // ★ 零时差：上传完成后自动跳转
-        setTimeout(() => {
-          if (primaryType === '订单数据') window.location.hash = '#/dashboard';
-          else if (['商品推广数据', '明星店铺数据', '直播推广数据'].includes(primaryType)) window.location.hash = '#/promotion';
-          else if (primaryType === '运费险数据') window.location.hash = '#/shipping-insurance';
-          else if (primaryType === '售后数据') window.location.hash = '#/after-sale';
-        }, 300);
+        // ★ 上传完成后留在当前页面（不上传自动跳转），改用 toast 提示
+        toast.success(`${primaryType} 解析完成：${totalRows} 行 × ${allFields.length} 列`, { id: toastId });
 
       } catch (err) {
 
@@ -1445,6 +1668,8 @@ export default function UploadPage() {
         console.error('XLSX parse error:', { err, fileName: file.name });
 
         setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error', errorMessage: errMsg } : f));
+
+        toast.error(errMsg, { id: toastId });
 
       }
 
@@ -1461,9 +1686,8 @@ export default function UploadPage() {
       const entries = Object.entries(zip.files).filter(([name, f]) =>
         !f.dir && !name.startsWith('__MACOSX') && !name.startsWith('.') && !name.includes('/.')
       );
-      // 更新 ZIP 文件条目的状态
-      setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'done', progress: 100, detectedType: `压缩包 (${entries.length}个子文件)` } : f));
-      // 逐个提取并处理子文件
+      // ★ 所有子文件处理完再标记完成
+      let processedCount = 0;
       for (const [name, zipEntry] of entries) {
         const blob = await zipEntry.async('blob');
         const lowerName = name.toLowerCase();
@@ -1483,14 +1707,15 @@ export default function UploadPage() {
       const errMsg = `ZIP解压失败: ${err instanceof Error ? err.message : '未知错误'}`;
       console.error('ZIP parse error:', { err, fileName: file.name });
       setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error', errorMessage: errMsg } : f));
+      toast.error(errMsg);
     }
   }, [processCsvFile, processXlsxFile]);
 
 
   const processFile = useCallback((file: File) => {
 
-    if (!currentStore) { alert('请先选择一个店铺'); return; }
-    if (dataFilter === '__all__') { alert('请在下拉菜单中选择一个具体店铺后再上传数据'); return; }
+    if (!currentStore) { toast.error('请先选择一个店铺'); return; }
+    if (dataFilter === '__all__') { toast.error('请在下拉菜单中选择一个具体店铺后再上传数据'); return; }
 
     const targetStoreId = currentStore.id;
 
@@ -1499,17 +1724,15 @@ export default function UploadPage() {
     // 文件指纹检测：同名文件再次上传时弹窗确认
     const existingRecord = uploadRecords.find((r: any) => r.fileName === file.name && r.storeId === targetStoreId);
     if (existingRecord) {
-      const confirmed = window.confirm(
-        `文件 "${file.name}" 已上传过（${new Date(existingRecord.uploadedAt).toLocaleString()}）。\n\n是否继续上传？重复数据将自动去重。`
-      );
-      if (!confirmed) return;
+      setConfirmFile({ file, existingRecord });
+      return;
     }
 
     const isZip = file.name.toLowerCase().endsWith('.zip');
     const ext = file.name.toLowerCase().endsWith('.csv') ? 'csv' : isZip ? 'zip' : 'xlsx';
 
     const entry: UploadedFile = { name: file.name, type: ext, size: file.size, status: 'parsing', progress: 0, detectedType: '检测中...' };
-
+parsingStartRef.current[file.name] = Date.now();
     setFiles(prev => [...prev, entry]);
 
 
@@ -1528,9 +1751,22 @@ export default function UploadPage() {
   }, [currentStore, dataFilter, processCsvFile, processXlsxFile, processZipFile]);
 
 
-  const handleDrop = useCallback((e: React.DragEvent) => { e.preventDefault(); setDragging(false); Array.from(e.dataTransfer.files).forEach(processFile); }, [processFile]);
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault(); setDragging(false); resetGlobalSeenKeys();
+    const files = Array.from(e.dataTransfer.files);
+    if (!storageMode[dataFilter] && files.length > 0) {
+      setPendingFiles(files); setShowModeDialog(true);
+    } else { files.forEach(processFile); }
+  }, [processFile, dataFilter, storageMode]);
 
-  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { Array.from(e.target.files || []).forEach(processFile); e.target.value = ''; }, [processFile]);
+  const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    resetGlobalSeenKeys();
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!storageMode[dataFilter] && files.length > 0) {
+      setPendingFiles(files); setShowModeDialog(true);
+    } else { files.forEach(processFile); }
+  }, [processFile, dataFilter, storageMode]);
 
   const removeFile = useCallback((name: string) => setFiles(prev => prev.filter(f => f.name !== name)), []);
 
@@ -1555,15 +1791,30 @@ export default function UploadPage() {
   };
 
 
+  // --- ⭐ 权益1: 批量上传队列追踪 ---
+  React.useEffect(() => {
+    if (files.length === 0) { setBatchQueue({ total: 0, done: 0, failed: 0 }); setShowBatchQueue(false); return; }
+    const done = files.filter(f => f.status === 'done').length;
+    const failed = files.filter(f => f.status === 'error').length;
+    const parsing = files.filter(f => f.status === 'parsing').length;
+    setBatchQueue({ total: files.length, done, failed });
+    if (files.length > 1 || parsing > 0) setShowBatchQueue(true);
+    if (done + failed === files.length && files.length > 0) {
+      // All done - auto hide after 5s
+      const timer = setTimeout(() => setShowBatchQueue(false), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [files]);
+
   const toggleSelectAll = () => {
 
-    if (selectedRecords.size === currentStoreUploads.length) {
+    if (selectedRecords.size === filteredRecords.length) {
 
       setSelectedRecords(new Set());
 
     } else {
 
-      setSelectedRecords(new Set(currentStoreUploads.map(r => r.id)));
+      setSelectedRecords(new Set(filteredRecords.map(r => r.id)));
 
     }
 
@@ -1571,54 +1822,61 @@ export default function UploadPage() {
 
 
   const handleBatchDelete = () => {
-
     selectedRecords.forEach(id => deleteUploadRecord(id));
-
     setSelectedRecords(new Set());
-
     setBatchDeleteConfirm(false);
-
   };
 
+  const handleConfirmFileUpload = () => {
+    if (!confirmFile) return;
+    const { file } = confirmFile;
+    setConfirmFile(null);
+    const targetStoreId = currentStore?.id;
+    const targetStoreName = currentStore?.name;
+    if (!targetStoreId || !targetStoreName) return;
+    const isZip = file.name.toLowerCase().endsWith('.zip');
+    const ext = file.name.toLowerCase().endsWith('.csv') ? 'csv' : isZip ? 'zip' : 'xlsx';
+    const entry: UploadedFile = { name: file.name, type: ext, size: file.size, status: 'parsing', progress: 0, detectedType: '检测中...' };
+    parsingStartRef.current[file.name] = Date.now();
+    setFiles(prev => [...prev, entry]);
+    if (ext === 'zip') {
+      processZipFile(file, targetStoreId, targetStoreName);
+    } else if (ext === 'csv') {
+      processCsvFile(file, targetStoreId, targetStoreName);
+    } else {
+      processXlsxFile(file, targetStoreId, targetStoreName);
+    }
+  };
 
   return (
 
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-4 space-y-3">
 
-      <div className="flex items-center justify-between mb-4">
-
-        <motion.h1 initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="text-2xl font-bold">数据上传</motion.h1>
-
-        <div className="flex items-center gap-3">
-
-          {currentStore && (
-
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-pdd-primary/10 border border-pdd-primary/30 rounded-lg">
-
-              <Store size={16} className="text-pdd-primary" />
-
-              <span className="text-sm font-medium text-pdd-primary">当前店铺: {currentStore.name}</span>
-
+      {/* ── Tab 导航（shadcn/ui Tabs 风格） ── */}
+      <div className="relative group">
+        <div className="absolute -inset-[1px] rounded-xl bg-gradient-to-br from-pdd-primary/30 via-purple-500/20 to-pink-500/20 opacity-40 blur-[1px]" />
+        <Card className="relative border-0" style={{ background: 'rgba(15, 18, 35, 0.9)' }}>
+          <CardContent className="p-2">
+            <div className="flex items-center gap-1 overflow-x-auto">
+              {TABS.map(tab => (
+                <button key={tab.key}
+                  onClick={() => setActiveTab(tab.key)}
+                  className={'whitespace-nowrap text-xs px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 font-medium ' +
+                    (activeTab === tab.key
+                      ? 'bg-gradient-to-r from-pdd-primary to-purple-500 text-white shadow-sm'
+                      : 'text-pdd-text-secondary hover:bg-pdd-bg/50 hover:text-pdd-text')}
+                ><span>{tab.icon}</span> {tab.label}</button>
+              ))}
             </div>
-
-          )}
-
-          {currentStoreUploads.length > 0 && (
-
-            <button onClick={() => setShowHistory(!showHistory)} className="flex items-center gap-2 px-3 py-1.5 text-sm rounded-lg border border-pdd-border hover:bg-pdd-bg transition-colors text-pdd-text-secondary">
-
-              <History size={16} />上传记录 ({currentStoreUploads.length})
-
-            </button>
-
-          )}
-
-        </div>
-
+          </CardContent>
+        </Card>
       </div>
 
+      {/* ── Tab1: 上传（保留现有功能） ── */}
+      {activeTab === 'upload' && (<>
 
-      {!currentStore && <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="pdd-card mb-4 border-l-4 border-pdd-danger"><p className="text-pdd-danger font-medium">请先在店铺管理中创建一个店铺</p></motion.div>}
+
+      {!currentStore && <Card className="mb-4 border-l-4 border-pdd-danger"><CardContent className="p-3"><p className="text-pdd-danger font-medium text-sm">请先在店铺管理中创建一个店铺</p></CardContent></Card>}
 
 
       <AnimatePresence>
@@ -1627,47 +1885,74 @@ export default function UploadPage() {
 
           <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="mb-4 overflow-hidden">
 
-            <div className="pdd-card">
+            <Card>
+
+              <CardContent className="p-4">
 
               <div className="flex items-center justify-between mb-3">
 
-                <h3 className="font-bold flex items-center gap-2"><History size={18} className="text-pdd-danger" />当前店铺上传记录</h3>
+                <h3 className="font-semibold flex items-center gap-2 text-sm"><History size={16} className="text-pdd-danger" />当前店铺上传记录</h3>
 
                 <div className="flex items-center gap-2">
 
                   {selectedRecords.size > 0 && (
 
-                    <button onClick={() => setBatchDeleteConfirm(true)} className="px-2 py-1 text-xs bg-pdd-danger text-white rounded hover:bg-pdd-danger/80 transition-colors">
-
+                    <Button variant="destructive" size="sm" onClick={() => setBatchDeleteConfirm(true)}>
                       批量删除 ({selectedRecords.size})
-
-                    </button>
+                    </Button>
 
                   )}
 
-                  <button onClick={() => setShowHistory(false)} className="text-pdd-text-secondary hover:text-pdd-text"><X size={18} /></button>
+                  <button onClick={() => setShowHistory(false)} className="text-pdd-text-secondary hover:text-pdd-text"><X size={16} /></button>
 
                 </div>
 
               </div>
 
-              {currentStoreUploads.length > 0 && (
+              {/* ⭐ 权益2: 上传历史搜索 */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex-1 relative">
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-pdd-text-secondary" />
+                  <input
+                    type="text" placeholder="搜索文件名..." value={historySearch}
+                    onChange={e => setHistorySearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 text-xs rounded-md border border-pdd-border bg-pdd-bg text-pdd-text placeholder:text-pdd-text-secondary outline-none focus:border-pdd-primary transition-colors"
+                  />
+                </div>
+                <select
+                  value={historyTypeFilter}
+                  onChange={e => setHistoryTypeFilter(e.target.value)}
+                  className="text-xs px-2 py-1.5 rounded-md border border-pdd-border bg-pdd-bg text-pdd-text outline-none focus:border-pdd-primary"
+                >
+                  <option value="all">全部类型</option>
+                  <option value="订单数据">订单</option>
+                  <option value="货款明细">货款</option>
+                  <option value="售后数据">售后</option>
+                  <option value="运费险数据">运费险</option>
+                  <option value="商品推广数据">推广</option>
+                </select>
+              </div>
+              {historySearch && (
+                <p className="text-xs text-pdd-text-secondary mb-2">
+                  搜索 &quot;{historySearch}&quot;，共 {filteredRecords.length} 条结果
+                </p>
+              )}
+
+              {filteredRecords.length > 0 && (
 
                 <div className="flex items-center gap-2 mb-2 pb-2 border-b border-pdd-border">
 
-                  <input
+                  <Checkbox
 
-                    type="checkbox"
+                    checked={selectedRecords.size === filteredRecords.length && filteredRecords.length > 0}
 
-                    checked={selectedRecords.size === currentStoreUploads.length && currentStoreUploads.length > 0}
+                    onCheckedChange={toggleSelectAll}
 
-                    onChange={toggleSelectAll}
-
-                    className="w-4 h-4 rounded border-pdd-border text-pdd-danger focus:ring-pdd-danger"
+                    className="border-pdd-text-secondary data-[state=checked]:bg-pdd-danger data-[state=checked]:border-pdd-danger"
 
                   />
 
-                  <span className="text-xs text-pdd-text-secondary">全选 ({currentStoreUploads.length})</span>
+                  <span className="text-xs text-pdd-text-secondary">全选 ({filteredRecords.length})</span>
 
                 </div>
 
@@ -1675,21 +1960,19 @@ export default function UploadPage() {
 
               <div className="space-y-2 max-h-64 overflow-y-auto">
 
-                {currentStoreUploads.map(record => (
+                {filteredRecords.map(record => (
 
                   <div key={record.id} className={`flex items-center justify-between p-3 rounded-lg border ${selectedRecords.has(record.id) ? 'bg-pdd-info/10 border-pdd-info' : 'bg-pdd-bg border-pdd-border'}`}>
 
                     <div className="flex items-center gap-3 flex-1 min-w-0">
 
-                      <input
-
-                        type="checkbox"
+                      <Checkbox
 
                         checked={selectedRecords.has(record.id)}
 
-                        onChange={() => toggleSelectRecord(record.id)}
+                        onCheckedChange={() => toggleSelectRecord(record.id)}
 
-                        className="w-4 h-4 rounded border-pdd-border text-pdd-danger focus:ring-pdd-danger"
+                        className="border-pdd-border data-[state=checked]:bg-pdd-danger data-[state=checked]:border-pdd-danger"
 
                       />
 
@@ -1709,9 +1992,9 @@ export default function UploadPage() {
 
                         <span className="text-xs text-pdd-danger">确认删除?</span>
 
-                        <button onClick={() => handleDeleteRecord(record.id)} className="px-2 py-1 text-xs bg-pdd-danger text-white rounded hover:bg-pdd-danger/80 transition-colors">确认</button>
+                        <Button size="sm" variant="destructive" onClick={() => handleDeleteRecord(record.id)}>确认</Button>
 
-                        <button onClick={() => setDeleteConfirm(null)} className="px-2 py-1 text-xs border border-pdd-border rounded hover:bg-pdd-bg transition-colors text-pdd-text-secondary">取消</button>
+                        <Button size="sm" variant="outline" onClick={() => setDeleteConfirm(null)}>取消</Button>
 
                       </div>
 
@@ -1743,6 +2026,12 @@ export default function UploadPage() {
 
                         )}
 
+                        {record.fileType === '货款明细' && (
+
+                          <button onClick={() => { setDataFilter(record.storeId); window.location.hash = '#/reconciliation'; }} className="px-2 py-1 text-xs bg-pdd-success text-white rounded hover:bg-pdd-success/80 transition-colors">同步</button>
+
+                        )}
+
                         <button onClick={() => setDeleteConfirm(record.id)} className="p-1.5 text-pdd-text-secondary hover:text-pdd-danger hover:bg-pdd-danger/10 rounded transition-colors" title="删除此上传记录"><Trash2 size={16} /></button>
 
                       </div>
@@ -1762,63 +2051,48 @@ export default function UploadPage() {
               </div>
 
 
-              {/* 批量删除确认弹窗 */}
-
-              {batchDeleteConfirm && (
-
-                <div className="fixed inset-0 bg-pdd-text/50 flex items-center justify-center z-50">
-
-                  <div className="bg-pdd-card rounded-lg p-6 max-w-sm w-full mx-4 shadow-xl border border-pdd-border">
-
-                    <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-pdd-text">
-
+              {/* 批量删除确认弹窗 — shadcn/ui Dialog */}
+              <Dialog open={batchDeleteConfirm} onOpenChange={setBatchDeleteConfirm}>
+                <DialogContent className="max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-pdd-text">
                       <AlertTriangle size={20} className="text-pdd-danger" />
-
                       确认批量删除
-
-                    </h3>
-
-                    <p className="text-sm text-pdd-text-secondary mb-4">
-
+                    </DialogTitle>
+                    <DialogDescription className="text-pdd-text-secondary">
                       确定要删除选中的 {selectedRecords.size} 条上传记录吗？此操作将同时清除这些文件导入的数据，且无法恢复。
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setBatchDeleteConfirm(false)}>取消</Button>
+                    <Button variant="destructive" onClick={handleBatchDelete}>确认删除</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
 
-                    </p>
+              {/* 同名文件重复上传确认 — shadcn/ui Dialog */}
+              <Dialog open={!!confirmFile} onOpenChange={() => setConfirmFile(null)}>
+                <DialogContent className="max-w-sm">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-pdd-text">
+                      <AlertTriangle size={20} className="text-pdd-warning" />
+                      文件已上传过
+                    </DialogTitle>
+                    <DialogDescription className="text-pdd-text-secondary">
+                      文件 &quot;{confirmFile?.file?.name}&quot; 已上传过
+                      {confirmFile?.existingRecord && `（${new Date(confirmFile.existingRecord.uploadedAt).toLocaleString()}）`}。
+                      是否继续上传？重复数据将自动去重。
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setConfirmFile(null)}>取消</Button>
+                    <Button variant="default" onClick={handleConfirmFileUpload}>继续上传</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
 
-                    <div className="flex justify-end gap-2">
-
-                      <button
-
-                        onClick={() => setBatchDeleteConfirm(false)}
-
-                        className="px-4 py-2 text-sm border border-pdd-border rounded hover:bg-pdd-bg transition-colors text-pdd-text-secondary"
-
-                      >
-
-                        取消
-
-                      </button>
-
-                      <button
-
-                        onClick={handleBatchDelete}
-
-                        className="px-4 py-2 text-sm bg-pdd-danger text-white rounded hover:bg-pdd-danger/80 transition-colors"
-
-                      >
-
-                        确认删除
-
-                      </button>
-
-                    </div>
-
-                  </div>
-
-                </div>
-
-              )}
-
-            </div>
+              </CardContent>
+            </Card>
 
           </motion.div>
 
@@ -1826,162 +2100,281 @@ export default function UploadPage() {
 
       </AnimatePresence>
 
+      {/* ★ 上传模式选择弹窗 — shadcn/ui Dialog */}
+      <Dialog open={showModeDialog} onOpenChange={setShowModeDialog}>
+        <DialogContent className="max-w-lg" onInteractOutside={e => e.preventDefault()}>
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold text-pdd-text">选择数据存储方式</DialogTitle>
+            <DialogDescription className="text-sm text-pdd-text-secondary">
+              首次上传需选择该店铺的存储方式，后续可在店铺设置中更改
+            </DialogDescription>
+          </DialogHeader>
+          {(() => {
+            const level = authUser?.membershipLevel || 'free';
+            const storageLimitText = level === 'enterprise' ? '企业版不限量'
+              : level === 'pro' ? '专业版300MB'
+              : '免费版30MB';
+            return (
+              <div className="space-y-4 py-2">
+                <button onClick={() => { setStorageMode(dataFilter, 'cloud'); setShowModeDialog(false); pendingFiles.forEach(processFile); setPendingFiles([]); }}
+                  className="w-full p-4 border-2 border-pdd-primary rounded-xl text-left hover:bg-pdd-primary/5 transition-colors">
+                  <div className="flex items-center gap-3 mb-1"><span className="text-2xl">☁️</span><span className="font-semibold text-pdd-text">私人云盘（推荐）</span></div>
+                  <p className="text-xs text-pdd-text-secondary ml-9">数据存入您的专属私人云盘空间。{storageLimitText}。计算精准、多设备同步、数据随时可删除。</p>
+                </button>
+                <button onClick={() => { setStorageMode(dataFilter, 'local'); setShowModeDialog(false); pendingFiles.forEach(processFile); setPendingFiles([]); }}
+                  className="w-full p-4 border-2 border-pdd-border rounded-xl text-left hover:bg-pdd-bg transition-colors">
+                  <div className="flex items-center gap-3 mb-1"><span className="text-2xl">💻</span><span className="font-semibold text-pdd-text">仅本地保存</span></div>
+                  <p className="text-xs text-pdd-text-secondary ml-9">数据只存在浏览器本地。清除缓存或换设备后数据丢失。免费版同样可用，不占云盘空间。</p>
+                </button>
+              </div>
+            );
+          })()}
+          <p className="text-[10px] text-pdd-text-secondary text-center">选择私人云盘后，该店铺数据以云盘为准，本地缓存自动同步。</p>
+        </DialogContent>
+      </Dialog>
 
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
+      <div className="relative group mb-6">
+        {/* 动态渐变边框 */}
+        <div className="absolute -inset-[1px] rounded-xl bg-gradient-to-br from-pdd-primary via-purple-500 to-pink-500 opacity-40 group-hover:opacity-70 blur-[2px] transition-all duration-700" />
+        <div className="absolute -inset-[1px] rounded-xl bg-gradient-to-br from-pdd-primary via-purple-500 to-pink-500 opacity-15 animate-pulse blur-[4px]" />
+        <Card
+          onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={handleDrop}
+          className={`relative border-0 rounded-xl text-center cursor-pointer transition-all ${dragging ? 'bg-pdd-primary/10 scale-[1.02]' : 'hover:bg-pdd-primary/5'}`}
+          style={{ background: 'rgba(15, 18, 35, 0.85)' }}
+          onClick={() => fileInputRef.current?.click()}>
+          <CardContent>
+          <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.zip" multiple className="hidden" onChange={handleFileInput} />
 
-        onDragOver={e => { e.preventDefault(); setDragging(true); }} onDragLeave={() => setDragging(false)} onDrop={handleDrop}
+          <motion.div animate={{ scale: dragging ? 1.1 : 1 }} className="py-12">
 
-        className={`pdd-card mb-6 text-center cursor-pointer transition-all ${dragging ? 'border-pdd-primary bg-pdd-primary/5 scale-[1.02]' : 'hover:border-pdd-primary'}`}
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-pdd-primary/20 to-purple-500/20 flex items-center justify-center shadow-lg shadow-pdd-primary/10">
+              <Upload className="w-8 h-8 text-pdd-primary" />
+            </div>
 
-        onClick={() => document.getElementById('file-input')!.click()}>
+            <p className="text-lg font-medium text-pdd-text">拖拽文件到此处上传</p>
+            <p className="text-pdd-text-secondary mt-1">支持 CSV、XLSX 格式 | 订单数据、推广数据、运费险数据</p>
+            <p className="text-[11px] text-pdd-text-secondary/60 mt-2">点击选择文件或拖拽到此处</p>
 
-        <input id="file-input" type="file" accept=".csv,.xlsx,.xls,.zip" multiple className="hidden" onChange={handleFileInput} />
+          </motion.div>
+          </CardContent>
+        </Card>
+      </div>
 
-        <motion.div animate={{ scale: dragging ? 1.1 : 1 }} className="py-12">
 
-          <Upload className="w-12 h-12 mx-auto mb-3 text-pdd-primary" />
-
-          <p className="text-lg font-medium text-pdd-text">拖拽文件到此处上传</p>
-
-          <p className="text-pdd-text-secondary mt-1">支持 CSV、XLSX 格式 | 订单数据、推广数据、运费险数据</p>
-
-        </motion.div>
-
-      </motion.div>
-
+      {/* ⭐ 权益1: 批量上传队列状态 */}
+      {showBatchQueue && batchQueue.total > 0 && (
+        <Card className="mb-3 border-pdd-primary/30 bg-pdd-primary/5">
+          <CardContent className="p-3">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-medium text-pdd-text flex items-center gap-1.5">
+                <Loader2 size={12} className="animate-spin" />
+                批量上传队列
+              </span>
+              <span className="text-xs text-pdd-text-secondary">
+                {batchQueue.done + batchQueue.failed}/{batchQueue.total}
+                {batchQueue.failed > 0 && <span className="text-pdd-danger ml-1">({batchQueue.failed} 失败)</span>}
+              </span>
+            </div>
+            <Progress value={((batchQueue.done + batchQueue.failed) / batchQueue.total) * 100} className="h-1.5" />
+            <div className="flex items-center gap-3 mt-1.5 text-[10px] text-pdd-text-secondary">
+              <span className="text-pdd-success">✅ {batchQueue.done} 成功</span>
+              {batchQueue.failed > 0 && <span className="text-pdd-danger">❌ {batchQueue.failed} 失败</span>}
+              <span className="text-pdd-text-secondary">⏳ {batchQueue.total - batchQueue.done - batchQueue.failed} 进行中</span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <AnimatePresence>
 
         {files.map(f => (
 
-          <motion.div key={f.name} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 20 }} className="pdd-card mb-3 flex items-center gap-3">
+          <motion.div key={f.name} initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, x: 20 }}>
+            <Card className="mb-3 border-pdd-border/60 overflow-hidden">
+              <CardContent className="p-4">
+                <div className="flex items-start gap-3">
 
-            {f.type === 'csv' ? <FileText className="w-5 h-5 text-pdd-primary" /> : <FileSpreadsheet className="w-5 h-5 text-pdd-primary" />}
+                  {/* 类型图标 */}
+                  <div className="w-9 h-9 rounded-lg bg-pdd-primary/10 flex items-center justify-center shrink-0 mt-0.5">
+                    {f.type === 'csv' ? <FileText className="w-4 h-4 text-pdd-primary" /> : <FileSpreadsheet className="w-4 h-4 text-pdd-primary" />}
+                  </div>
 
-            <div className="flex-1 min-w-0">
+                  {/* 内容区域 */}
+                  <div className="flex-1 min-w-0">
 
-              <p className="font-medium truncate text-pdd-text">{f.name}</p>
-
-              <p className="text-sm text-pdd-text-secondary">{f.detectedType} · {(f.size / 1024).toFixed(1)}KB</p>
-
-              {f.status === 'parsing' && <div className="mt-2 h-1.5 bg-pdd-border rounded-full overflow-hidden"><motion.div className="h-full bg-pdd-primary rounded-full" initial={{ width: '0%' }} animate={{ width: `${f.progress}%` }} /></div>}
-
-              {f.status === 'done' && (
-
-                <div className="text-sm mt-1 space-y-1">
-
-                  <p className="text-pdd-success">{f.fieldCount}列 × {f.rowCount}行 · {f.missingFields?.length ? `缺${f.missingFields.length}个必填字段` : '字段完整'}</p>
-
-                  {f.duplicateCount !== undefined && f.duplicateCount > 0 && (
-
-                    <div className="text-xs mt-1 space-y-0.5">
-                      <p className="text-pdd-warning font-medium">🔄 已过滤 {f.duplicateCount} 条重复，实际新增 {f.newCount} 条</p>
-                      {(f.intraDupCount ?? 0) > 0 && (
-                        <p className="text-amber-400/80 ml-2">↳ 文件内部重复: {f.intraDupCount} 条</p>
-                      )}
-                      {(f.crossDupCount ?? 0) > 0 && (
-                        <p className="text-orange-400/80 ml-2">↳ 跨文件重复(本次会话): {f.crossDupCount} 条</p>
-                      )}
-                      {((f.duplicateCount ?? 0) - (f.intraDupCount ?? 0) - (f.crossDupCount ?? 0)) > 0 && (
-                        <p className="text-red-400/80 ml-2">↳ 与已有数据重复: {(f.duplicateCount ?? 0) - (f.intraDupCount ?? 0) - (f.crossDupCount ?? 0)} 条</p>
-                      )}
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="font-medium text-sm text-pdd-text truncate">{f.name}</p>
+                      <button onClick={() => removeFile(f.name)} className="shrink-0 text-pdd-text-secondary hover:text-pdd-danger transition-colors">
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
 
-                  )}
+                    <p className="text-xs text-pdd-text-secondary mt-0.5">
+                      {f.detectedType || '检测中...'} · {(f.size / 1024).toFixed(1)}KB
+                      {f.detectedType && f.detectedType !== '检测中...' && f.status === 'parsing' && <span className="ml-2 text-pdd-primary">解析中...</span>}
+                    </p>
 
-                  {f.mismatchWarning && (
+                    {/* ★ 进度条：解析状态始终显示 */}
+                    {f.status === 'parsing' && (
+                      <div className="mt-2">
+                        <div className="h-1.5 bg-pdd-border/50 rounded-full overflow-hidden">
+                          <motion.div
+                            className="h-full rounded-full bg-gradient-to-r from-pdd-primary to-purple-500"
+                            initial={{ width: '0%' }}
+                            animate={{ width: `${f.progress}%` }}
+                            transition={{ duration: 0.3 }}
+                          />
+                        </div>
+                        <p className="text-[10px] text-pdd-text-secondary mt-1">{f.progress}%</p>
+                      </div>
+                    )}
 
-                    <motion.div initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} className={`mt-2 p-3 rounded-lg border-l-4 ${f.mismatchWarning.type === 'no_overlap' ? 'bg-pdd-danger/10 border-pdd-danger' : 'bg-pdd-warning/10 border-pdd-warning'}`}>
+                    {/* ★ 完成状态 */}
+                    {f.status === 'done' && (
+                      <div className="text-xs mt-1.5 space-y-1">
 
-                      <div className="flex items-start gap-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="bg-pdd-success/10 text-pdd-success border-pdd-success/30 text-[10px] px-2 py-0">
+                            ✅ {f.fieldCount}列 × {f.rowCount}行
+                          </Badge>
+                          {f.missingFields?.length ? (
+                            <Badge variant="outline" className="bg-pdd-warning/10 text-pdd-warning border-pdd-warning/30 text-[10px] px-2 py-0">
+                              ⚠️ 缺{f.missingFields.length}个字段
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-pdd-success/10 text-pdd-success border-pdd-success/30 text-[10px] px-2 py-0">
+                              ✓ 字段完整
+                            </Badge>
+                          )}
+                        </div>
 
-                        <AlertTriangle size={16} className={`mt-0.5 flex-shrink-0 ${f.mismatchWarning.type === 'no_overlap' ? 'text-pdd-danger' : 'text-pdd-warning'}`} />
+                        {f.duplicateCount !== undefined && f.duplicateCount > 0 && (
+                          <p className="text-pdd-warning/80 text-[10px]">🔄 已过滤 {f.duplicateCount} 条重复，实际新增 {f.newCount} 条</p>
+                        )}
 
-                        <div>
+                        {f.mismatchWarning && (
+                          <div className={`mt-1 p-2 rounded border-l-4 ${f.mismatchWarning.type === 'no_overlap' ? 'bg-pdd-danger/10 border-pdd-danger' : 'bg-pdd-warning/10 border-pdd-warning'}`}>
+                            <p className={`font-medium text-[10px] ${f.mismatchWarning.type === 'no_overlap' ? 'text-pdd-danger' : 'text-pdd-warning'}`}>{f.mismatchWarning.message}</p>
+                            <p className="text-[10px] text-pdd-text-secondary mt-0.5">{f.mismatchWarning.details}</p>
+                          </div>
+                        )}
 
-                          <p className={`font-medium text-xs ${f.mismatchWarning.type === 'no_overlap' ? 'text-pdd-danger' : 'text-pdd-warning'}`}>{f.mismatchWarning.message}</p>
-
-                          <p className="text-xs text-pdd-text-secondary mt-1 leading-relaxed">{f.mismatchWarning.details}</p>
-
+                        {/* 同步按钮 */}
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <CheckCircle className="w-3.5 h-3.5 text-pdd-success" />
+                          <span className="text-pdd-success text-[10px]">解析完成</span>
+                          {f.detectedType === '订单数据' && currentStore && (
+                            <button onClick={() => { setDataFilter(currentStore.id); window.location.hash = '#/dashboard'; }} className="px-2 py-0.5 text-[10px] bg-pdd-success/20 text-pdd-success rounded hover:bg-pdd-success/30 transition-colors">查看仪表盘</button>
+                          )}
+                          {['商品推广数据', '明星店铺数据', '直播推广数据'].includes(f.detectedType || '') && currentStore && (
+                            <button onClick={() => { setDataFilter(currentStore.id); window.location.hash = '#/promotion'; }} className="px-2 py-0.5 text-[10px] bg-pdd-success/20 text-pdd-success rounded hover:bg-pdd-success/30 transition-colors">查看推广</button>
+                          )}
+                          {f.detectedType === '运费险数据' && currentStore && (
+                            <button onClick={() => { setDataFilter(currentStore.id); window.location.hash = '#/shipping-insurance'; }} className="px-2 py-0.5 text-[10px] bg-pdd-success/20 text-pdd-success rounded hover:bg-pdd-success/30 transition-colors">查看运费险</button>
+                          )}
+                          {f.detectedType === '售后数据' && currentStore && (
+                            <button onClick={() => { setDataFilter(currentStore.id); window.location.hash = '#/after-sale'; }} className="px-2 py-0.5 text-[10px] bg-pdd-success/20 text-pdd-success rounded hover:bg-pdd-success/30 transition-colors">查看售后</button>
+                          )}
+                          {f.detectedType === '货款明细' && currentStore && (
+                            <button onClick={() => { setDataFilter(currentStore.id); window.location.hash = '#/reconciliation'; }} className="px-2 py-0.5 text-[10px] bg-pdd-success/20 text-pdd-success rounded hover:bg-pdd-success/30 transition-colors">查看财务</button>
+                          )}
                         </div>
 
                       </div>
+                    )}
 
-                    </motion.div>
+                    {/* ★ 错误状态 */}
+                    {f.status === 'error' && (
+                      <div className="mt-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <AlertCircle className="w-3.5 h-3.5 text-pdd-danger" />
+                          <span className="text-xs text-pdd-danger font-medium">解析失败</span>
+                        </div>
+                        {f.errorMessage && <p className="text-[10px] text-pdd-danger/70 mt-0.5">{f.errorMessage}</p>}
+                      </div>
+                    )}
 
-                  )}
+                  </div>
+
+                  {/* 右侧状态图标 */}
+                  <div className="shrink-0 flex items-center mt-0.5">
+                    {f.status === 'parsing' && <Loader2 className="w-4 h-4 text-pdd-primary animate-spin" />}
+                    {f.status === 'done' && <CheckCircle className="w-4 h-4 text-pdd-success" />}
+                    {f.status === 'error' && <AlertCircle className="w-4 h-4 text-pdd-danger" />}
+                  </div>
 
                 </div>
-
-              )}
-
-              {f.status === 'error' && (
-
-                <div className="mt-1">
-
-                  <p className="text-sm text-pdd-danger font-medium">解析失败</p>
-
-                  {f.errorMessage && <p className="text-xs text-pdd-danger mt-0.5 opacity-80">{f.errorMessage}</p>}
-
-                </div>
-
-              )}
-
-            </div>
-
-            {f.status === 'parsing' && <Loader2 className="w-5 h-5 text-pdd-primary animate-spin" />}
-
-            {f.status === 'done' && (
-
-              <div className="flex items-center gap-2">
-
-                <CheckCircle className="w-5 h-5 text-pdd-success" />
-
-                {f.detectedType === '订单数据' && currentStore && (
-
-                  <button onClick={() => { setDataFilter(currentStore.id); window.location.hash = '#/dashboard'; }} className="px-2 py-1 text-xs bg-pdd-success text-white rounded hover:bg-pdd-success/80 transition-colors">同步</button>
-
-                )}
-
-                {['商品推广数据', '明星店铺数据', '直播推广数据'].includes(f.detectedType || '') && currentStore && (
-
-                  <button onClick={() => { setDataFilter(currentStore.id); window.location.hash = '#/promotion'; }} className="px-2 py-1 text-xs bg-pdd-success text-white rounded hover:bg-pdd-success/80 transition-colors">同步</button>
-
-                )}
-
-                {f.detectedType === '运费险数据' && currentStore && (
-
-                  <button onClick={() => { setDataFilter(currentStore.id); window.location.hash = '#/shipping-insurance'; }} className="px-2 py-1 text-xs bg-pdd-success text-white rounded hover:bg-pdd-success/80 transition-colors">同步</button>
-
-                )}
-
-                {f.detectedType === '售后数据' && currentStore && (
-
-                  <button onClick={() => { setDataFilter(currentStore.id); window.location.hash = '#/after-sale'; }} className="px-2 py-1 text-xs bg-pdd-success text-white rounded hover:bg-pdd-success/80 transition-colors">同步</button>
-
-                )}
-
-              </div>
-
-            )}
-
-            {f.status === 'error' && <AlertCircle className="w-5 h-5 text-pdd-danger" />}
-
-            <button onClick={() => removeFile(f.name)} className="text-pdd-text-secondary hover:text-pdd-danger"><X className="w-4 h-4" /></button>
-
+              </CardContent>
+            </Card>
           </motion.div>
 
         ))}
 
       </AnimatePresence>
 
+      {/* ★ 上传诊断面板 */}
+      {files.filter(f => f.status === 'done').length > 0 && (() => {
+        const doneFiles = files.filter(f => f.status === 'done');
+        const totalRows = doneFiles.reduce((s, f) => s + (f.rowCount || 0), 0);
+        const totalJsonKB = doneFiles.reduce((s, f) => s + (f.jsonEstimateKB || 0), 0);
+        const allDates = doneFiles.flatMap(f => [f.dateStart, f.dateEnd]).filter(Boolean) as string[];
+        const allPrivacy = [...new Set(doneFiles.flatMap(f => f.privacyFields || []))];
+        return (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-4 p-4 bg-blue-500/5 border border-blue-500/20 rounded-lg">
+            <div className="flex items-center gap-2 mb-3">
+              <FileText className="w-4 h-4 text-blue-400" />
+              <span className="text-blue-300 font-medium text-sm">上传诊断</span>
+              <span className="text-blue-400/50 text-xs">{doneFiles.length} 个文件 · {totalRows.toLocaleString()} 行 · 预估 {totalJsonKB >= 1024 ? (totalJsonKB / 1024).toFixed(1) + ' MB' : totalJsonKB + ' KB'}</span>
+            </div>
+            {allDates.length > 0 && (
+              <p className="text-blue-400/70 text-xs mb-2">
+                数据日期范围：{allDates.sort()[0]} 至 {allDates.sort().reverse()[0]}
+              </p>
+            )}
+            {allPrivacy.length > 0 && (
+              <div className="flex items-start gap-2 text-xs">
+                <span className="text-amber-400 shrink-0 mt-0.5">⚠</span>
+                <span className="text-amber-400/80">
+                  检测到隐私字段（{allPrivacy.join('、')}），同步时会被拒绝。请在 Excel 中删除这些列后重新上传。
+                </span>
+              </div>
+            )}
+            {totalJsonKB > 4096 && (
+              <p className="text-amber-400/70 text-xs mt-2">⚠ JSON 数据量较大（{totalJsonKB >= 1024 ? (totalJsonKB / 1024).toFixed(1) + ' MB' : totalJsonKB + ' KB'}），建议拆分文件上传以避免同步超时。</p>
+            )}
+            {doneFiles.map(f => (
+              <div key={f.name} className="mt-2 pt-2 border-t border-blue-500/10 text-xs text-blue-400/60">
+                <span className="text-blue-300">{f.name}</span> · {f.detectedType || '未知'} · {f.rowCount?.toLocaleString()} 行
+                {f.dateStart && f.dateEnd && <span> · {f.dateStart} ~ {f.dateEnd}</span>}
+                {f.jsonEstimateKB ? <span> · {f.jsonEstimateKB >= 1024 ? (f.jsonEstimateKB / 1024).toFixed(1) + 'MB' : f.jsonEstimateKB + 'KB'}</span> : null}
+              </div>
+            ))}
+          </motion.div>
+        );
+      })()}
+
+      {lastSyncError && (
+        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-red-300 font-medium text-sm">同步到云端失败</p>
+              <p className="text-red-400/80 text-xs mt-1">
+                数据已保存在本地，当前页面可见，但刷新后会丢失。
+              </p>
+              <p className="text-red-400/80 text-xs mt-1 whitespace-pre-wrap">{lastSyncError}</p>
+              <button onClick={clearSyncError} className="mt-2 text-xs text-red-400 hover:text-red-300 underline">关闭</button>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       <AnimatePresence>
 
         {fieldReport && (
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className="pdd-card mt-4">
-
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}>
+            <Card><CardContent className="p-4">
             <h3 className="font-bold mb-3 text-pdd-text">字段检测报告 · {fieldReport.type}</h3>
 
             {fieldReport.missing.length > 0 && (
@@ -2004,6 +2397,7 @@ export default function UploadPage() {
 
             </div>
 
+            </CardContent></Card>
           </motion.div>
 
         )}
@@ -2011,7 +2405,9 @@ export default function UploadPage() {
       </AnimatePresence>
 
       {/* 网站更新日志 */}
-      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="pdd-card mt-4">
+      <Card className="mt-4">
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+        <CardContent className="p-4">
         <button
           onClick={() => setShowChangelog(!showChangelog)}
           className="w-full flex items-center justify-between text-left"
@@ -2071,7 +2467,68 @@ export default function UploadPage() {
             </motion.div>
           )}
         </AnimatePresence>
+        </CardContent>
       </motion.div>
+      </Card>
+      </>)} {/* end Tab1: upload */}
+
+      {/* ══════════════════════════════════════════════
+          Tab2: 数据总览
+         ══════════════════════════════════════════════ */}
+      {activeTab === 'overview' && (
+        <DataOverview
+          orders={getStoreData(currentStore?.id || '')?.orders || []}
+          financialRecords={getStoreData(currentStore?.id || '')?.financialRecords || []}
+          afterSaleRecords={getStoreData(currentStore?.id || '')?.afterSaleRecords || []}
+          promotionProducts={getStoreData(currentStore?.id || '')?.promotionProducts || []}
+        />
+      )}
+
+      {/* ══════════════════════════════════════════════
+          Tab3: 数据质量检查
+         ══════════════════════════════════════════════ */}
+      {activeTab === 'quality' && (
+        <DataQualityCheck
+          orders={getStoreData(currentStore?.id || '')?.orders || []}
+          financialRecords={getStoreData(currentStore?.id || '')?.financialRecords || []}
+          afterSaleRecords={getStoreData(currentStore?.id || '')?.afterSaleRecords || []}
+          promotionProducts={getStoreData(currentStore?.id || '')?.promotionProducts || []}
+          filter={qualityFilter}
+          onFilterChange={setQualityFilter}
+        />
+      )}
+
+      {/* ══════════════════════════════════════════════
+          Tab4: 数据清理
+         ══════════════════════════════════════════════ */}
+      {activeTab === 'cleanup' && (
+        <DataCleanup
+          stores={currentStore ? [currentStore] : []}
+          uploadRecords={currentStoreUploads}
+          onCleanup={(storeId, types) => {
+            types.forEach(t => {
+              if (t === 'orders') clearOrderData?.(storeId);
+              else if (t === 'financialRecords') clearFinancialData?.(storeId);
+              else if (t === 'afterSaleRecords') clearOrderData?.(storeId);
+            });
+            setCleanupTypes(new Set());
+          }}
+          onReset={() => clearAllData?.()}
+        />
+      )}
+
+      {/* ══════════════════════════════════════════════
+          Tab5: 同步状态
+         ══════════════════════════════════════════════ */}
+      {activeTab === 'sync' && (
+        <SyncStatus
+          orders={getStoreData(currentStore?.id || '')?.orders || []}
+          financialRecords={getStoreData(currentStore?.id || '')?.financialRecords || []}
+          afterSaleRecords={getStoreData(currentStore?.id || '')?.afterSaleRecords || []}
+          shippingInsurance={getStoreData(currentStore?.id || '')?.shippingInsurance || []}
+          promotionProducts={getStoreData(currentStore?.id || '')?.promotionProducts || []}
+        />
+      )}
 
     </div>
 

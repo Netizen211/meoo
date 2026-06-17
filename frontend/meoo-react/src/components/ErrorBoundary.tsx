@@ -29,6 +29,13 @@ export class ErrorBoundary extends React.Component<Props, State> {
   componentDidCatch(error: Error, info: React.ErrorInfo): void {
     console.error('[ErrorBoundary]', error.message, info.componentStack);
     this.props.onError?.(error, info);
+    // 持久化错误信息到 localStorage，方便排查
+    try {
+      const errors = JSON.parse(localStorage.getItem('__dianfx_errors') || '[]');
+      errors.push({ msg: error.message, stack: error.stack, time: Date.now() });
+      if (errors.length > 50) errors.splice(0, errors.length - 50);
+      localStorage.setItem('__dianfx_errors', JSON.stringify(errors));
+    } catch {}
   }
 
   handleRetry = (): void => {
@@ -53,12 +60,13 @@ export class ErrorBoundary extends React.Component<Props, State> {
               很抱歉，此页面发生了意外错误。请尝试刷新页面。
             </p>
             {this.state.error && (
-              <details className="mb-4">
+              <details className="mb-4" open>
                 <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-300">
                   查看错误详情
                 </summary>
                 <pre className="mt-2 text-xs text-left text-gray-400 bg-gray-800/50 rounded p-3 overflow-auto max-h-32">
                   {this.state.error.message}
+                  {this.state.error.stack ? '\n\n' + this.state.error.stack : ''}
                 </pre>
               </details>
             )}

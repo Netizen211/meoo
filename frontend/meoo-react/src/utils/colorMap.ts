@@ -6,7 +6,7 @@
 
 export const colorMap: Record<string, string> = {
   // 主色调
-  'var(--pdd-primary)': '#e02e24',
+  'var(--pdd-primary)': '#1F6BFF',
   'var(--pdd-primary-light)': '#ef4444',
   'var(--pdd-primary-dark)': '#c41e14',
 
@@ -70,7 +70,7 @@ export function getColorWithOpacity(colorKey: string, opacity: number): string {
  * 图表颜色配置 - 用于 recharts
  */
 export const chartColors = {
-  primary: '#e02e24',
+  primary: '#1F6BFF',
   success: '#22c55e',
   warning: '#f59e0b',
   danger: '#ef4444',
@@ -85,7 +85,7 @@ export const chartColors = {
  * 图表颜色数组 - 用于循环使用
  */
 export const chartColorArray = [
-  '#e02e24', // primary
+  '#1F6BFF', // primary
   '#22c55e', // success
   '#f59e0b', // warning
   '#ef4444', // danger

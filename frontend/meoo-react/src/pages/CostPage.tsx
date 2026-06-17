@@ -20,14 +20,14 @@ const COST_FILTER_FIELDS: FilterField[] = [
   { key: 'recvRate', label: '实收率', hint: '%', group: 'cost', compute: (o) => { const pt = safeFloat(findField(o, '商品总价(元)', '商品总价')); if (!pt) return 0; return (safeFloat(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额')) / pt) * 100; } },
 ];
 
-const COLORS = ['var(--pdd-danger)', 'var(--pdd-primary)', 'var(--pdd-success)', 'var(--pdd-warning)', '#722ed1', 'var(--pdd-danger)'];
+const COLORS = ['var(--pdd-danger)', 'var(--pdd-primary)', 'var(--pdd-success)', 'var(--pdd-warning)', 'var(--pdd-purple)', 'var(--pdd-danger)'];
 
 type CostTab = 'overview' | 'discount' | 'anomaly' | 'detail';
 
 export default function CostPage() {
   const { currentDisplayData, productCosts, defaultCostRatio, packagingFeePerOrder } = useData();
   const { isPaid } = useAuth();
-  const tf = useTimeFilter('7', 'day');
+  const tf = useTimeFilter('all', 'day');
   const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
   const [activeTab, setActiveTab] = useState<CostTab>('overview');
   const [searchQuery, setSearchQuery] = useState('');
@@ -246,11 +246,11 @@ export default function CostPage() {
   const renderOverview = () => (
     <motion.div key="overview" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KpiCard label="商品总价" value={kpi?.totalProduct} icon={DollarSign} color="var(--pdd-text)" bgColor="rgba(100,116,139,0.1)" />
-        <KpiCard label="优惠总额" value={kpi?.totalDisc} icon={Percent} color="var(--pdd-danger)" bgColor="rgba(239,68,68,0.1)" />
-        <KpiCard label="商家实收" value={kpi?.totalMerchant} icon={TrendingUp} color="var(--pdd-success)" bgColor="rgba(34,197,94,0.1)"
+        <KpiCard label="商品总价" value={kpi?.totalProduct} icon={DollarSign} color="var(--pdd-text)" bgColor="#F8FAFD" />
+        <KpiCard label="优惠总额" value={kpi?.totalDisc} icon={Percent} color="var(--pdd-danger)" bgColor="#FFF1F2" />
+        <KpiCard label="商家实收" value={kpi?.totalMerchant} icon={TrendingUp} color="var(--pdd-success)" bgColor="#ECFDF3"
           change={compareEnabled ? changePct(kpi?.totalMerchant || 0, compareKpi?.totalMerchant || 0) : null} />
-        <KpiCard label="实收率" value={kpi?.recvRate} icon={Percent} color="var(--pdd-primary)" bgColor="rgba(59,130,246,0.1)" isRate />
+        <KpiCard label="实收率" value={kpi?.recvRate} icon={Percent} color="var(--pdd-primary)" bgColor="#EEF5FF" isRate />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -264,8 +264,8 @@ export default function CostPage() {
                 <YAxis tick={{ fontSize: 10 }} tickFormatter={v => v >= 10000 ? `${(v / 10000).toFixed(0)}万` : v} />
                 <Tooltip formatter={(v: number) => fmt(v)} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Area type="monotone" dataKey="product" stackId="1" stroke="var(--pdd-text)" fill="rgba(100,116,139,0.15)" name="商品总价" />
-                <Area type="monotone" dataKey="merchant" stackId="2" stroke="var(--pdd-success)" fill="rgba(34,197,94,0.2)" name="商家实收" />
+                <Area type="monotone" dataKey="product" stackId="1" stroke="var(--pdd-text)" fill="#F0F2F5" name="商品总价" />
+                <Area type="monotone" dataKey="merchant" stackId="2" stroke="var(--pdd-success)" fill="#D1FADF" name="商家实收" />
               </ComposedChart>
             </ResponsiveContainer>
           )}
@@ -309,10 +309,10 @@ export default function CostPage() {
   const renderDiscount = () => (
     <motion.div key="discount" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        <KpiCard label="优惠总额" value={kpi?.totalDisc} icon={Percent} color="var(--pdd-danger)" bgColor="rgba(239,68,68,0.1)" />
-        <KpiCard label="优惠率" value={kpi?.discRate} icon={Percent} color="var(--pdd-warning)" bgColor="rgba(245,158,11,0.1)" isRate />
-        <KpiCard label="平均每单优惠" value={kpi?.avgDisc} icon={DollarSign} color="var(--pdd-primary)" bgColor="rgba(59,130,246,0.1)" />
-        <KpiCard label="高优惠订单" value={kpi?.highDiscCount} icon={AlertTriangle} color="#722ed1" bgColor="rgba(114,46,209,0.1)" />
+        <KpiCard label="优惠总额" value={kpi?.totalDisc} icon={Percent} color="var(--pdd-danger)" bgColor="#FFF1F2" />
+        <KpiCard label="优惠率" value={kpi?.discRate} icon={Percent} color="var(--pdd-warning)" bgColor="#FFFAEB" isRate />
+        <KpiCard label="平均每单优惠" value={kpi?.avgDisc} icon={DollarSign} color="var(--pdd-primary)" bgColor="#EEF5FF" />
+        <KpiCard label="高优惠订单" value={kpi?.highDiscCount} icon={AlertTriangle} color="#722ed1" bgColor="#F5F3FF" />
       </div>
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.1 }} className="pdd-card p-3">
@@ -372,9 +372,9 @@ export default function CostPage() {
     <motion.div key="anomaly" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
       <div className="grid grid-cols-3 gap-2">
         {[
-          { label: '高优惠率', count: anomalyOrders.highDisc.length, color: 'var(--pdd-danger)', bgColor: 'rgba(239,68,68,0.1)', desc: '优惠率 > 50%' },
-          { label: '高邮费', count: anomalyOrders.highPostage.length, color: 'var(--pdd-warning)', bgColor: 'rgba(245,158,11,0.1)', desc: '邮费 > ¥20' },
-          { label: '亏损/零利润', count: anomalyOrders.loss.length, color: '#722ed1', bgColor: 'rgba(114,46,209,0.1)', desc: '实收 ≤ 0' },
+          { label: '高优惠率', count: anomalyOrders.highDisc.length, color: 'var(--pdd-danger)', bgColor: '#FFF1F2', desc: '优惠率 > 50%' },
+          { label: '高邮费', count: anomalyOrders.highPostage.length, color: 'var(--pdd-warning)', bgColor: '#FFFAEB', desc: '邮费 > ¥20' },
+          { label: '亏损/零利润', count: anomalyOrders.loss.length, color: 'var(--pdd-purple)', bgColor: 'var(--pdd-purple)', desc: '实收 ≤ 0' },
         ].map((item, i) => (
           <motion.div key={item.label} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
             className="pdd-card px-3 py-2.5 text-center">
@@ -386,9 +386,9 @@ export default function CostPage() {
       </div>
 
       {[
-        { title: '高优惠率订单', data: anomalyOrders.highDisc, color: 'var(--pdd-danger)', borderColor: 'rgba(239,68,68,0.3)', bgColor: 'rgba(239,68,68,0.04)' },
-        { title: '高邮费订单', data: anomalyOrders.highPostage, color: 'var(--pdd-warning)', borderColor: 'rgba(245,158,11,0.3)', bgColor: 'rgba(245,158,11,0.04)' },
-        { title: '亏损/零利润订单', data: anomalyOrders.loss, color: '#722ed1', borderColor: 'rgba(114,46,209,0.3)', bgColor: 'rgba(114,46,209,0.04)' },
+        { title: '高优惠率订单', data: anomalyOrders.highDisc, color: 'var(--pdd-danger)', borderColor: '#FFC2C2', bgColor: '#FFF1F2' },
+        { title: '高邮费订单', data: anomalyOrders.highPostage, color: 'var(--pdd-warning)', borderColor: '#FFEBA6', bgColor: '#FFFAEB' },
+        { title: '亏损/零利润订单', data: anomalyOrders.loss, color: 'var(--pdd-purple)', borderColor: '#D3C4F5', bgColor: 'var(--pdd-purple)' },
       ].map((group, gi) => (
         <motion.div key={group.title} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 + gi * 0.05 }}
           className="pdd-card p-3" style={{ borderColor: group.borderColor }}>

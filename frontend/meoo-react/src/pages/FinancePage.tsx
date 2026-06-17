@@ -8,6 +8,7 @@ import {
 import { useData } from '../App';
 import { useTimeFilter } from '../components/TimeFilter';
 import { sf, exportCSV, findField } from '../utils';
+import { TrustBadge, trustLevelFromActual } from '../components/DataSourceLabel';
 import {
   buildFinancialIndex, getBestPlatformFee, getBestInsuranceFee,
   getPenaltyFees, getMarketingFees, isSubsidyOrder, getSuggestedCommissionRate
@@ -19,7 +20,7 @@ import {
 
 type FinanceTab = 'compare' | 'subsidy' | 'penalties' | 'calibrate';
 
-const PIE_COLORS = ['var(--pdd-success)', 'var(--pdd-info)', '#6366f1', 'var(--pdd-danger)', 'var(--pdd-warning)', '#ef4444', '#8b5cf6'];
+const PIE_COLORS = ['var(--pdd-success)', 'var(--pdd-info)', '#6366f1', 'var(--pdd-danger)', 'var(--pdd-warning)', 'var(--pdd-danger)', 'var(--pdd-purple)'];
 
 const TABS: { key: FinanceTab; label: string; icon: any }[] = [
   { key: 'compare', label: '对比校准', icon: BarChart3 },
@@ -252,7 +253,7 @@ export default function FinancePage() {
           <div className="flex items-center justify-between mb-6">
             <div>
               <h1 className="text-2xl font-bold flex items-center gap-3 text-pdd-text">
-                <div className="p-2.5 rounded-xl bg-gradient-to-br from-pdd-primary to-pdd-primary-dark shadow-lg shadow-pdd-primary/20">
+                <div className="p-2.5 rounded-xl bg-gradient-to-br from-pdd-primary to-pdd-primary-dark ">
                   <LandmarkIcon size={24} className="text-white" />
                 </div>
                 财务管理
@@ -286,7 +287,7 @@ export default function FinancePage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold flex items-center gap-3 text-pdd-text">
-              <div className="p-2.5 rounded-xl bg-gradient-to-br from-pdd-primary to-pdd-primary-dark shadow-lg shadow-pdd-primary/20">
+              <div className="p-2.5 rounded-xl bg-gradient-to-br from-pdd-primary to-pdd-primary-dark ">
                 <LandmarkIcon size={24} className="text-white" />
               </div>
               财务管理
@@ -298,13 +299,13 @@ export default function FinancePage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex items-center gap-1 mb-6 bg-pdd-card rounded-xl p-1 border border-pdd-border w-fit">
+        <div className="flex items-center gap-1 mb-6 bg-pdd-card rounded-lg p-1 border border-pdd-border w-fit">
           {TABS.map(tab => (
             <button key={tab.key} onClick={() => setActiveTab(tab.key)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                 activeTab === tab.key
-                  ? 'bg-pdd-primary text-white shadow-lg shadow-pdd-primary/20'
-                  : 'text-pdd-text-secondary hover:text-pdd-text'
+                  ? 'bg-pdd-primary text-white '
+                  : 'text-pdd-text-secondary hover:text-pdd-text hover:bg-pdd-gray-50'
               }`}>
               <tab.icon size={16} /> {tab.label}
             </button>
@@ -322,7 +323,7 @@ export default function FinancePage() {
                   { label: '实际成本', value: `¥${compareKPI.totalActual.toFixed(2)}`, icon: DollarSign, color: 'var(--pdd-warning)' },
                   { label: '差异', value: `${compareKPI.diff >= 0 ? '+' : ''}¥${compareKPI.diff.toFixed(2)}`, icon: TrendingUp,
                     color: compareKPI.diff > 0 ? 'var(--pdd-success)' : compareKPI.diff < 0 ? 'var(--pdd-danger)' : 'var(--pdd-text-secondary)' },
-                  { label: '有实际数据', value: `${compareKPI.countWithActual} / ${compareKPI.totalOrders}`, icon: Shield, color: 'var(--pdd-success)' },
+                  { label: '有实际数据', value: `${compareKPI.countWithActual} / ${compareKPI.totalOrders}`, icon: Shield, color: compareKPI.countWithActual === compareKPI.totalOrders ? 'var(--pdd-success)' : compareKPI.countWithActual > 0 ? 'var(--pdd-warning)' : 'var(--pdd-danger)' },
                 ].map(card => (
                   <motion.div key={card.label} initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }}
                     className="pdd-card p-4 hover:border-pdd-border transition-all">
@@ -333,6 +334,21 @@ export default function FinancePage() {
                     <p className="text-2xl font-bold text-pdd-text">{card.value}</p>
                   </motion.div>
                 ))}
+              </div>
+
+              {/* 数据可信度状态条 */}
+              <div className="flex items-center gap-3 mb-6 px-1">
+                <span className="text-[11px] text-pdd-text-secondary font-medium">数据可信度：</span>
+                <TrustBadge level="verified" />
+                <span className="text-[11px] text-pdd-text-secondary/60">有实际货款明细的订单</span>
+                <span className="text-pdd-gray-300">|</span>
+                <TrustBadge level="estimated" />
+                <span className="text-[11px] text-pdd-text-secondary/60">按费率公式估算</span>
+                {compareKPI.countWithActual > 0 && compareKPI.countWithActual < compareKPI.totalOrders && (
+                  <span className="text-[11px] text-pdd-text-secondary/40 ml-auto">
+                    覆盖度 {((compareKPI.countWithActual / compareKPI.totalOrders) * 100).toFixed(0)}%
+                  </span>
+                )}
               </div>
 
               {/* 误差率提示 */}
@@ -394,7 +410,7 @@ export default function FinancePage() {
                           <td className="px-3 py-2 font-mono text-xs text-pdd-text">
                             {c.orderNo}
                             {c.isSubsidy && <span className="ml-1 px-1 py-0.5 rounded text-[9px] bg-pdd-warning/10 text-pdd-warning">补贴</span>}
-                            {!c.hasActual && <span className="ml-1 px-1 py-0.5 rounded text-[9px] bg-pdd-bg text-pdd-text-secondary">公式</span>}
+                            {!c.hasActual && <TrustBadge level="estimated" />}
                           </td>
                           <td className="px-3 py-2 text-pdd-text-secondary max-w-[150px] truncate">{c.productName}</td>
                           <td className="px-3 py-2 text-right font-mono text-pdd-text">¥{c.merchantReceived.toFixed(2)}</td>

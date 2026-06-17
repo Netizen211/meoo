@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Filter, X, ChevronDown, ChevronUp, RotateCcw } from 'lucide-react';
+import { findField } from '../utils';
 
 export interface FilterField {
   key: string;
@@ -25,22 +26,22 @@ const GROUP_LABELS: Record<string, string> = {
 const GROUP_ORDER = ['basic', 'discount', 'cost', 'quantity'];
 
 export const DEFAULT_AMOUNT_FIELDS: FilterField[] = [
-  { key: 'actualPay', label: '买家实付金额', hint: '用户实付', group: 'basic', compute: (o) => parseFloat(String(o['用户实付金额(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0 },
-  { key: 'actualReceiveAll', label: '商家实收(含退款)', hint: '含退款订单', group: 'basic', compute: (o) => parseFloat(String(o['商家实收金额(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0 },
-  { key: 'actualReceive', label: '实收金额(剔除退款)', hint: '仅非退款', group: 'basic', compute: (o) => parseFloat(String(o['商家实收金额(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0, filterLogic: 'exclude_refund' },
-  { key: 'refundAmount', label: '买家退款金额', hint: '仅退款单', group: 'basic', compute: (o) => parseFloat(String(o['用户实付金额(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0, filterLogic: 'only_refund' },
-  { key: 'productTotal', label: '商品总价', hint: '含邮费', group: 'basic', compute: (o) => parseFloat(String(o['商品总价(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0 },
-  { key: 'postage', label: '邮费金额', group: 'basic', compute: (o) => parseFloat(String(o['邮费(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0 },
-  { key: 'discountTotal', label: '优惠总额', hint: '三项合计', group: 'discount', compute: (o) => (parseFloat(String(o['店铺优惠折扣(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0) + (parseFloat(String(o['平台优惠折扣(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0) + (parseFloat(String(o['多多支付立减金额(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0) },
-  { key: 'shopDiscount', label: '店铺优惠折扣', group: 'discount', compute: (o) => parseFloat(String(o['店铺优惠折扣(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0 },
-  { key: 'platDiscount', label: '平台优惠折扣', group: 'discount', compute: (o) => parseFloat(String(o['平台优惠折扣(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0 },
-  { key: 'duoduoDiscount', label: '多多支付立减', group: 'discount', compute: (o) => parseFloat(String(o['多多支付立减金额(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0 },
-  { key: 'discountRate', label: '优惠率', hint: '%', group: 'discount', compute: (o) => { const pt = parseFloat(String(o['商品总价(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0; if (!pt) return 0; const disc = (parseFloat(String(o['店铺优惠折扣(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0) + (parseFloat(String(o['平台优惠折扣(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0) + (parseFloat(String(o['多多支付立减金额(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0); return (disc / pt) * 100; } },
-  { key: 'productCost', label: '商品成本', hint: '30%售价', group: 'cost', compute: (o) => (parseFloat(String(o['商品总价(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0) * 0.3 },
-  { key: 'profit', label: '利润金额', hint: '实收-成本-邮费', group: 'cost', compute: (o) => (parseFloat(String(o['商家实收金额(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0) - (parseFloat(String(o['商品总价(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0) * 0.3 - (parseFloat(String(o['邮费(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0) },
-  { key: 'recvRate', label: '实收率', hint: '%', group: 'cost', compute: (o) => { const pt = parseFloat(String(o['商品总价(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0; if (!pt) return 0; return ((parseFloat(String(o['商家实收金额(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0) / pt) * 100; } },
-  { key: 'productQty', label: '商品数量', hint: '件', group: 'quantity', compute: (o) => parseFloat(String(o['商品数量(件)'] || o['商品数量'] || '0').replace(/[^\d.\-]/g, '')) || 0 },
-  { key: 'unitPrice', label: '客单价', hint: '实付/件数', group: 'quantity', compute: (o) => { const qty = parseFloat(String(o['商品数量(件)'] || o['商品数量'] || '0').replace(/[^\d.\-]/g, '')) || 0; if (!qty) return 0; return (parseFloat(String(o['用户实付金额(元)'] || '0').replace(/[^\d.\-]/g, '')) || 0) / qty; } },
+  { key: 'actualPay', label: '买家实付金额', hint: '用户实付', group: 'basic', compute: (o) => parseFloat(String(findField(o, '用户实付金额(元)', '用户实付金额', '用户实付', '实付金额') ?? '0').replace(/[^\d.\-]/g, '')) || 0 },
+  { key: 'actualReceiveAll', label: '商家实收(含退款)', hint: '含退款订单', group: 'basic', compute: (o) => parseFloat(String(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额') ?? '0').replace(/[^\d.\-]/g, '')) || 0 },
+  { key: 'actualReceive', label: '实收金额(剔除退款)', hint: '仅非退款', group: 'basic', compute: (o) => parseFloat(String(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额') ?? '0').replace(/[^\d.\-]/g, '')) || 0, filterLogic: 'exclude_refund' },
+  { key: 'refundAmount', label: '买家退款金额', hint: '仅退款单', group: 'basic', compute: (o) => parseFloat(String(findField(o, '用户实付金额(元)', '用户实付金额', '用户实付', '实付金额') ?? '0').replace(/[^\d.\-]/g, '')) || 0, filterLogic: 'only_refund' },
+  { key: 'productTotal', label: '商品总价', hint: '含邮费', group: 'basic', compute: (o) => parseFloat(String(findField(o, '商品总价(元)', '商品总价', '商品金额') ?? '0').replace(/[^\d.\-]/g, '')) || 0 },
+  { key: 'postage', label: '邮费金额', group: 'basic', compute: (o) => parseFloat(String(findField(o, '邮费(元)', '邮费', '快递费', '运费') ?? '0').replace(/[^\d.\-]/g, '')) || 0 },
+  { key: 'discountTotal', label: '优惠总额', hint: '三项合计', group: 'discount', compute: (o) => (parseFloat(String(findField(o, '店铺优惠折扣(元)', '店铺优惠折扣', '店铺优惠') ?? '0').replace(/[^\d.\-]/g, '')) || 0) + (parseFloat(String(findField(o, '平台优惠折扣(元)', '平台优惠折扣', '平台优惠') ?? '0').replace(/[^\d.\-]/g, '')) || 0) + (parseFloat(String(findField(o, '多多支付立减金额(元)', '多多支付立减金额', '多多立减') ?? '0').replace(/[^\d.\-]/g, '')) || 0) },
+  { key: 'shopDiscount', label: '店铺优惠折扣', group: 'discount', compute: (o) => parseFloat(String(findField(o, '店铺优惠折扣(元)', '店铺优惠折扣', '店铺优惠') ?? '0').replace(/[^\d.\-]/g, '')) || 0 },
+  { key: 'platDiscount', label: '平台优惠折扣', group: 'discount', compute: (o) => parseFloat(String(findField(o, '平台优惠折扣(元)', '平台优惠折扣', '平台优惠') ?? '0').replace(/[^\d.\-]/g, '')) || 0 },
+  { key: 'duoduoDiscount', label: '多多支付立减', group: 'discount', compute: (o) => parseFloat(String(findField(o, '多多支付立减金额(元)', '多多支付立减金额', '多多立减') ?? '0').replace(/[^\d.\-]/g, '')) || 0 },
+  { key: 'discountRate', label: '优惠率', hint: '%', group: 'discount', compute: (o) => { const pt = parseFloat(String(findField(o, '商品总价(元)', '商品总价', '商品金额') ?? '0').replace(/[^\d.\-]/g, '')) || 0; if (!pt) return 0; const disc = (parseFloat(String(findField(o, '店铺优惠折扣(元)', '店铺优惠折扣', '店铺优惠') ?? '0').replace(/[^\d.\-]/g, '')) || 0) + (parseFloat(String(findField(o, '平台优惠折扣(元)', '平台优惠折扣', '平台优惠') ?? '0').replace(/[^\d.\-]/g, '')) || 0) + (parseFloat(String(findField(o, '多多支付立减金额(元)', '多多支付立减金额', '多多立减') ?? '0').replace(/[^\d.\-]/g, '')) || 0); return (disc / pt) * 100; } },
+  { key: 'productCost', label: '商品成本', hint: '30%售价', group: 'cost', compute: (o) => (parseFloat(String(findField(o, '商品总价(元)', '商品总价', '商品金额') ?? '0').replace(/[^\d.\-]/g, '')) || 0) * 0.3 },
+  { key: 'profit', label: '利润金额', hint: '实收-成本-邮费', group: 'cost', compute: (o) => (parseFloat(String(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额') ?? '0').replace(/[^\d.\-]/g, '')) || 0) - (parseFloat(String(findField(o, '商品总价(元)', '商品总价', '商品金额') ?? '0').replace(/[^\d.\-]/g, '')) || 0) * 0.3 - (parseFloat(String(findField(o, '邮费(元)', '邮费', '快递费', '运费') ?? '0').replace(/[^\d.\-]/g, '')) || 0) },
+  { key: 'recvRate', label: '实收率', hint: '%', group: 'cost', compute: (o) => { const pt = parseFloat(String(findField(o, '商品总价(元)', '商品总价', '商品金额') ?? '0').replace(/[^\d.\-]/g, '')) || 0; if (!pt) return 0; return ((parseFloat(String(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额') ?? '0').replace(/[^\d.\-]/g, '')) || 0) / pt) * 100; } },
+  { key: 'productQty', label: '商品数量', hint: '件', group: 'quantity', compute: (o) => parseFloat(String(findField(o, '商品数量(件)', '商品数量', '数量') ?? '0').replace(/[^\d.\-]/g, '')) || 0 },
+  { key: 'unitPrice', label: '客单价', hint: '实付/件数', group: 'quantity', compute: (o) => { const qty = parseFloat(String(findField(o, '商品数量(件)', '商品数量', '数量') ?? '0').replace(/[^\d.\-]/g, '')) || 0; if (!qty) return 0; return (parseFloat(String(findField(o, '用户实付金额(元)', '用户实付金额', '用户实付', '实付金额') ?? '0').replace(/[^\d.\-]/g, '')) || 0) / qty; } },
 ];
 
 export function createEmptyFilters(fields: FilterField[]): FilterValues {
@@ -59,7 +60,7 @@ export function applyAmountFilters(orders: any[], fields: FilterField[], filters
     if (minVal === null && maxVal === null) return;
     if (fd.filterLogic === 'exclude_refund') {
       result = result.filter(o => {
-        const isRefund = String(o['售后状态'] || '').includes('退款');
+        const isRefund = String(findField(o, '售后状态', '退款状态') || '').includes('退款');
         if (isRefund) return false;
         const val = fd.compute(o);
         if (minVal !== null && val < minVal) return false;
@@ -68,7 +69,7 @@ export function applyAmountFilters(orders: any[], fields: FilterField[], filters
       });
     } else if (fd.filterLogic === 'only_refund') {
       result = result.filter(o => {
-        const isRefund = String(o['售后状态'] || '').includes('退款');
+        const isRefund = String(findField(o, '售后状态', '退款状态') || '').includes('退款');
         if (!isRefund) return false;
         const val = fd.compute(o);
         if (minVal !== null && val < minVal) return false;
@@ -139,9 +140,9 @@ export default function AmountFilterPanel({ fields, filters, onFiltersChange, co
   });
 
   return (
-    <div className="bg-[var(--pdd-card)] rounded-lg border border-[var(--pdd-border)] overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 border-b border-[var(--pdd-border)]">
-        <button onClick={() => setIsExpanded(!isExpanded)} className="flex items-center gap-2 text-xs font-medium hover:text-pdd-primary transition-colors">
+    <div className="bg-pdd-card rounded-lg border border-pdd-border overflow-hidden">
+      <div className="flex items-center justify-between px-3 py-2 border-b border-pdd-border">
+        <button onClick={() => setIsExpanded(!isExpanded)} className="flex items-center gap-2 text-xs font-medium text-pdd-text hover:text-pdd-primary transition-colors">
           <Filter size={14} />
           <span>金额筛选</span>
           {isExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
@@ -159,11 +160,11 @@ export default function AmountFilterPanel({ fields, filters, onFiltersChange, co
       </div>
 
       {activeTags.length > 0 && (
-        <div className="px-3 py-1.5 bg-[var(--pdd-bg)] flex items-center gap-1.5 flex-wrap">
+        <div className="px-3 py-1.5 bg-pdd-bg flex items-center gap-1.5 flex-wrap">
           {activeTags.map(tag => (
-            <span key={tag.key} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-pdd-card border border-[var(--pdd-border)] rounded text-[10px]">
+            <span key={tag.key} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-pdd-card border border-pdd-border rounded text-[10px]">
               <span className="text-pdd-primary font-medium">{tag.label}</span>
-              <span className="text-[var(--pdd-text-secondary)]">{tag.display}</span>
+              <span className="text-pdd-text-secondary">{tag.display}</span>
               <button onClick={() => clearFilter(tag.key)} className="hover:text-pdd-primary"><X size={10} /></button>
             </span>
           ))}
@@ -176,11 +177,11 @@ export default function AmountFilterPanel({ fields, filters, onFiltersChange, co
             <div className="p-3 space-y-3">
               {GROUP_ORDER.filter(g => groupedFields[g]).map(group => (
                 <div key={group}>
-                  <div className="text-[10px] text-[var(--pdd-text-secondary)] font-medium uppercase tracking-wider mb-1.5">{GROUP_LABELS[group]}</div>
+                  <div className="text-[10px] text-pdd-text-secondary font-medium uppercase tracking-wider mb-1.5">{GROUP_LABELS[group]}</div>
                   <div className={`grid ${compact ? 'grid-cols-3' : 'grid-cols-4'} gap-2`}>
                     {groupedFields[group].map(fd => (
                       <div key={fd.key} className="space-y-0.5">
-                        <label className="text-[10px] text-[var(--pdd-text-secondary)] flex items-center gap-1">
+                        <label className="text-[10px] text-pdd-text-secondary flex items-center gap-1">
                           {fd.label}
                           {fd.hint && <span className="text-[9px] text-pdd-text-secondary/70">({fd.hint})</span>}
                         </label>
@@ -190,14 +191,14 @@ export default function AmountFilterPanel({ fields, filters, onFiltersChange, co
                             placeholder="最小"
                             value={filters[fd.key]?.min || ''}
                             onChange={e => updateFilter(fd.key, 'min', e.target.value)}
-                            className="w-1/2 px-1.5 py-1 text-[11px] border border-[var(--pdd-border)] rounded bg-pdd-card focus:border-pdd-primary focus:outline-none"
+                            className="w-1/2 px-1.5 py-1 text-[11px] border border-pdd-border rounded bg-pdd-card focus:border-pdd-primary focus:outline-none"
                           />
                           <input
                             type="number"
                             placeholder="最大"
                             value={filters[fd.key]?.max || ''}
                             onChange={e => updateFilter(fd.key, 'max', e.target.value)}
-                            className="w-1/2 px-1.5 py-1 text-[11px] border border-[var(--pdd-border)] rounded bg-pdd-card focus:border-pdd-primary focus:outline-none"
+                            className="w-1/2 px-1.5 py-1 text-[11px] border border-pdd-border rounded bg-pdd-card focus:border-pdd-primary focus:outline-none"
                           />
                         </div>
                       </div>

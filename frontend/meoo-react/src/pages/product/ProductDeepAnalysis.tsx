@@ -23,10 +23,17 @@ import AnomalyBanner from '../../components/analysis/AnomalyBanner';
 import PromoChannelROI from '../../components/analysis/PromoChannelROI';
 import ProfitBreakdownDrawer from '../../components/analysis/ProfitBreakdownDrawer';
 import { detectAnomalies } from '../../utils/anomalyDetector';
+// ★ shadcn/ui 组件
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../components/ui/select';
+import { SEMANTIC, CHART } from '../../ui/tokens/colors';
 
-const COLORS = ['var(--pdd-primary)', 'var(--pdd-primary-light)', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'];
-const WATERFALL_POSITIVE = '#22c55e';
-const WATERFALL_NEGATIVE = 'var(--pdd-primary)';
+const COLORS = [CHART.all[0], CHART.all[1], '#f97316', '#eab308', SEMANTIC.profit, '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899'];
+const WATERFALL_POSITIVE = SEMANTIC.profit;
+const WATERFALL_NEGATIVE = CHART.all[0];
 
 interface ProductItem {
   id: string;
@@ -100,7 +107,7 @@ function classifyProduct(stats: ProductStat, allStats: Record<string, ProductSta
 
   let type: string; let typeColor: string; let typeBg: string;
   if (salesTopRatio <= 0.2 && stats.profitRate > avgProfitRate) {
-    type = '爆品'; typeColor = '#e02e24'; typeBg = '#fef2f2';
+    type = '爆品'; typeColor = SEMANTIC.loss; typeBg = '#fef2f2';
   } else if (stats.profitRate > avgProfitRate * 1.2) {
     type = '利润款'; typeColor = '#7c3aed'; typeBg = '#f5f3ff';
   } else if (impressionShare > 0.2 && stats.profitRate < avgProfitRate) {
@@ -160,27 +167,27 @@ function generateDiagnoses(stats: ProductStat, prevStats?: ProductStat): Diagnos
   if (prevStats && prevStats.gmv > 0) {
     const change = ((stats.gmv - prevStats.gmv) / prevStats.gmv) * 100;
     if (change < -20) {
-      items.push({ priority: 'urgent', title: 'GMV显著下降', description: `GMV环比下降${Math.abs(change).toFixed(1)}%，建议拆解为①访客数变化 ②转化率变化 ③客单价变化，定位根本原因。`, icon: <AlertTriangle size={14} />, color: '#e02e24', bg: '#fef2f2' });
+      items.push({ priority: 'urgent', title: 'GMV显著下降', description: `GMV环比下降${Math.abs(change).toFixed(1)}%，建议拆解为①访客数变化 ②转化率变化 ③客单价变化，定位根本原因。`, icon: <AlertTriangle size={14} />, color: SEMANTIC.loss, bg: 'rgba(239,68,68,0.08)' });
     }
   }
 
   // 2. 推广效率
   if (stats.roi > 0 && stats.roi < 1.5) {
-    items.push({ priority: 'urgent', title: '推广ROI偏低', description: `推广ROI仅${stats.roi.toFixed(2)}，推广花费¥${fmtMoney(stats.promoCost)}，建议暂停低效计划，聚焦ROI>2的渠道。`, icon: <TrendingDown size={14} />, color: '#e02e24', bg: '#fef2f2' });
+    items.push({ priority: 'urgent', title: '推广ROI偏低', description: `推广ROI仅${(stats.roi||0).toFixed(2)}，推广花费¥${fmtMoney(stats.promoCost)}，建议暂停低效计划，聚焦ROI>2的渠道。`, icon: <TrendingDown size={14} />, color: SEMANTIC.loss, bg: 'rgba(239,68,68,0.08)' });
   } else if (stats.roi > 0 && stats.roi < 2.5) {
-    items.push({ priority: 'important', title: '推广ROI需优化', description: `推广ROI为${stats.roi.toFixed(2)}，处于中等水平，建议优化关键词和人群定向，目标提升至3以上。`, icon: <Target size={14} />, color: '#f97316', bg: '#fff7ed' });
+    items.push({ priority: 'important', title: '推广ROI需优化', description: `推广ROI为${(stats.roi||0).toFixed(2)}，处于中等水平，建议优化关键词和人群定向，目标提升至3以上。`, icon: <Target size={14} />, color: '#f97316', bg: '#fff7ed' });
   }
 
   // 3. 售后风险
   if (stats.refundRate > 10) {
     const topReason = stats.afterSaleBreakdown ? Object.entries(stats.afterSaleBreakdown).sort((a, b) => b[1] - a[1])[0] : null;
     const reasonText = topReason ? `，主要原因"${topReason[0]}"占比${rate(topReason[1], Object.values(stats.afterSaleBreakdown).reduce((a, b) => a + b, 0)).toFixed(0)}%` : '';
-    items.push({ priority: 'urgent', title: '退款率偏高', description: `退款率${fmtPct(stats.refundRate)}${reasonText}，建议检查商品描述准确性、包装质量和物流时效。`, icon: <RotateCcw size={14} />, color: '#e02e24', bg: '#fef2f2' });
+    items.push({ priority: 'urgent', title: '退款率偏高', description: `退款率${fmtPct(stats.refundRate)}${reasonText}，建议检查商品描述准确性、包装质量和物流时效。`, icon: <RotateCcw size={14} />, color: SEMANTIC.loss, bg: 'rgba(239,68,68,0.08)' });
   }
 
   // 4. 库存风险
   if (stats.turnoverDays > 60) {
-    items.push({ priority: 'urgent', title: '库存积压严重', description: `库存周转${stats.turnoverDays}天，远超健康线（30天），资金占用约¥${fmtMoney(stats.sales * (stats.costBreakdown?.productCost || 0))}，建议立即促销清仓或停止补货。`, icon: <Clock size={14} />, color: '#e02e24', bg: '#fef2f2' });
+    items.push({ priority: 'urgent', title: '库存积压严重', description: `库存周转${stats.turnoverDays}天，远超健康线（30天），资金占用约¥${fmtMoney(stats.sales * (stats.costBreakdown?.productCost || 0))}，建议立即促销清仓或停止补货。`, icon: <Clock size={14} />, color: SEMANTIC.loss, bg: 'rgba(239,68,68,0.08)' });
   } else if (stats.turnoverDays > 30) {
     items.push({ priority: 'important', title: '库存周转偏慢', description: `库存周转${stats.turnoverDays}天，超过30天警戒线，建议适度促销或控制补货节奏。`, icon: <Clock size={14} />, color: '#f97316', bg: '#fff7ed' });
   }
@@ -219,93 +226,6 @@ function generateDiagnoses(stats: ProductStat, prevStats?: ProductStat): Diagnos
   return items.slice(0, 5);
 }
 
-// ─── 子组件：KPI 卡片行 ───────────────────────────────────
-function KpiCardRow({ stats, prevStats, benchmark, getBenchmark, comparisonMode, healthScore, cm3, allProductStats }: {
-  stats: ProductStat; prevStats?: ProductStat;
-  benchmark: any; getBenchmark: (m: string, v: number) => any; comparisonMode: string;
-  healthScore: any; cm3: number; allProductStats: Record<string, ProductStat>;
-}) {
-  const diffBadge = (current: number, bm: any) => {
-    if (!bm || comparisonMode === 'none') return null;
-    const delta = current - bm.value;
-    const better = bm.lowIsGood ? delta < 0 : delta > 0;
-    const cls = better ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600';
-    const arrow = better ? '↑' : '↓';
-    const absDelta = Math.abs(delta);
-    // 百分比类指标显示 pp，绝对值类显示金额/数字
-    const suffix = Math.abs(bm.value) < 100 ? 'pp' : '';
-    return <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${cls}`}>{arrow} {absDelta.toFixed(1)}{suffix}</span>;
-  };
-
-  const percentileBadge = (val: number, key: string, lowIsGood?: boolean) => {
-    if (!benchmark || comparisonMode === 'none') return null;
-    const all = Object.values(allProductStats);
-    const arr = all.map((s: any) => s[key] ?? 0);
-    const better = lowIsGood ? arr.filter((v: number) => v < val).length : arr.filter((v: number) => v > val).length;
-    const pct = arr.length > 0 ? Math.round((better / arr.length) * 100) : 0;
-    return <span className="text-xs text-pdd-gray-400">优于 {pct}% 商品</span>;
-  };
-
-  const renderSpark = (dailyData: any[], key: string) => {
-    if (!dailyData || dailyData.length < 2) return null;
-    const vals = dailyData.map(d => d[key] || 0);
-    const min = Math.min(...vals);
-    const max = Math.max(...vals);
-    const range = max - min || 1;
-    const pts = vals.map((v, i) => `${(i / (vals.length - 1)) * 100},${100 - ((v - min) / range) * 40}`).join(' ');
-    return (
-      <svg width="56" height="20" className="shrink-0 opacity-40">
-        <polyline points={pts} fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  };
-
-  const kpiDefs = [
-    { label: 'GMV', key: 'gmv', value: stats.gmv, display: fmtMoney(stats.gmv), icon: <ShoppingCart size={14} />, color: '#e02e24', spark: renderSpark(stats.dailySales, 'gmv'), section: 'kpi-gmv' },
-    { label: '净利润率', key: 'profitRate', value: stats.profitRate, display: fmtPct(stats.profitRate), icon: <DollarSign size={14} />, color: '#16a34a', spark: renderSpark(stats.dailySales, 'sales'), section: 'kpi-profit' },
-    { label: '推广ROI', key: 'roi', value: stats.roi, display: stats.roi > 0 ? stats.roi.toFixed(2) : '--', icon: <Target size={14} />, color: '#7c3aed', spark: null, section: 'kpi-roi' },
-    { label: '退款率', key: 'refundRate', value: stats.refundRate, display: fmtPct(stats.refundRate), icon: <RotateCcw size={14} />, color: '#f97316', spark: null, section: 'kpi-refund', lowIsGood: true },
-    { label: '库存周转', key: 'turnoverDays', value: stats.turnoverDays ?? 0, display: (stats.turnoverDays ?? 0) > 0 ? stats.turnoverDays + '天' : '--', icon: <Clock size={14} />, color: '#0891b2', spark: null, section: 'kpi-turnover', lowIsGood: true },
-    { label: 'CM3 利润', key: '', value: cm3, display: fmtMoney(cm3), icon: <BarChart3 size={14} />, color: cm3 >= 0 ? '#16a34a' : '#e02e24', spark: null, section: 'kpi-cm3' },
-    { label: '健康分', key: '', value: healthScore?.score ?? 0, display: healthScore ? `${healthScore.score}分` : '--', icon: <Gauge size={14} />, color: (healthScore?.score ?? 0) >= 60 ? '#16a34a' : '#f97316', spark: null, section: 'kpi-health' },
-  ];
-
-  const scrollTo = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
-  return (
-    <div className="grid grid-cols-7 gap-2">
-      {kpiDefs.map(k => {
-        const bm = k.key ? getBenchmark(k.key, k.value) : null;
-        const isGood = bm ? (bm.lowIsGood ? k.value < bm.value : k.value > bm.value) : null;
-        const borderColor = comparisonMode !== 'none' && bm ? (isGood ? '#22c55e40' : 'var(--pdd-primary)40') : 'var(--pdd-border)';
-        return (
-          <motion.div key={k.label} whileHover={{ y: -2 }} onClick={() => scrollTo(k.section)}
-            className="rounded-xl border p-2.5 flex flex-col gap-1 transition-all hover:shadow-md cursor-pointer" style={{ borderColor, backgroundColor: 'var(--pdd-card)' }}>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1 text-xs text-pdd-gray-500">
-                <span style={{ color: k.color }}>{k.icon}</span>
-                {k.label}
-              </div>
-              {k.spark}
-            </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-lg font-bold text-pdd-text">{k.display}</span>
-              {bm && k.key && diffBadge(k.value, bm)}
-            </div>
-            <div className="flex items-center justify-between">
-              {k.key ? percentileBadge(k.value, k.key, (k as any).lowIsGood) : <span />}
-              {bm && <span className="text-xs text-pdd-gray-400">vs {bm.label}</span>}
-            </div>
-          </motion.div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ─── 子组件：双列对比转化漏斗 ─────────────────────────────
 function ConversionFunnel({ stats, orders, allProductStats, comparisonMode }: {
   stats: ProductStat; orders: any[];
@@ -338,7 +258,7 @@ function ConversionFunnel({ stats, orders, allProductStats, comparisonMode }: {
     if (!showStore) return null;
     const delta = curr - store;
     const suffix = isRate ? 'pp' : '%';
-    if (Math.abs(delta) < 0.01) return <span className="text-xs text-pdd-gray-400">≈持平</span>;
+    if (Math.abs(delta) < 0.01) return <span className="text-xs text-pdd-text-secondary/50">≈持平</span>;
     const better = delta > 0;
     const cls = better ? 'text-green-600' : 'text-red-500';
     const sign = better ? '+' : '';
@@ -354,7 +274,7 @@ function ConversionFunnel({ stats, orders, allProductStats, comparisonMode }: {
 
   return (
     <div className="p-4">
-      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-3 flex items-center gap-1.5"><Activity size={13} color="#3b82f6" />转化漏斗{showStore && <span className="text-pdd-gray-400 font-normal ml-1">· 左当前 / 右店铺均值</span>}</h3>
+      <h3 className="text-xs font-semibold text-pdd-text-secondary mb-3 flex items-center gap-1.5"><Activity size={13} color="#3b82f6" />转化漏斗{showStore && <span className="text-pdd-text-secondary/50 font-normal ml-1">· 左当前 / 右店铺均值</span>}</h3>
       <div className="space-y-2.5">
         {steps.map((s, i) => {
           const maxVal = showStore ? Math.max(s.value, s.storeVal, 1) : Math.max(s.value, 1);
@@ -364,7 +284,7 @@ function ConversionFunnel({ stats, orders, allProductStats, comparisonMode }: {
           const storeLossRate = i > 0 && showStore && steps[i-1].storeVal > 0 ? ((1 - s.storeVal / steps[i-1].storeVal) * 100) : 0;
           return (
             <div key={s.label} className="flex items-center gap-2">
-              <span className="text-xs text-pdd-gray-500 w-14 shrink-0 text-right">{s.label}</span>
+              <span className="text-xs text-pdd-text-secondary w-14 shrink-0 text-right">{s.label}</span>
               {/* 当前商品条 */}
               <div className="flex-1 flex gap-1">
                 <div className="flex-1 h-7 rounded-md relative overflow-hidden" style={{ backgroundColor: `${s.color}15` }}>
@@ -375,7 +295,7 @@ function ConversionFunnel({ stats, orders, allProductStats, comparisonMode }: {
                 {showStore && (
                   <div className="flex-1 h-7 rounded-md relative overflow-hidden" style={{ backgroundColor: `${s.color}08` }}>
                     <motion.div initial={{ width: 0 }} animate={{ width: `${Math.max(storeW, 0.5)}%` }} transition={{ duration: 0.6, delay: i * 0.1 }} className="h-full rounded-md border border-dashed" style={{ backgroundColor: `${s.color}30`, borderColor: `${s.color}50` }} />
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-pdd-gray-500">{s.fmt(s.storeVal)}</span>
+                    <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs font-semibold text-pdd-text-secondary">{s.fmt(s.storeVal)}</span>
                   </div>
                 )}
               </div>
@@ -383,9 +303,9 @@ function ConversionFunnel({ stats, orders, allProductStats, comparisonMode }: {
               <span className="text-xs w-16 shrink-0 text-right">{diffBadge(s.value, s.storeVal, s.isRate)}</span>
               {/* 流失率对比 */}
               {i > 0 && (
-                <span className="text-xs text-pdd-gray-400 w-24 shrink-0">
-                  流失 {lossRate.toFixed(0)}%
-                  {showStore && <span className="text-pdd-gray-300"> | {storeLossRate.toFixed(0)}%</span>}
+                <span className="text-xs text-pdd-text-secondary/50 w-24 shrink-0">
+                  流失 {(lossRate||0).toFixed(0)}%
+                  {showStore && <span className="text-pdd-text-secondary/50"> | {(storeLossRate||0).toFixed(0)}%</span>}
                 </span>
               )}
               {i === 0 && <span className="w-24 shrink-0" />}
@@ -395,9 +315,9 @@ function ConversionFunnel({ stats, orders, allProductStats, comparisonMode }: {
       </div>
       {/* CTR / CVR 对比 */}
       {showStore && (
-        <div className="mt-3 flex items-center gap-4 text-xs border-t border-pdd-gray-100 pt-2.5">
-          <span className="text-pdd-gray-500">CTR：<span className="font-mono font-semibold text-pdd-text">{ctr.toFixed(1)}%</span>{diffBadge(ctr, storeFunnel!.ctr, true)}</span>
-          <span className="text-pdd-gray-500">CVR：<span className="font-mono font-semibold text-pdd-text">{cvr.toFixed(1)}%</span>{diffBadge(cvr, storeFunnel!.cvr, true)}</span>
+        <div className="mt-3 flex items-center gap-4 text-xs border-t border-pdd-border pt-2.5">
+          <span className="text-pdd-text-secondary">CTR：<span className="font-mono font-semibold text-pdd-text">{(ctr||0).toFixed(1)}%</span>{diffBadge(ctr, storeFunnel!.ctr, true)}</span>
+          <span className="text-pdd-text-secondary">CVR：<span className="font-mono font-semibold text-pdd-text">{(cvr||0).toFixed(1)}%</span>{diffBadge(cvr, storeFunnel!.cvr, true)}</span>
         </div>
       )}
     </div>
@@ -413,17 +333,17 @@ function ProfitWaterfall({ stats, allProductStats, comparisonMode }: {
   const gmv = stats.gmv || 0;
   const items: WaterfallItem[] = [
     { label: 'GMV', value: gmv, color: '#22c55e', pct: '100%' },
-    { label: '折扣优惠', value: -(stats.discount || 0), color: 'var(--pdd-primary)', pct: gmv ? (Math.abs(stats.discount || 0) / gmv * 100).toFixed(0) + '%' : '--' },
-    { label: '推广花费', value: -(stats.promoCost || 0), color: 'var(--pdd-primary)', pct: gmv ? (Math.abs(stats.promoCost || 0) / gmv * 100).toFixed(0) + '%' : '--' },
-    { label: '商品成本', value: -(cb.productCost || 0), color: 'var(--pdd-primary)', pct: gmv ? (Math.abs(cb.productCost || 0) / gmv * 100).toFixed(0) + '%' : '--' },
-    { label: '平台佣金', value: -(cb.platformFee || 0), color: 'var(--pdd-primary-light)', pct: gmv ? (Math.abs(cb.platformFee || 0) / gmv * 100).toFixed(0) + '%' : '--' },
-    { label: '运费险', value: -(cb.insuranceFee || 0), color: 'var(--pdd-primary-light)', pct: gmv ? (Math.abs(cb.insuranceFee || 0) / gmv * 100).toFixed(0) + '%' : '--' },
+    { label: '折扣优惠', value: -(stats.discount || 0), color: CHART.all[0], pct: gmv ? (Math.abs(stats.discount || 0) / gmv * 100).toFixed(0) + '%' : '--' },
+    { label: '推广花费', value: -(stats.promoCost || 0), color: CHART.all[0], pct: gmv ? (Math.abs(stats.promoCost || 0) / gmv * 100).toFixed(0) + '%' : '--' },
+    { label: '商品成本', value: -(cb.productCost || 0), color: CHART.all[0], pct: gmv ? (Math.abs(cb.productCost || 0) / gmv * 100).toFixed(0) + '%' : '--' },
+    { label: '平台佣金', value: -(cb.platformFee || 0), color: CHART.all[0], pct: gmv ? (Math.abs(cb.platformFee || 0) / gmv * 100).toFixed(0) + '%' : '--' },
+    { label: '运费险', value: -(cb.insuranceFee || 0), color: CHART.all[0], pct: gmv ? (Math.abs(cb.insuranceFee || 0) / gmv * 100).toFixed(0) + '%' : '--' },
     { label: '罚款/扣款', value: -(cb.penaltyFee || 0), color: '#f5222d', pct: gmv ? (Math.abs(cb.penaltyFee || 0) / gmv * 100).toFixed(0) + '%' : '--' },
     { label: '营销费用', value: -(cb.marketingFee || 0), color: '#eb2f96', pct: gmv ? (Math.abs(cb.marketingFee || 0) / gmv * 100).toFixed(0) + '%' : '--' },
-    { label: '包装快递', value: -((cb.packagingFee || 0) + (cb.shippingFee || 0)), color: 'var(--pdd-primary-light)', pct: gmv ? (Math.abs((cb.packagingFee || 0) + (cb.shippingFee || 0)) / gmv * 100).toFixed(0) + '%' : '--' },
+    { label: '包装快递', value: -((cb.packagingFee || 0) + (cb.shippingFee || 0)), color: CHART.all[0], pct: gmv ? (Math.abs((cb.packagingFee || 0) + (cb.shippingFee || 0)) / gmv * 100).toFixed(0) + '%' : '--' },
     { label: '税费', value: -(cb.taxes || 0), color: '#f97316', pct: gmv ? (Math.abs(cb.taxes || 0) / gmv * 100).toFixed(0) + '%' : '--' },
     { label: '其他扣费', value: -(cb.customDeductions || 0), color: '#f97316', pct: gmv ? (Math.abs(cb.customDeductions || 0) / gmv * 100).toFixed(0) + '%' : '--' },
-    { label: '净利润', value: stats.netProfit || 0, color: (stats.netProfit || 0) >= 0 ? '#22c55e' : 'var(--pdd-primary)', pct: gmv ? (Math.abs(stats.netProfit || 0) / gmv * 100).toFixed(0) + '%' : '--' },
+    { label: '净利润', value: stats.netProfit || 0, color: (stats.netProfit || 0) >= 0 ? '#22c55e' : CHART.all[0], pct: gmv ? (Math.abs(stats.netProfit || 0) / gmv * 100).toFixed(0) + '%' : '--' },
   ];
   const maxVal = Math.max(...items.map(i => Math.abs(i.value)), 1);
 
@@ -465,9 +385,9 @@ function ProfitWaterfall({ stats, allProductStats, comparisonMode }: {
 
   return (
     <div className="p-4">
-      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-3 flex items-center gap-1.5">
+      <h3 className="text-xs font-semibold text-pdd-text-secondary mb-3 flex items-center gap-1.5">
         <BarChart3 size={13} color="#7c3aed" />利润拆解
-        {storeAvgPcts && <span className="text-pdd-gray-400 font-normal ml-1">· vs 店铺均值</span>}
+        {storeAvgPcts && <span className="text-pdd-text-secondary/50 font-normal ml-1">· vs 店铺均值</span>}
       </h3>
       <div className="space-y-2">
         {items.map((item, i) => {
@@ -478,8 +398,8 @@ function ProfitWaterfall({ stats, allProductStats, comparisonMode }: {
           const isWorse = deltaPct != null && item.value < 0 && deltaPct < 0; // 扣费项占比更高=更差
           return (
           <div key={item.label} className="flex items-center gap-3">
-            <span className={`text-xs w-16 shrink-0 text-right ${item.label === '净利润' ? 'font-bold text-pdd-text' : 'text-pdd-gray-500'}`}>{item.label}</span>
-            <div className="flex-1 h-6 bg-pdd-gray-100 rounded-sm overflow-hidden">
+            <span className={`text-xs w-16 shrink-0 text-right ${item.label === '净利润' ? 'font-bold text-pdd-text' : 'text-pdd-text-secondary'}`}>{item.label}</span>
+            <div className="flex-1 h-6 bg-pdd-bg/80 rounded-sm overflow-hidden">
               <motion.div
                 initial={{ width: 0 }} animate={{ width: `${(Math.abs(item.value) / maxVal) * 100}%` }}
                 transition={{ duration: 0.4, delay: i * 0.05 }}
@@ -490,14 +410,14 @@ function ProfitWaterfall({ stats, allProductStats, comparisonMode }: {
             <span className={`text-xs font-mono w-20 shrink-0 text-right ${item.value >= 0 ? 'text-green-600' : 'text-red-500'}`}>
               {item.value >= 0 ? '+' : ''}{fmtMoney(Math.abs(item.value))}
             </span>
-            <span className="text-xs font-mono text-pdd-gray-500 w-10 shrink-0 text-right">{item.pct}</span>
+            <span className="text-xs font-mono text-pdd-text-secondary w-10 shrink-0 text-right">{item.pct}</span>
             {storeAvgPcts && storeKey && storeKey !== 'gmv' && (
-              <span className={`text-xs font-mono w-16 shrink-0 text-right ${isWorse ? 'text-red-500' : deltaPct != null && item.value < 0 ? 'text-green-500' : 'text-pdd-gray-400'}`}>
-                vs {storePct.toFixed(0)}%
+              <span className={`text-xs font-mono w-16 shrink-0 text-right ${isWorse ? 'text-red-500' : deltaPct != null && item.value < 0 ? 'text-green-500' : 'text-pdd-text-secondary/50'}`}>
+                vs {(storePct||0).toFixed(0)}%
                 {deltaPct != null && deltaPct !== 0 && <span className="ml-0.5">{deltaPct > 0 ? '↑' : '↓'}{Math.abs(deltaPct).toFixed(0)}pp</span>}
               </span>
             )}
-            {storeAvgPcts && storeKey === 'gmv' && <span className="text-xs text-pdd-gray-400 w-16">全店均 ¥{fmt(storeAvgPcts.gmv)}</span>}
+            {storeAvgPcts && storeKey === 'gmv' && <span className="text-xs text-pdd-text-secondary/50 w-16">全店均 ¥{fmt(storeAvgPcts.gmv)}</span>}
           </div>
         )})}
       </div>
@@ -510,29 +430,29 @@ function SkuRankingTable({ orders, stats }: { orders: any[]; stats: ProductStat 
   const skuData = useMemo(() => {
     const map: Record<string, { sku: string; qty: number; revenue: number; count: number }> = {};
     orders.forEach(o => {
-      const sku = o['商家编码-SKU维度'] || o['规格编码'] || o['SKU编码'] || '';
+      const sku = findField(o, '商家编码-SKU维度', '商品规格', 'SKU编码', '规格编码') || '';
       if (!sku) return;
       if (!map[sku]) map[sku] = { sku, qty: 0, revenue: 0, count: 0 };
-      map[sku].qty += Number(o['商品数量'] || o['交易数量'] || 1) || 1;
-      map[sku].revenue += Number(o['商家实收金额(元)'] || o['成交金额'] || o['支付金额'] || 0) || 0;
+      map[sku].qty += Number(findField(o, '商品数量(件)', '商品数量', '交易数量', '数量') ?? 1) || 1;
+      map[sku].revenue += Number(findField(o, '商家实收金额(元)', '商家实收', '实收金额', '成交金额', '支付金额') ?? 0) || 0;
       map[sku].count++;
     });
     return Object.values(map).sort((a, b) => b.qty - a.qty).slice(0, 10);
   }, [orders]);
 
-  if (!skuData.length) return <div className="p-4 text-xs text-pdd-gray-400 text-center">暂无SKU数据</div>;
+  if (!skuData.length) return <div className="p-4 text-xs text-pdd-text-secondary/50 text-center">暂无SKU数据</div>;
 
   return (
     <div className="p-4">
-      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1.5"><Layers size={13} color="#f97316" />SKU 销量排行 TOP10</h3>
+      <h3 className="text-xs font-semibold text-pdd-text-secondary mb-2 flex items-center gap-1.5"><Layers size={13} color="#f97316" />SKU 销量排行 TOP10</h3>
       <table className="w-full" style={{ fontSize: '10px' }}>
-        <thead><tr className="text-pdd-gray-400 border-b border-pdd-gray-100"><th className="py-1 text-left font-medium">SKU编码</th><th className="py-1 text-right font-medium">销量</th><th className="py-1 text-right font-medium">收入</th></tr></thead>
-        <tbody className="divide-y divide-pdd-gray-50">
+        <thead><tr className="text-pdd-text-secondary/50 border-b border-pdd-border"><th className="py-1 text-left font-medium">SKU编码</th><th className="py-1 text-right font-medium">销量</th><th className="py-1 text-right font-medium">收入</th></tr></thead>
+        <tbody className="divide-y divide-pdd-border/30">
           {skuData.map((s, i) => (
-            <tr key={s.sku} className="hover:bg-pdd-gray-50">
-              <td className="py-1 text-pdd-gray-700 font-mono truncate max-w-[120px]">{s.sku}</td>
-              <td className="py-1 text-right font-mono text-pdd-gray-700">{s.qty}</td>
-              <td className="py-1 text-right font-mono text-pdd-gray-700">{fmtMoney(s.revenue)}</td>
+            <tr key={s.sku} className="hover:bg-pdd-bg/50">
+              <td className="py-1 text-pdd-text font-mono truncate max-w-[120px]">{s.sku}</td>
+              <td className="py-1 text-right font-mono text-pdd-text">{s.qty}</td>
+              <td className="py-1 text-right font-mono text-pdd-text">{fmtMoney(s.revenue)}</td>
             </tr>
           ))}
         </tbody>
@@ -553,7 +473,7 @@ function ProductPositioningCard({ stats, allStats }: { stats: ProductStat; allSt
             <span className="text-sm font-bold" style={{ color: pos.typeColor }}>{pos.type}</span>
             <span className="px-2 py-0.5 rounded-full text-xs font-medium" style={{ backgroundColor: pos.stageBg, color: pos.stageColor }}>{pos.stage}</span>
           </div>
-          <p className="text-xs text-pdd-gray-500">{pos.suggestion}</p>
+          <p className="text-xs text-pdd-text-secondary">{pos.suggestion}</p>
         </div>
       </div>
     </div>
@@ -591,7 +511,7 @@ function CmLayerCascade({ layers, allProductStats, comparisonMode }: {
     };
   }, [allProductStats, layers, comparisonMode]);
 
-  if (!layers) return <div className="p-4 text-xs text-pdd-gray-400 text-center">暂无CM分层数据</div>;
+  if (!layers) return <div className="p-4 text-xs text-pdd-text-secondary/50 text-center">暂无CM分层数据</div>;
   const items = [layers.cm1, layers.cm2, layers.cm3];
   const rankKeys: Array<'cm1' | 'cm2' | 'cm3'> = ['cm1', 'cm2', 'cm3'];
   return (
@@ -601,8 +521,8 @@ function CmLayerCascade({ layers, allProductStats, comparisonMode }: {
           const rk = rankings ? (rankings as any)[rankKeys[i]] : null;
           return (
           <React.Fragment key={layer.name}>
-            <div className={`flex-1 rounded-xl border p-3 text-center ${layer.positive ? 'bg-green-50/30' : 'bg-red-50/30'}`} style={{ borderColor: layer.positive ? '#22c55e40' : 'var(--pdd-primary)40' }}>
-              <div className="text-xs text-pdd-gray-500 mb-1">{layer.name}</div>
+            <div className={`flex-1 rounded-xl border p-3 text-center ${layer.positive ? 'bg-green-50/30' : 'bg-red-50/30'}`} style={{ borderColor: layer.positive ? '#22c55e40' : `${CHART.all[0]}40` }}>
+              <div className="text-xs text-pdd-text-secondary mb-1">{layer.name}</div>
               <div className={`text-lg font-bold font-mono ${layer.positive ? 'text-green-600' : 'text-red-500'}`}>
                 {layer.positive ? '+' : ''}{fmtMoney(Math.abs(layer.value))}
               </div>
@@ -610,16 +530,16 @@ function CmLayerCascade({ layers, allProductStats, comparisonMode }: {
                 占GMV {layer.pct >= 0 ? '+' : ''}{layer.pct.toFixed(1)}%
               </div>
               {rk && (
-                <div className="text-pdd-gray-500 mt-1" style={{ fontSize: '9px' }}>
+                <div className="text-pdd-text-secondary mt-1" style={{ fontSize: '9px' }}>
                   贡献度排第 <span className="font-semibold text-pdd-text">{rk.rank}</span>/{rk.total} · 优于 {rk.topPct}% 商品
                 </div>
               )}
-              <div className="text-pdd-gray-400 mt-1" style={{ fontSize: '9px' }}>{layer.desc}</div>
+              <div className="text-pdd-text-secondary/50 mt-1" style={{ fontSize: '9px' }}>{layer.desc}</div>
             </div>
             {i < 2 && (
               <div className="shrink-0 w-8 flex items-center justify-center">
-                <div className="w-6 h-0.5 bg-pdd-gray-300 relative">
-                  <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-l-6 border-transparent border-l-pdd-gray-300" style={{ borderLeftColor: 'var(--pdd-border)' }} />
+                <div className="w-6 h-0.5 bg-pdd-text-secondary/30 relative">
+                  <div className="absolute -right-1 top-1/2 -translate-y-1/2 w-0 h-0 border-t-4 border-b-4 border-l-6 border-transparent border-l-pdd-text-secondary/50" style={{ borderLeftColor: 'var(--pdd-border)' }} />
                 </div>
               </div>
             )}
@@ -635,7 +555,7 @@ function SkuDeepTable({ matrix }: { matrix: any[] }) {
   const [expandedSku, setExpandedSku] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<string>('sales');
   const [sortDir, setSortDir] = useState<number>(-1);
-  if (!matrix.length) return <div className="p-4 text-xs text-pdd-gray-400 text-center">暂无SKU数据（请确认订单数据包含SKU维度字段）</div>;
+  if (!matrix.length) return <div className="p-4 text-xs text-pdd-text-secondary/50 text-center">暂无SKU数据（请确认订单数据包含SKU维度字段）</div>;
 
   const handleSort = (key: string) => {
     if (sortBy === key) setSortDir(-sortDir); else { setSortBy(key); setSortDir(-1); }
@@ -663,10 +583,10 @@ function SkuDeepTable({ matrix }: { matrix: any[] }) {
 
   return (
     <div className="p-4 overflow-x-auto" id="sku-deep">
-      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1.5"><Layers size={13} color="#f97316" />SKU深度对比 · 点击展开查看明细</h3>
+      <h3 className="text-xs font-semibold text-pdd-text-secondary mb-2 flex items-center gap-1.5"><Layers size={13} color="#f97316" />SKU深度对比 · 点击展开查看明细</h3>
       <table className="w-full" style={{ fontSize: '10px' }}>
         <thead>
-          <tr className="text-pdd-gray-400 border-b border-pdd-gray-100">
+          <tr className="text-pdd-text-secondary/50 border-b border-pdd-border">
             <th className="py-1.5 w-5" />
             {cols.map(c => (
               <th key={c.key} onClick={() => handleSort(c.key)} className={`py-1.5 ${c.cls} font-medium cursor-pointer hover:text-pdd-text transition-colors`}>
@@ -675,25 +595,25 @@ function SkuDeepTable({ matrix }: { matrix: any[] }) {
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-pdd-gray-50">
+        <tbody className="divide-y divide-pdd-border/30">
           {sorted.map((s, i) => {
             const isExpanded = expandedSku === s.skuId;
             return (
               <React.Fragment key={s.skuId || i}>
                 <tr onClick={() => setExpandedSku(isExpanded ? null : s.skuId)}
-                  className={`cursor-pointer transition-colors hover:bg-pdd-gray-50 ${rowColor(s)}`}>
-                  <td className="py-1.5 text-pdd-gray-400">{isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</td>
-                  <td className={`py-1.5 text-pdd-gray-700 font-mono truncate max-w-[80px] ${s.isMainSku ? 'font-bold' : ''}`} title={s.skuId}>{s.skuId}</td>
-                  <td className="py-1.5 text-pdd-gray-600 truncate max-w-[60px]">{s.spec || '--'}</td>
-                  <td className={`py-1.5 text-right font-mono font-semibold ${s.isMainSku ? 'text-blue-600' : 'text-pdd-gray-700'}`}>{s.sales}</td>
-                  <td className="py-1.5 text-right font-mono text-pdd-gray-700">{fmtMoney(s.revenue)}</td>
-                  <td className="py-1.5 text-right font-mono">{s.salesRatio.toFixed(0)}%</td>
-                  <td className={`py-1.5 text-right font-mono font-semibold ${s.isHighRefund ? 'text-red-500' : 'text-pdd-gray-600'}`}>
-                    {s.refundRate.toFixed(1)}%
+                  className={`cursor-pointer transition-colors hover:bg-pdd-bg/50 ${rowColor(s)}`}>
+                  <td className="py-1.5 text-pdd-text-secondary/50">{isExpanded ? <ChevronDown size={12} /> : <ChevronRight size={12} />}</td>
+                  <td className={`py-1.5 text-pdd-text font-mono truncate max-w-[80px] ${s.isMainSku ? 'font-bold' : ''}`} title={s.skuId}>{s.skuId}</td>
+                  <td className="py-1.5 text-pdd-text-secondary truncate max-w-[60px]">{s.spec || '--'}</td>
+                  <td className={`py-1.5 text-right font-mono font-semibold ${s.isMainSku ? 'text-blue-600' : 'text-pdd-text'}`}>{s.sales}</td>
+                  <td className="py-1.5 text-right font-mono text-pdd-text">{fmtMoney(s.revenue)}</td>
+                  <td className="py-1.5 text-right font-mono">{(s.salesRatio||0).toFixed(0)}%</td>
+                  <td className={`py-1.5 text-right font-mono font-semibold ${s.isHighRefund ? 'text-red-500' : 'text-pdd-text-secondary'}`}>
+                    {(s.refundRate||0).toFixed(1)}%
                     {s.isHighRefund && <AlertTriangle size={10} className="inline ml-0.5 text-red-400" />}
                   </td>
-                  <td className="py-1.5 text-right font-mono text-pdd-gray-600">{fmtMoney(s.refundAmount)}</td>
-                  <td className={`py-1.5 text-right font-mono font-semibold ${s.profitRate != null ? (s.profitRate >= 0 ? 'text-green-600' : 'text-red-500') : 'text-pdd-gray-400'}`}>
+                  <td className="py-1.5 text-right font-mono text-pdd-text-secondary">{fmtMoney(s.refundAmount)}</td>
+                  <td className={`py-1.5 text-right font-mono font-semibold ${s.profitRate != null ? (s.profitRate >= 0 ? 'text-green-600' : 'text-red-500') : 'text-pdd-text-secondary/50'}`}>
                     {s.profitRate != null ? s.profitRate.toFixed(0) + '%' : '--'}
                   </td>
                 </tr>
@@ -701,42 +621,42 @@ function SkuDeepTable({ matrix }: { matrix: any[] }) {
                 {isExpanded && (
                   <tr>
                     <td colSpan={9} className="p-0">
-                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="bg-pdd-gray-50/50 border-b border-pdd-gray-100 px-4 py-3 overflow-hidden">
+                      <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="bg-pdd-bg/50/50 border-b border-pdd-border px-4 py-3 overflow-hidden">
                         <div className="grid grid-cols-3 gap-4">
                           {/* SKU 诊断 */}
                           <div>
-                            <div className="text-xs font-semibold text-pdd-gray-600 mb-1.5 flex items-center gap-1"><Info size={11} color="#7c3aed" />SKU 诊断</div>
+                            <div className="text-xs font-semibold text-pdd-text-secondary mb-1.5 flex items-center gap-1"><Info size={11} color="#7c3aed" />SKU 诊断</div>
                             <div className="space-y-1 text-xs">
                               {s.isHighRefund && <div className="text-red-500 flex items-center gap-1"><AlertTriangle size={10} />高退款SKU — 退款率是均值 2 倍以上</div>}
-                              {s.isMainSku && <div className="text-blue-500 flex items-center gap-1"><Star size={10} />主力SKU — 占销量 {s.salesRatio.toFixed(0)}%</div>}
+                              {s.isMainSku && <div className="text-blue-500 flex items-center gap-1"><Star size={10} />主力SKU — 占销量 {(s.salesRatio||0).toFixed(0)}%</div>}
                               {s.profitRate != null && s.profitRate < 0 && <div className="text-red-500 flex items-center gap-1"><TrendingDown size={10} />亏损SKU — 利润率 {s.profitRate.toFixed(0)}%</div>}
                               {s.profitRate != null && s.profitRate > 25 && <div className="text-green-500 flex items-center gap-1"><TrendingUp size={10} />高利润SKU — 利润率 {s.profitRate.toFixed(0)}%</div>}
-                              {!s.isHighRefund && !s.isMainSku && (s.profitRate == null || (s.profitRate >= 0 && s.profitRate <= 25)) && <div className="text-pdd-gray-400">该 SKU 指标正常，无明显异常</div>}
+                              {!s.isHighRefund && !s.isMainSku && (s.profitRate == null || (s.profitRate >= 0 && s.profitRate <= 25)) && <div className="text-pdd-text-secondary/50">该 SKU 指标正常，无明显异常</div>}
                             </div>
                             <div className="mt-2 space-y-1">
-                              <div className="flex justify-between text-xs"><span className="text-pdd-gray-400">均价</span><span className="font-mono">{fmtMoney(s.avgPrice)}</span></div>
-                              <div className="flex justify-between text-xs"><span className="text-pdd-gray-400">平均退款天数</span><span className="font-mono">{s.avgRefundDays > 0 ? s.avgRefundDays.toFixed(0) + '天' : '--'}</span></div>
-                              <div className="flex justify-between text-xs"><span className="text-pdd-gray-400">订单数</span><span className="font-mono">{s.orderCount}</span></div>
+                              <div className="flex justify-between text-xs"><span className="text-pdd-text-secondary/50">均价</span><span className="font-mono">{fmtMoney(s.avgPrice)}</span></div>
+                              <div className="flex justify-between text-xs"><span className="text-pdd-text-secondary/50">平均退款天数</span><span className="font-mono">{s.avgRefundDays > 0 ? s.avgRefundDays.toFixed(0) + '天' : '--'}</span></div>
+                              <div className="flex justify-between text-xs"><span className="text-pdd-text-secondary/50">订单数</span><span className="font-mono">{s.orderCount}</span></div>
                             </div>
                           </div>
                           {/* 退款原因 TOP1 */}
                           <div>
-                            <div className="text-xs font-semibold text-pdd-gray-600 mb-1.5 flex items-center gap-1"><ThumbsDown size={11} color="#f97316" />退款主因</div>
+                            <div className="text-xs font-semibold text-pdd-text-secondary mb-1.5 flex items-center gap-1"><ThumbsDown size={11} color="#f97316" />退款主因</div>
                             {s.topRefundReason ? (
                               <div className="text-xs">
                                 <span className="inline-block px-2 py-1 bg-orange-100 text-orange-700 rounded font-medium">{s.topRefundReason}</span>
-                                <p className="text-pdd-gray-400 mt-1">该原因是此 SKU 退款的首要原因，退款 {s.refundAmount > 0 ? fmtMoney(s.refundAmount) : ''} 共 {s.refundRate.toFixed(1)}%</p>
+                                <p className="text-pdd-text-secondary/50 mt-1">该原因是此 SKU 退款的首要原因，退款 {s.refundAmount > 0 ? fmtMoney(s.refundAmount) : ''} 共 {(s.refundRate||0).toFixed(1)}%</p>
                               </div>
-                            ) : <div className="text-xs text-pdd-gray-400">暂无退款原因数据</div>}
+                            ) : <div className="text-xs text-pdd-text-secondary/50">暂无退款原因数据</div>}
                           </div>
                           {/* 利润贡献 */}
                           <div>
-                            <div className="text-xs font-semibold text-pdd-gray-600 mb-1.5 flex items-center gap-1"><DollarSign size={11} color="#16a34a" />利润贡献</div>
+                            <div className="text-xs font-semibold text-pdd-text-secondary mb-1.5 flex items-center gap-1"><DollarSign size={11} color="#16a34a" />利润贡献</div>
                             <div className="space-y-1 text-xs">
-                              <div className="flex justify-between"><span className="text-pdd-gray-400">实收</span><span className="font-mono">{fmtMoney(s.revenue)}</span></div>
-                              <div className="flex justify-between"><span className="text-pdd-gray-400">退款</span><span className="font-mono text-red-500">-{fmtMoney(s.refundAmount)}</span></div>
-                              <div className="flex justify-between font-semibold border-t border-pdd-gray-200 pt-1 mt-1">
-                                <span className="text-pdd-gray-600">净贡献</span>
+                              <div className="flex justify-between"><span className="text-pdd-text-secondary/50">实收</span><span className="font-mono">{fmtMoney(s.revenue)}</span></div>
+                              <div className="flex justify-between"><span className="text-pdd-text-secondary/50">退款</span><span className="font-mono text-red-500">-{fmtMoney(s.refundAmount)}</span></div>
+                              <div className="flex justify-between font-semibold border-t border-pdd-border/70 pt-1 mt-1">
+                                <span className="text-pdd-text-secondary">净贡献</span>
                                 <span className={`font-mono ${s.revenue - s.refundAmount >= 0 ? 'text-green-600' : 'text-red-500'}`}>{fmtMoney(s.revenue - s.refundAmount)}</span>
                               </div>
                             </div>
@@ -751,7 +671,7 @@ function SkuDeepTable({ matrix }: { matrix: any[] }) {
           })}
         </tbody>
       </table>
-      <div className="mt-2 flex items-center gap-4 text-pdd-gray-400" style={{ fontSize: '9px' }}>
+      <div className="mt-2 flex items-center gap-4 text-pdd-text-secondary/50" style={{ fontSize: '9px' }}>
         <span><span className="inline-block w-3 h-2 rounded-sm mr-1 bg-red-50/40 border-l-2 border-red-400" />高退款</span>
         <span><span className="inline-block w-3 h-2 rounded-sm mr-1 bg-green-50/30 border-l-2 border-green-400" />高利润</span>
         <span><span className="inline-block w-3 h-2 rounded-sm mr-1 bg-blue-50/20" />主力SKU</span>
@@ -764,7 +684,7 @@ function SkuDeepTable({ matrix }: { matrix: any[] }) {
 // ─── 新子组件：双列对比退款原因条形图 ──────────────────────
 function RefundReasonBarChart({ data, storeData }: { data: any[]; storeData: any[] }) {
   const hasStore = storeData.length > 0;
-  if (!data.length && !hasStore) return <div className="p-4"><h3 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1.5"><ThumbsDown size={13} color="#f97316" />退款原因TOP10</h3><div className="text-xs text-pdd-gray-400 text-center h-[200px] flex items-center justify-center">暂无退款原因数据（请上传售后数据）</div></div>;
+  if (!data.length && !hasStore) return <div className="p-4"><h3 className="text-xs font-semibold text-pdd-text-secondary mb-2 flex items-center gap-1.5"><ThumbsDown size={13} color="#f97316" />退款原因TOP10</h3><div className="text-xs text-pdd-text-secondary/50 text-center h-[200px] flex items-center justify-center">暂无退款原因数据（请上传售后数据）</div></div>;
 
   const qualityReasons = ['质量问题', '品质问题', '质量不好', '商品破损', '商品瑕疵', '与描述不符', '描述不符', '颜色/款式/型号不符', '做工粗糙', '质量差'];
 
@@ -789,41 +709,41 @@ function RefundReasonBarChart({ data, storeData }: { data: any[]; storeData: any
 
   return (
     <div className="p-4">
-      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1.5">
+      <h3 className="text-xs font-semibold text-pdd-text-secondary mb-2 flex items-center gap-1.5">
         <ThumbsDown size={13} color="#f97316" />退款原因对比
-        {hasStore && <span className="text-pdd-gray-400 font-normal ml-1">· 深=当前 / 浅=全店</span>}
+        {hasStore && <span className="text-pdd-text-secondary/50 font-normal ml-1">· 深=当前 / 浅=全店</span>}
       </h3>
       <div className="space-y-1.5">
         {merged.map((d, i) => {
           const isQuality = qualityReasons.some(q => d.reason.includes(q));
-          const barColor = isQuality ? 'var(--pdd-primary)' : '#9ca3af';
+          const barColor = isQuality ? CHART.all[0] : '#9ca3af';
           const delta = d.currRatio - d.storeRatio;
           const onlyCurr = d.currCount > 0 && d.storeCount === 0;
           const onlyStore = d.storeCount > 0 && d.currCount === 0;
           return (
             <div key={i} className="flex items-center gap-1.5 text-xs">
-              <span className={`w-14 shrink-0 truncate ${onlyStore ? 'text-pdd-gray-400' : 'text-pdd-gray-600'}`} title={d.reason}>{d.reason}</span>
+              <span className={`w-14 shrink-0 truncate ${onlyStore ? 'text-pdd-text-secondary/50' : 'text-pdd-text-secondary'}`} title={d.reason}>{d.reason}</span>
               <div className="flex-1 flex gap-0.5">
                 {/* 当前商品条 */}
                 {d.currCount > 0 && (
-                  <div className="flex-1 h-5 bg-pdd-gray-100 rounded-sm overflow-hidden relative">
+                  <div className="flex-1 h-5 bg-pdd-bg/80 rounded-sm overflow-hidden relative">
                     <div className="h-full rounded-sm" style={{ width: `${(d.currCount / maxCount) * 100}%`, backgroundColor: barColor, opacity: 0.8 }} />
                     <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-pdd-text font-mono" style={{ fontSize: '8px' }}>{d.currCount}笔</span>
                   </div>
                 )}
                 {/* 全店条 */}
                 {hasStore && (
-                  <div className="flex-1 h-5 bg-pdd-gray-100 rounded-sm overflow-hidden relative">
+                  <div className="flex-1 h-5 bg-pdd-bg/80 rounded-sm overflow-hidden relative">
                     <div className="h-full rounded-sm border border-dashed" style={{ width: `${(d.storeCount / maxCount) * 100}%`, backgroundColor: barColor, opacity: 0.25, borderColor: `${barColor}4d` }} />
-                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-pdd-gray-500 font-mono" style={{ fontSize: '8px' }}>{d.storeCount}笔</span>
+                    <span className="absolute left-1.5 top-1/2 -translate-y-1/2 text-pdd-text-secondary font-mono" style={{ fontSize: '8px' }}>{d.storeCount}笔</span>
                   </div>
                 )}
               </div>
-              <span className={`w-12 text-right font-mono shrink-0 ${onlyCurr ? 'text-red-500' : onlyStore ? 'text-pdd-gray-400' : 'text-pdd-gray-600'}`}>
+              <span className={`w-12 text-right font-mono shrink-0 ${onlyCurr ? 'text-red-500' : onlyStore ? 'text-pdd-text-secondary/50' : 'text-pdd-text-secondary'}`}>
                 {d.currRatio.toFixed(0)}%
               </span>
               {hasStore && (
-                <span className={`w-16 text-right shrink-0 ${delta > 3 ? 'text-red-500' : delta < -3 ? 'text-green-500' : 'text-pdd-gray-400'}`} style={{ fontSize: '9px' }}>
+                <span className={`w-16 text-right shrink-0 ${delta > 3 ? 'text-red-500' : delta < -3 ? 'text-green-500' : 'text-pdd-text-secondary/50'}`} style={{ fontSize: '9px' }}>
                   {onlyCurr ? '仅该品' : onlyStore ? '仅全店' : delta !== 0 ? `${delta > 0 ? '+' : ''}${delta.toFixed(1)}pp` : '持平'}
                 </span>
               )}
@@ -831,10 +751,10 @@ function RefundReasonBarChart({ data, storeData }: { data: any[]; storeData: any
           );
         })}
       </div>
-      <div className="mt-2 flex items-center gap-4 text-pdd-gray-400" style={{ fontSize: '9px' }}>
-        <span><span className="inline-block w-3 h-3 rounded-sm mr-1" style={{ backgroundColor: 'var(--pdd-primary)', opacity: 0.8 }} />品质类</span>
-        <span><span className="inline-block w-3 h-3 rounded-sm mr-1" style={{ backgroundColor: '#9ca3af', opacity: 0.8 }} />买家类</span>
-        {hasStore && <span><span className="inline-block w-3 h-3 rounded-sm mr-1 border border-dashed" style={{ backgroundColor: 'var(--pdd-primary)', opacity: 0.25 }} />全店</span>}
+      <div className="mt-2 flex items-center gap-4 text-pdd-text-secondary/50" style={{ fontSize: '9px' }}>
+        <span><span className="inline-block w-3 h-3 rounded-sm mr-1" style={{ backgroundColor: CHART.all[0], opacity: 0.8 }} />品质类</span>
+        <span><span className="inline-block w-3 h-3 rounded-sm mr-1" style={{ backgroundColor: SEMANTIC.neutral, opacity: 0.8 }} />买家类</span>
+        {hasStore && <span><span className="inline-block w-3 h-3 rounded-sm mr-1 border border-dashed" style={{ backgroundColor: CHART.all[0], opacity: 0.25 }} />全店</span>}
       </div>
     </div>
   );
@@ -842,20 +762,20 @@ function RefundReasonBarChart({ data, storeData }: { data: any[]; storeData: any
 
 // ─── 新子组件：时间窗口堆叠柱状图 ──────────────────────────
 function TimeWindowStackedBar({ data, skippedNoPay, skippedNoApply }: { data: any[]; skippedNoPay: number; skippedNoApply: number }) {
-  if (!data.length || data.every(w => w.count === 0)) return <div className="p-4"><h3 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1.5"><Clock size={13} color="#0891b2" />退款时间窗口</h3><div className="text-xs text-pdd-gray-400 text-center h-[200px] flex items-center justify-center">暂无退款时间数据（请上传售后数据）</div></div>;
+  if (!data.length || data.every(w => w.count === 0)) return <div className="p-4"><h3 className="text-xs font-semibold text-pdd-text-secondary mb-2 flex items-center gap-1.5"><Clock size={13} color="#0891b2" />退款时间窗口</h3><div className="text-xs text-pdd-text-secondary/50 text-center h-[200px] flex items-center justify-center">暂无退款时间数据（请上传售后数据）</div></div>;
   const maxCount = Math.max(...data.map(w => w.count), 1);
   const total = data.reduce((s: number, w: any) => s + w.count, 0);
   return (
     <div className="p-4">
-      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1.5"><Clock size={13} color="#0891b2" />退款时间窗口 (支付→申请)</h3>
+      <h3 className="text-xs font-semibold text-pdd-text-secondary mb-2 flex items-center gap-1.5"><Clock size={13} color="#0891b2" />退款时间窗口 (支付→申请)</h3>
       <div className="space-y-2">
         {data.map(w => (
           <div key={w.label}>
             <div className="flex items-center justify-between text-xs mb-0.5">
-              <span className="text-pdd-gray-600 font-medium">{w.label}</span>
-              <span className="text-pdd-gray-400">{w.count}笔 | {w.ratio.toFixed(0)}% | ¥{w.amount.toFixed(0)}</span>
+              <span className="text-pdd-text-secondary font-medium">{w.label}</span>
+              <span className="text-pdd-text-secondary/50">{w.count}笔 | {w.ratio.toFixed(0)}% | ¥{w.amount.toFixed(0)}</span>
             </div>
-            <div className="h-6 bg-pdd-gray-100 rounded-sm overflow-hidden flex">
+            <div className="h-6 bg-pdd-bg/80 rounded-sm overflow-hidden flex">
               {w.onlyRefund > 0 && (
                 <div className="h-full bg-blue-400 flex items-center justify-center text-white font-mono" style={{ width: `${(w.onlyRefund / maxCount) * 100}%`, fontSize: '8px' }} title="仅退款">
                   {((w.onlyRefund / Math.max(w.count, 1)) * 100) > 15 ? `仅退款${w.onlyRefund}` : ''}
@@ -870,7 +790,7 @@ function TimeWindowStackedBar({ data, skippedNoPay, skippedNoApply }: { data: an
           </div>
         ))}
       </div>
-      <div className="mt-2 flex items-center gap-4 text-pdd-gray-400" style={{ fontSize: '9px' }}>
+      <div className="mt-2 flex items-center gap-4 text-pdd-text-secondary/50" style={{ fontSize: '9px' }}>
         <span><span className="inline-block w-3 h-3 rounded-sm mr-1 bg-blue-400" />仅退款</span>
         <span><span className="inline-block w-3 h-3 rounded-sm mr-1 bg-orange-400" />退货退款</span>
         {(skippedNoPay > 0 || skippedNoApply > 0) && (
@@ -885,7 +805,7 @@ function TimeWindowStackedBar({ data, skippedNoPay, skippedNoApply }: { data: an
 function RegionHeatTable({ data }: { data: any[] }) {
   const [sortKey, setSortKey] = useState<string>('afterSaleCount');
   const [sortDir, setSortDir] = useState<number>(-1);
-  if (!data.length) return <div className="p-4"><h3 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1.5"><MapPin size={13} color="#e02e24" />地域×售后交叉分析</h3><div className="text-xs text-pdd-gray-400 text-center h-[200px] flex items-center justify-center">暂无地域售后数据</div></div>;
+  if (!data.length) return <div className="p-4"><h3 className="text-xs font-semibold text-pdd-text-secondary mb-2 flex items-center gap-1.5"><MapPin size={13} color={SEMANTIC.loss} />地域×售后交叉分析</h3><div className="text-xs text-pdd-text-secondary/50 text-center h-[200px] flex items-center justify-center">暂无地域售后数据</div></div>;
 
   const sorted = [...data].sort((a, b) => {
     const va = a[sortKey] ?? 0;
@@ -907,11 +827,11 @@ function RegionHeatTable({ data }: { data: any[] }) {
 
   return (
     <div className="p-4">
-      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-2 flex items-center gap-1.5"><MapPin size={13} color="#e02e24" />地域×售后交叉分析</h3>
+      <h3 className="text-xs font-semibold text-pdd-text-secondary mb-2 flex items-center gap-1.5"><MapPin size={13} color={SEMANTIC.loss} />地域×售后交叉分析</h3>
       <div className="overflow-y-auto" style={{ maxHeight: '320px' }}>
         <table className="w-full" style={{ fontSize: '10px' }}>
           <thead>
-            <tr className="text-pdd-gray-400 border-b border-pdd-gray-100">
+            <tr className="text-pdd-text-secondary/50 border-b border-pdd-border">
               {cols.map(c => (
                 <th key={c.key} onClick={() => handleSort(c.key)} className={`py-1.5 ${c.cls} font-medium cursor-pointer hover:text-pdd-text transition-colors`}>
                   {c.label}{sortKey === c.key ? (sortDir === 1 ? ' ↑' : ' ↓') : ''}
@@ -920,16 +840,16 @@ function RegionHeatTable({ data }: { data: any[] }) {
               <th className="py-1.5 text-left font-medium">标记</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-pdd-gray-50">
+          <tbody className="divide-y divide-pdd-border/30">
             {sorted.map((r, i) => (
-              <tr key={i} className={`hover:bg-pdd-gray-50 ${r.isAnomaly ? 'bg-red-50/50' : ''}`}>
-                <td className="py-1.5 text-pdd-gray-700">{r.province}</td>
-                <td className="py-1.5 text-right font-mono text-pdd-gray-700">{r.orderCount}</td>
-                <td className="py-1.5 text-right font-mono text-pdd-gray-700">{r.afterSaleCount}</td>
-                <td className={`py-1.5 text-right font-mono font-semibold ${r.isAnomaly ? 'text-red-500' : 'text-pdd-gray-600'}`}>{r.afterSaleRate.toFixed(1)}%</td>
-                <td className="py-1.5 text-right font-mono text-pdd-gray-600">{fmtMoney(r.refundAmount)}</td>
+              <tr key={i} className={`hover:bg-pdd-bg/50 ${r.isAnomaly ? 'bg-red-50/50' : ''}`}>
+                <td className="py-1.5 text-pdd-text">{r.province}</td>
+                <td className="py-1.5 text-right font-mono text-pdd-text">{r.orderCount}</td>
+                <td className="py-1.5 text-right font-mono text-pdd-text">{r.afterSaleCount}</td>
+                <td className={`py-1.5 text-right font-mono font-semibold ${r.isAnomaly ? 'text-red-500' : 'text-pdd-text-secondary'}`}>{r.afterSaleRate.toFixed(1)}%</td>
+                <td className="py-1.5 text-right font-mono text-pdd-text-secondary">{fmtMoney(r.refundAmount)}</td>
                 <td className="py-1.5 text-left">
-                  {r.lowSample ? <span className="text-pdd-gray-300 text-xs">样本不足</span> :
+                  {r.lowSample ? <span className="text-pdd-text-secondary/50 text-xs">样本不足</span> :
                    r.isAnomaly ? <span className="text-red-500 text-xs flex items-center gap-0.5"><AlertTriangle size={10} />异常</span> :
                    <span className="text-green-500 text-xs">正常</span>}
                 </td>
@@ -942,107 +862,7 @@ function RegionHeatTable({ data }: { data: any[] }) {
   );
 }
 
-// ─── 新子组件：健康度仪表盘（嵌入对比 + 可展开维度）───────
-function HealthScoreGauge({ score, allProductStats, comparisonMode }: {
-  score: { score: number; rating: string; dims: any[] } | null;
-  allProductStats: Record<string, ProductStat>; comparisonMode: string;
-}) {
-  const [expandedDim, setExpandedDim] = useState<string | null>(null);
-
-  // 计算全店均值分数供对比
-  const storeAvgScores = useMemo(() => {
-    if (comparisonMode === 'none' || !score) return null;
-    const all = Object.values(allProductStats);
-    if (all.length < 2) return null;
-    const percentile = (arr: number[], val: number) => {
-      if (arr.length === 0) return 50;
-      const sorted = [...arr].sort((a, b) => a - b);
-      const pos = sorted.findIndex(v => v >= val);
-      return pos === -1 ? 100 : (pos / sorted.length) * 100;
-    };
-    // 每个维度的全店平均分 = 50（因为百分位均值就是50）
-    return { sales: 50, profit: 50, quality: 50, ops: 50, growth: 50 };
-  }, [allProductStats, comparisonMode]);
-
-  if (!score) return <div className="p-4 text-xs text-pdd-gray-400 text-center">暂无健康度数据</div>;
-  const getColor = (s: number) => {
-    if (s >= 80) return '#16a34a';
-    if (s >= 60) return '#22c55e';
-    if (s >= 40) return '#f97316';
-    return 'var(--pdd-primary)';
-  };
-  const color = getColor(score.score);
-  const radius = 70;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference - (score.score / 100) * circumference;
-
-  const dimDetails: Record<string, string> = {
-    '销售力': 'GMV 在全店商品中的百分位排名。GMV 越高排名越靠前。权重 35%，是健康分最核心的维度。',
-    '盈利力': 'CM3 利润率（即推广后净利润 ÷ GMV）在全店中的百分位排名。权重 30%。',
-    '品质力': '退款率反向排序的百分位排名。退款率越低分越高。权重 20%。',
-    '运营力': '库存周转天数反向排序的百分位排名。周转越快分越高。权重 10%。',
-    '增长力': '近7天销量环比变化率的百分位排名。增长越快分越高。权重 5%。',
-  };
-
-  return (
-    <div className="p-4">
-      <h3 className="text-xs font-semibold text-pdd-gray-600 mb-3 flex items-center gap-1.5">
-        <Gauge size={13} color={color} />五维健康度评分
-        {storeAvgScores && <span className="text-pdd-gray-400 font-normal ml-1">· 参考线=全店中位</span>}
-      </h3>
-      <div className="flex items-start gap-6">
-        {/* 大圆圈 */}
-        <div className="shrink-0 flex flex-col items-center">
-          <svg width="160" height="160" viewBox="0 0 160 160">
-            <circle cx="80" cy="80" r={radius} fill="none" stroke="var(--pdd-border)" strokeWidth="10" />
-            <circle cx="80" cy="80" r={radius} fill="none" stroke={color} strokeWidth="10" strokeDasharray={circumference} strokeDashoffset={offset} strokeLinecap="round" transform="rotate(-90 80 80)" style={{ transition: 'stroke-dashoffset 0.8s ease' }} />
-            <text x="80" y="65" textAnchor="middle" dominantBaseline="central" fontSize="32" fontWeight="bold" fill={color} fontFamily="monospace">{score.score}</text>
-            <text x="80" y="95" textAnchor="middle" dominantBaseline="central" fontSize="14" fontWeight="600" fill={color}>{score.rating}</text>
-            {storeAvgScores && (
-              <text x="80" y="112" textAnchor="middle" dominantBaseline="central" fontSize="9" fill="var(--pdd-text-secondary)">全店均分 ~50</text>
-            )}
-          </svg>
-        </div>
-        {/* 5维进度条（可点击展开） */}
-        <div className="flex-1 space-y-2.5">
-          {score.dims.map(dim => {
-            const isExpanded = expandedDim === dim.name;
-            const storeAvg = storeAvgScores ? (storeAvgScores as any)[dim.name] ?? 50 : null;
-            return (
-            <div key={dim.name}>
-              <div className="flex items-center justify-between text-xs mb-0.5 cursor-pointer hover:opacity-80" onClick={() => setExpandedDim(isExpanded ? null : dim.name)}>
-                <span className="flex items-center gap-1 text-pdd-gray-600">
-                  {isExpanded ? <ChevronDown size={10} className="text-pdd-gray-400" /> : <ChevronRight size={10} className="text-pdd-gray-400" />}
-                  <span style={{ color: dim.color }}>{dim.icon}</span>{dim.name}
-                </span>
-                <span className="text-pdd-gray-400">{dim.weight}% 权重 | <span className="font-mono font-semibold" style={{ color: getColor(dim.score) }}>{dim.score.toFixed(0)}分</span></span>
-              </div>
-              <div className="h-3 bg-pdd-gray-100 rounded-full overflow-hidden relative">
-                <motion.div initial={{ width: 0 }} animate={{ width: `${dim.score}%` }} transition={{ duration: 0.6 }} className="h-full rounded-full" style={{ backgroundColor: getColor(dim.score) }} />
-                {/* 全店中位参考线 */}
-                {storeAvg != null && (
-                  <div className="absolute top-0 bottom-0 w-0.5 bg-pdd-gray-400" style={{ left: `${storeAvg}%` }} title="全店中位数" />
-                )}
-              </div>
-              {storeAvg != null && (
-                <div className="flex justify-between text-pdd-gray-400 mt-0.5" style={{ fontSize: '8px' }}>
-                  <span />
-                  <span>vs 中位{dim.score > storeAvg ? ' ↑' + (dim.score - storeAvg).toFixed(0) : dim.score < storeAvg ? ' ↓' + (storeAvg - dim.score).toFixed(0) : ' 持平'}</span>
-                </div>
-              )}
-              {/* 展开：维度详情 */}
-              {isExpanded && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} className="mt-1.5 p-2 bg-pdd-gray-50 rounded-lg text-xs text-pdd-gray-600 leading-relaxed">
-                  {dimDetails[dim.name] || '暂无详细说明'}
-                </motion.div>
-              )}
-            </div>
-          )})}
-        </div>
-      </div>
-    </div>
-  );
-}
+// ─── 健康度仪表盘已移除 ───
 
 // ─── 核心组件：扣费明细表（运营必看）────────────────────────
 function DeductionDetailTable({ stats, allProductStats, comparisonMode, onViewFullDetail }: {
@@ -1099,7 +919,7 @@ function DeductionDetailTable({ stats, allProductStats, comparisonMode, onViewFu
 
   // 颜色映射
   const severityColors: Record<string, string> = {
-    revenue: '#16a34a', neutral: 'var(--pdd-text-secondary)', warning: '#f97316', danger: 'var(--pdd-primary)', profit: '#16a34a'
+    revenue: '#16a34a', neutral: 'var(--pdd-text-secondary)', warning: '#f97316', danger: CHART.all[0], profit: '#16a34a'
   };
   const severityBgs: Record<string, string> = {
     revenue: '#f0fdf4', neutral: '#f9fafb', warning: '#fff7ed', danger: '#fef2f2', profit: '#f0fdf4'
@@ -1159,7 +979,7 @@ function DeductionDetailTable({ stats, allProductStats, comparisonMode, onViewFu
 
         return (
           <div key={item.key}
-            className={`flex items-center gap-2 px-2 py-2 rounded-lg transition-colors hover:bg-pdd-gray-50/50 ${isProfitRow ? 'border-t-2 border-dashed border-pdd-border mt-0.5 pt-2.5 font-bold' : ''} ${isGmvRow ? 'pb-2' : ''}`}
+            className={`flex items-center gap-2 px-2 py-2 rounded-lg transition-colors hover:bg-pdd-bg/50/50 ${isProfitRow ? 'border-t-2 border-dashed border-pdd-border mt-0.5 pt-2.5 font-bold' : ''} ${isGmvRow ? 'pb-2' : ''}`}
             style={{ backgroundColor: isProfitRow ? '#f0fdf4' : isGmvRow ? '#f9fafb' : 'transparent' }}
           >
             {/* 项目名 */}
@@ -1222,6 +1042,462 @@ function DeductionDetailTable({ stats, allProductStats, comparisonMode, onViewFu
   );
 }
 
+// ─── 操作时间线 Operation Timeline ───────────────────────────
+function OperationTimeline({ productOrders, productAfterSales, financialRecords, selectedStats }: {
+  productOrders: any[]; productAfterSales: any[];
+  financialRecords: any[]; selectedStats: ProductStat | null;
+}) {
+  const timelineEvents = useMemo(() => {
+    interface TimelineEvent {
+      date: string;
+      type: 'order' | 'price' | 'refund' | 'finance' | 'milestone';
+      label: string;
+      desc: string;
+      icon: React.ReactNode;
+      color: string;
+      bg: string;
+    }
+    const events: TimelineEvent[] = [];
+
+    if (!selectedStats || productOrders.length === 0) return events;
+
+    // ① 订单时间分布：按日期聚合
+    const dateMap: Record<string, number> = {};
+    const priceMap: Record<string, { total: number; count: number }> = {};
+
+    productOrders.forEach(o => {
+      const d = String(findField(o, '支付时间', '付款时间', '支付日期') || '').slice(0, 10);
+      if (!d) return;
+      dateMap[d] = (dateMap[d] || 0) + 1;
+
+      // 检测价格变化
+      const price = parseFloat(findField(o, '商品总价(元)', '商品总价', '商品金额') || '0') || 0;
+      if (price > 0) {
+        if (!priceMap[d]) priceMap[d] = { total: 0, count: 0 };
+        priceMap[d].total += price;
+        priceMap[d].count++;
+      }
+    });
+
+    // ② 首单事件
+    const dateKeys = Object.keys(dateMap).sort();
+    if (dateKeys.length > 0) {
+      events.push({
+        date: dateKeys[0],
+        type: 'milestone',
+        label: '首单成交',
+        desc: `商品在 ${dateKeys[0]} 完成首单销售，当日共 ${dateMap[dateKeys[0]]} 单`,
+        icon: <Star size={12} />,
+        color: '#16a34a',
+        bg: '#f0fdf4',
+      });
+
+      // 日订单量里程碑
+      let maxOrders = 0, maxDate = '';
+      Object.entries(dateMap).forEach(([d, c]) => {
+        if (c > maxOrders) { maxOrders = c; maxDate = d; }
+      });
+      if (maxOrders >= 5) {
+        events.push({
+          date: maxDate,
+          type: 'milestone',
+          label: `日销峰值 ${maxOrders} 单`,
+          desc: `${maxDate} 达到单日销量峰值 ${maxOrders} 单`,
+          icon: <TrendingUp size={12} />,
+          color: '#0891b2',
+          bg: '#ecfeff',
+        });
+      }
+    }
+
+    // ③ 价格变动检测
+    let prevAvgPrice = 0;
+    const sortedDates = dateKeys.sort();
+    sortedDates.forEach(d => {
+      const entry = priceMap[d];
+      if (!entry || entry.count === 0) return;
+      const avgPrice = entry.total / entry.count;
+      if (prevAvgPrice > 0 && Math.abs(avgPrice - prevAvgPrice) / prevAvgPrice > 0.05) {
+        const direction = avgPrice > prevAvgPrice ? '上涨' : '下降';
+        const pct = Math.abs((avgPrice - prevAvgPrice) / prevAvgPrice * 100);
+        events.push({
+          date: d,
+          type: 'price',
+          label: `价格${direction} ${pct.toFixed(0)}%`,
+          desc: `均价 ¥${prevAvgPrice.toFixed(0)} → ¥${avgPrice.toFixed(0)}（${direction}${pct.toFixed(0)}%）`,
+          icon: avgPrice > prevAvgPrice ? <TrendingUp size={12} /> : <TrendingDown size={12} />,
+          color: avgPrice > prevAvgPrice ? '#f97316' : '#3b82f6',
+          bg: avgPrice > prevAvgPrice ? '#fff7ed' : '#eff6ff',
+        });
+      }
+      prevAvgPrice = avgPrice;
+    });
+
+    // ④ 退款事件
+    const refundDates = new Set<string>();
+    productAfterSales.forEach((r: any) => {
+      const d = String(findField(r, '创建时间', '售后申请时间', '申请时间') || '').slice(0, 10);
+      if (d) refundDates.add(d);
+    });
+    if (refundDates.size > 0) {
+      const firstRefund = [...refundDates].sort()[0];
+      const refundCount = refundDates.size;
+      events.push({
+        date: firstRefund,
+        type: 'refund',
+        label: `出现退款（共${refundCount}天有退款）`,
+        desc: `首笔退款发生在 ${firstRefund}，期间共 ${refundCount} 天出现退款`,
+        icon: <RotateCcw size={12} />,
+        color: SEMANTIC.loss,
+        bg: 'rgba(239,68,68,0.08)',
+      });
+    }
+
+    // ⑤ 财务事件（罚款/扣款）
+    const productOrderIds = new Set(productOrders.map((o: any) => String(findField(o, '订单号') || '')));
+    const finEvents = financialRecords.filter((rec: any) => {
+      const orderId = String(findField(rec, '商户订单号', '订单号', '订单编号') || '');
+      return productOrderIds.has(orderId) && (String(findField(rec, '业务描述', '费用类型') || '').includes('罚款') || String(findField(rec, '业务描述', '费用类型') || '').includes('扣款') || String(findField(rec, '业务描述', '费用类型') || '').includes('违约金'));
+    });
+    const finByDate: Record<string, number> = {};
+    finEvents.forEach((rec: any) => {
+      const d = String(findField(rec, '记账时间', '发生时间', '日期') || '').slice(0, 10);
+      if (d) finByDate[d] = (finByDate[d] || 0) + (parseFloat(findField(rec, '扣款金额(元)', '金额', '扣款金额') || '0') || 0);
+    });
+    Object.entries(finByDate).forEach(([d, amt]) => {
+      events.push({
+        date: d,
+        type: 'finance',
+        label: `罚款/扣款 ¥${fmtMoney(amt)}`,
+        desc: `${d} 发生罚款/扣款 ¥${fmtMoney(amt)}`,
+        icon: <AlertTriangle size={12} />,
+        color: SEMANTIC.loss,
+        bg: 'rgba(239,68,68,0.08)',
+      });
+    });
+
+    // 按日期排序
+    events.sort((a, b) => a.date.localeCompare(b.date));
+
+    // 去重：同一天同类型只保留一条
+    const seen = new Set<string>();
+    return events.filter(e => {
+      const key = `${e.date}-${e.type}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(-30); // 最多显示30条
+  }, [productOrders, productAfterSales, financialRecords, selectedStats]);
+
+  if (!selectedStats || productOrders.length === 0) {
+    return (
+      <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm p-8 text-center">
+        <Clock size={24} className="mx-auto mb-2 text-pdd-text-secondary/50 opacity-40" />
+        <p className="text-xs text-pdd-text-secondary/50">暂无订单数据，无法生成操作时间线</p>
+      </div>
+    );
+  }
+
+  const totalOrders = productOrders.length;
+  const dateRange = timelineEvents.length >= 2
+    ? `${timelineEvents[0].date} 至 ${timelineEvents[timelineEvents.length - 1].date}`
+    : '--';
+
+  return (
+    <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm">
+      {/* 统计概要 */}
+      <div className="grid grid-cols-4 gap-3 p-4 border-b border-pdd-border">
+        {[
+          { label: '总订单', val: `${totalOrders} 单`, color: '#0891b2' },
+          { label: '时间跨度', val: dateRange, color: '#16a34a' },
+          { label: '关键事件', val: `${timelineEvents.length} 件`, color: '#7c3aed' },
+          { label: '退款天数', val: `${new Set(productAfterSales.map((r: any) => String(findField(r, '创建时间', '售后申请时间', '申请时间') || '').slice(0, 10))).size} 天`, color: SEMANTIC.loss },
+        ].map((stat, i) => (
+          <div key={i} className="text-center p-2 rounded-lg bg-pdd-bg/50">
+            <div className="text-[10px] text-pdd-text-secondary/50 mb-1">{stat.label}</div>
+            <div className="text-sm font-bold font-mono" style={{ color: stat.color }}>{stat.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 时间线 */}
+      <div className="p-4 max-h-[400px] overflow-y-auto">
+        {timelineEvents.length === 0 ? (
+          <div className="text-xs text-pdd-text-secondary/50 text-center py-4">暂无关键事件</div>
+        ) : (
+          <div className="relative">
+            {/* 竖线 */}
+            <div className="absolute left-[15px] top-2 bottom-2 w-0.5 bg-pdd-text-secondary/20" />
+            <div className="space-y-0">
+              {timelineEvents.map((evt, i) => (
+                <div key={i} className="flex items-start gap-3 py-2 relative">
+                  {/* 时间点圆点 */}
+                  <div className="shrink-0 w-[30px] flex justify-center relative z-10">
+                    <div className="w-[22px] h-[22px] rounded-full flex items-center justify-center" style={{ backgroundColor: evt.bg, color: evt.color }}>
+                      {evt.icon}
+                    </div>
+                  </div>
+                  {/* 内容 */}
+                  <div className="flex-1 min-w-0 pt-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono text-pdd-text-secondary/50">{evt.date}</span>
+                      <span className="text-xs font-semibold text-pdd-text">{evt.label}</span>
+                    </div>
+                    <p className="text-[10px] text-pdd-text-secondary mt-0.5">{evt.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── 订单追溯 Order Traceability ────────────────────────────
+function OrderTraceability({ productOrders, productAfterSales, financialRecords, selectedStats }: {
+  productOrders: any[]; productAfterSales: any[];
+  financialRecords: any[]; selectedStats: ProductStat | null;
+}) {
+  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [traceSortBy, setTraceSortBy] = useState<string>('date');
+  const [traceSortDir, setTraceSortDir] = useState<-1 | 1>(-1);
+
+  // 构建追溯数据
+  const traceData = useMemo(() => {
+    if (!selectedStats || productOrders.length === 0) return [];
+
+    const afterSaleByOrder: Record<string, any[]> = {};
+    productAfterSales.forEach((r: any) => {
+      const oid = String(findField(r, '订单编号', '订单号') || '');
+      if (!oid) return;
+      if (!afterSaleByOrder[oid]) afterSaleByOrder[oid] = [];
+      afterSaleByOrder[oid].push(r);
+    });
+
+    const finByOrder: Record<string, any[]> = {};
+    financialRecords.forEach((rec: any) => {
+      const oid = String(findField(rec, '商户订单号', '订单号', '订单编号') || '');
+      if (!oid) return;
+      if (!finByOrder[oid]) finByOrder[oid] = [];
+      finByOrder[oid].push(rec);
+    });
+
+    return productOrders.map(o => {
+      const orderId = String(findField(o, '订单号') || '') || '--';
+      const payTime = String(findField(o, '支付时间', '付款时间', '支付日期') || '') || '--';
+      const sku = String(findField(o, '商家编码-SKU维度', '商品规格', 'SKU编码', '规格编码') || '') || '--';
+      const qty = parseInt(findField(o, '商品数量(件)', '商品数量', '数量') || '1') || 1;
+      const gmv = parseFloat(findField(o, '商品总价(元)', '商品总价', '商品金额') || '0') || 0;
+      const revenue = parseFloat(findField(o, '商家实收金额(元)', '商家实收', '实收金额') || '0') || 0;
+      const refund = parseFloat(findField(o, '退款金额(元)', '退款金额', '退款') || '0') || 0;
+      const status = refund > 0 ? '已退款' : '正常';
+      const afterSales = afterSaleByOrder[orderId] || [];
+      const finEvents = finByOrder[orderId] || [];
+
+      return {
+        orderId, payTime, sku, qty, gmv, revenue, refund, status,
+        afterSaleCount: afterSales.length,
+        finCount: finEvents.length,
+        afterSales,
+        finEvents,
+        hasIssue: refund > 0 || afterSales.length > 0 || finEvents.length > 0,
+      };
+    });
+  }, [productOrders, productAfterSales, financialRecords, selectedStats]);
+
+  // 排序
+  const sortedData = useMemo(() => {
+    const sorted = [...traceData];
+    sorted.sort((a, b) => {
+      let cmp = 0;
+      if (traceSortBy === 'date') cmp = a.payTime.localeCompare(b.payTime);
+      else if (traceSortBy === 'orderId') cmp = a.orderId.localeCompare(b.orderId);
+      else if (traceSortBy === 'gmv') cmp = a.gmv - b.gmv;
+      else if (traceSortBy === 'revenue') cmp = a.revenue - b.revenue;
+      else if (traceSortBy === 'qty') cmp = a.qty - b.qty;
+      else if (traceSortBy === 'status') cmp = a.status.localeCompare(b.status);
+      return cmp * traceSortDir;
+    });
+    return sorted;
+  }, [traceData, traceSortBy, traceSortDir]);
+
+  const handleSort = (key: string) => {
+    if (traceSortBy === key) setTraceSortDir(d => (d === 1 ? -1 : 1) as -1 | 1);
+    else { setTraceSortBy(key); setTraceSortDir(-1); }
+  };
+
+  const sortIcon = (key: string) => {
+    if (traceSortBy !== key) return null;
+    return traceSortDir === 1 ? ' ↑' : ' ↓';
+  };
+
+  if (!selectedStats || productOrders.length === 0) {
+    return (
+      <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm p-8 text-center">
+        <Search size={24} className="mx-auto mb-2 text-pdd-text-secondary/50 opacity-40" />
+        <p className="text-xs text-pdd-text-secondary/50">暂无订单数据</p>
+      </div>
+    );
+  }
+
+  const totalGmv = traceData.reduce((s, o) => s + o.gmv, 0);
+  const totalRevenue = traceData.reduce((s, o) => s + o.revenue, 0);
+  const totalOrders = traceData.length;
+  const issueOrders = traceData.filter(o => o.hasIssue).length;
+
+  return (
+    <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm overflow-hidden">
+      {/* 头部统计 */}
+      <div className="grid grid-cols-4 gap-3 p-4 border-b border-pdd-border bg-pdd-bg/50/50">
+        {[
+          { label: '订单总数', val: `${totalOrders} 单`, color: '#0891b2' },
+          { label: 'GMV合计', val: `¥${fmtMoney(totalGmv)}`, color: SEMANTIC.loss },
+          { label: '实收合计', val: `¥${fmtMoney(totalRevenue)}`, color: '#16a34a' },
+          { label: '异常订单', val: `${issueOrders} 单`, color: issueOrders > 0 ? SEMANTIC.loss : '#16a34a' },
+        ].map((stat, i) => (
+          <div key={i} className="text-center">
+            <div className="text-[10px] text-pdd-text-secondary/50">{stat.label}</div>
+            <div className="text-sm font-bold font-mono" style={{ color: stat.color }}>{stat.val}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 表格 */}
+      <div className="overflow-x-auto max-h-[420px] overflow-y-auto">
+        <table className="w-full" style={{ fontSize: '10px' }}>
+          <thead className="sticky top-0 bg-pdd-card z-10">
+            <tr className="text-pdd-text-secondary/50 border-b border-pdd-border">
+              <th className="py-2 px-2 w-5" />
+              <th className="py-2 px-2 text-left font-medium cursor-pointer hover:text-pdd-text" onClick={() => handleSort('orderId')}>订单号{sortIcon('orderId')}</th>
+              <th className="py-2 px-2 text-left font-medium cursor-pointer hover:text-pdd-text" onClick={() => handleSort('date')}>支付时间{sortIcon('date')}</th>
+              <th className="py-2 px-2 text-left font-medium">SKU</th>
+              <th className="py-2 px-2 text-right font-medium cursor-pointer hover:text-pdd-text" onClick={() => handleSort('qty')}>数量{sortIcon('qty')}</th>
+              <th className="py-2 px-2 text-right font-medium cursor-pointer hover:text-pdd-text" onClick={() => handleSort('gmv')}>GMV{sortIcon('gmv')}</th>
+              <th className="py-2 px-2 text-right font-medium cursor-pointer hover:text-pdd-text" onClick={() => handleSort('revenue')}>实收{sortIcon('revenue')}</th>
+              <th className="py-2 px-2 text-center font-medium cursor-pointer hover:text-pdd-text" onClick={() => handleSort('status')}>状态{sortIcon('status')}</th>
+              <th className="py-2 px-2 text-center font-medium">售后</th>
+              <th className="py-2 px-2 text-center font-medium">财务</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-pdd-border/30">
+            {sortedData.slice(0, 200).map((o, i) => {
+              const isExpanded = expandedOrder === o.orderId;
+              return (
+                <React.Fragment key={o.orderId || i}>
+                  <tr onClick={() => setExpandedOrder(isExpanded ? null : o.orderId)}
+                    className={`cursor-pointer transition-colors hover:bg-pdd-bg/50 ${o.hasIssue ? 'bg-red-50/20' : ''}`}>
+                    <td className="py-1.5 px-2 text-pdd-text-secondary/50">{isExpanded ? <ChevronDown size={10} /> : <ChevronRight size={10} />}</td>
+                    <td className="py-1.5 px-2 font-mono text-pdd-text truncate max-w-[100px]" title={o.orderId}>{o.orderId}</td>
+                    <td className="py-1.5 px-2 text-pdd-text-secondary">{o.payTime !== '--' ? o.payTime.slice(5, 10) : '--'}</td>
+                    <td className="py-1.5 px-2 font-mono text-pdd-text-secondary/50 truncate max-w-[60px]" title={o.sku}>{o.sku}</td>
+                    <td className="py-1.5 px-2 text-right font-mono text-pdd-text">{o.qty}</td>
+                    <td className="py-1.5 px-2 text-right font-mono text-pdd-text">{fmtMoney(o.gmv)}</td>
+                    <td className="py-1.5 px-2 text-right font-mono text-pdd-text">{fmtMoney(o.revenue)}</td>
+                    <td className="py-1.5 px-2 text-center">
+                      <span className={`px-1.5 py-0.5 rounded text-[9px] font-medium ${o.status === '正常' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600'}`}>{o.status}</span>
+                    </td>
+                    <td className="py-1.5 px-2 text-center">
+                      {o.afterSaleCount > 0
+                        ? <span className="px-1.5 py-0.5 rounded text-[9px] bg-orange-100 text-orange-600">{o.afterSaleCount}</span>
+                        : <span className="text-pdd-text-secondary/50">--</span>}
+                    </td>
+                    <td className="py-1.5 px-2 text-center">
+                      {o.finCount > 0
+                        ? <span className="px-1.5 py-0.5 rounded text-[9px] bg-red-100 text-red-600">{o.finCount}</span>
+                        : <span className="text-pdd-text-secondary/50">--</span>}
+                    </td>
+                  </tr>
+                  {/* 展开行：订单详情 */}
+                  {isExpanded && (
+                    <tr>
+                      <td colSpan={10} className="bg-pdd-bg/50 p-3">
+                        <div className="grid grid-cols-2 gap-3 text-[10px]">
+                          {/* 基本信息 */}
+                          <div className="bg-pdd-card rounded-lg p-2.5 border border-pdd-border">
+                            <h4 className="font-semibold text-pdd-text mb-1.5 text-[10px]">订单信息</h4>
+                            <div className="space-y-1">
+                              <div className="flex justify-between"><span className="text-pdd-text-secondary/50">订单号</span><span className="font-mono text-pdd-text">{o.orderId}</span></div>
+                              <div className="flex justify-between"><span className="text-pdd-text-secondary/50">支付时间</span><span className="text-pdd-text">{o.payTime}</span></div>
+                              <div className="flex justify-between"><span className="text-pdd-text-secondary/50">SKU</span><span className="font-mono text-pdd-text">{o.sku}</span></div>
+                              <div className="flex justify-between"><span className="text-pdd-text-secondary/50">数量</span><span className="font-mono text-pdd-text">{o.qty}</span></div>
+                              <div className="flex justify-between"><span className="text-pdd-text-secondary/50">GMV</span><span className="font-mono text-pdd-text">{fmtMoney(o.gmv)}</span></div>
+                              <div className="flex justify-between"><span className="text-pdd-text-secondary/50">实收</span><span className="font-mono text-green-600">{fmtMoney(o.revenue)}</span></div>
+                              {o.refund > 0 && <div className="flex justify-between"><span className="text-pdd-text-secondary/50">退款</span><span className="font-mono text-red-500">{fmtMoney(o.refund)}</span></div>}
+                            </div>
+                          </div>
+                          {/* 售后信息 */}
+                          <div className="bg-pdd-card rounded-lg p-2.5 border border-pdd-border">
+                            <h4 className="font-semibold text-pdd-text mb-1.5 text-[10px]">售后记录 <span className="text-pdd-text-secondary/50">({o.afterSaleCount})</span></h4>
+                            {o.afterSales.length > 0 ? (
+                              <div className="space-y-1.5">
+                                {o.afterSales.slice(0, 5).map((r: any, ri: number) => (
+                                  <div key={ri} className="border-b border-pdd-border pb-1 last:border-0">
+                                    <div className="flex justify-between">
+                                      <span className="font-mono text-pdd-text-secondary">{String(findField(r, '售后编号', '售后单号') || '').slice(-8)}</span>
+                                      <span className="text-red-500 font-mono">{fmtMoney(parseFloat(findField(r, '退款金额(元)', '金额') || '0') || 0)}</span>
+                                    </div>
+                                    <div className="text-pdd-text-secondary/50 mt-0.5">{String(findField(r, '售后类型', '退款类型') || '') || '--'} · {String(findField(r, '原因', '退款原因') || '') || '--'}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="text-pdd-text-secondary/50 text-center py-2">无售后记录</div>
+                            )}
+                          </div>
+                          {/* 财务事件 */}
+                          {o.finEvents.length > 0 && (
+                            <div className="col-span-2 bg-pdd-card rounded-lg p-2.5 border border-pdd-border">
+                              <h4 className="font-semibold text-pdd-text mb-1.5 text-[10px]">财务扣款 <span className="text-pdd-text-secondary/50">({o.finCount})</span></h4>
+                              <div className="space-y-1">
+                                {o.finEvents.map((rec: any, ri: number) => (
+                                  <div key={ri} className="flex justify-between items-center border-b border-pdd-border pb-1 last:border-0">
+                                    <div>
+                                      <span className="text-pdd-text-secondary">{String(findField(rec, '业务描述', '费用类型') || '') || '--'}</span>
+                                      <span className="text-pdd-text-secondary/50 ml-1 text-[9px]">{String(findField(rec, '记账时间', '发生时间', '日期') || '').slice(0, 10)}</span>
+                                    </div>
+                                    <span className="font-mono text-red-500">{fmtMoney(parseFloat(findField(rec, '扣款金额(元)', '金额', '扣款金额') || '0') || 0)}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+        {traceData.length > 200 && (
+          <div className="p-2 text-center text-[10px] text-pdd-text-secondary/50 border-t border-pdd-border">
+            仅显示前 200 条，共 {traceData.length} 条
+          </div>
+        )}
+      </div>
+      <div className="px-3 py-1.5 bg-pdd-bg/50/50 border-t border-pdd-border text-[9px] text-pdd-text-secondary/50 flex items-center justify-between">
+        <span>点击行展开查看完整追溯 · 点击表头排序</span>
+        <span>异常订单标红</span>
+      </div>
+    </div>
+  );
+}
+
+// 导航锚点配置（模块级常量，不依赖组件 state）
+const SECTIONS = [
+  { id: 'sec-overview', label: '趋势', icon: <TrendingUp size={12} /> },
+  { id: 'sec-profit', label: '利润', icon: <DollarSign size={12} /> },
+  { id: 'sec-traffic', label: '流量', icon: <Target size={12} /> },
+  { id: 'sec-sku', label: 'SKU', icon: <Layers size={12} /> },
+  { id: 'sec-aftersale', label: '售后', icon: <Shield size={12} /> },
+  { id: 'sec-timeline', label: '时间线', icon: <Clock size={12} /> },
+  { id: 'sec-traceability', label: '追溯', icon: <Search size={12} /> },
+  { id: 'sec-diagnosis', label: '诊断', icon: <Gauge size={12} /> },
+];
+
 // ─── 主组件：商品指挥中心（全新设计·单页滚动仪表盘）────────────────
 export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId, productStats, products, orders, prevProductStats }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(initialProductId || null);
@@ -1233,6 +1509,15 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   const [showProfitDrawer, setShowProfitDrawer] = useState(false);
   const [timeGranularity, setTimeGranularity] = useState<'hour' | 'day' | 'week'>('day');
   const [detailChartPoint, setDetailChartPoint] = useState<{date: string; data: any} | null>(null);
+  const [activeSection, setActiveSection] = useState<string>('sec-overview');
+
+  // ★ 当 initialProductId 属性变化时同步到内部 selectedId（props→state）
+  useEffect(() => {
+    if (isOpen && initialProductId) {
+      setSelectedId(initialProductId);
+      setShowSidebar(false);
+    }
+  }, [initialProductId, isOpen]);
 
   // 读取全局分析上下文（时间筛选、面包屑等）
   const analysis = useAnalysis();
@@ -1262,11 +1547,28 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   const selectedStats = serverDeepData?.stats || (selectedId ? productStats[selectedId] : null);
   const prevStats = serverDeepData?.prevStats || (selectedId && prevProductStats ? prevProductStats[selectedId] : undefined);
 
+  // ★ 滚动监听 — 高亮当前可见的锚点
+  useEffect(() => {
+    if (!selectedStats) return;
+    const obs = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          setActiveSection(entry.target.id);
+        }
+      }
+    }, { rootMargin: '-80px 0% -60% 0%' });
+    SECTIONS.forEach(s => {
+      const el = document.getElementById(s.id);
+      if (el) obs.observe(el);
+    });
+    return () => obs.disconnect();
+  }, [selectedStats, selectedId]);
+
   // 按时间范围过滤订单（基于 AnalysisContext 的 timeFilter）
   const timeFilteredOrders = useMemo(() => {
     const { rangeA } = timeFilter;
     return orders.filter(o => {
-      const payTime = String(o['支付时间'] || '').trim();
+      const payTime = String(findField(o, '支付时间', '付款时间', '支付日期') || '').trim();
       if (!payTime) return true;
       const datePart = payTime.split(' ')[0];
       return datePart >= rangeA.start && datePart <= rangeA.end;
@@ -1288,24 +1590,24 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     if (!selectedId) return [];
     const { rangeA } = timeFilter;
     const productOrds = timeFilteredOrders.filter(o =>
-      String(o['商品ID'] || o['商品id'] || '') === selectedId
+      String(findField(o, '商品ID', '商品编号') || '') === selectedId
     );
     const daily: Record<string, any> = {};
     productOrds.forEach(o => {
-      const d = String(o['支付时间'] || '').slice(0, 10);
+      const d = String(findField(o, '支付时间', '付款时间', '支付日期') || '').slice(0, 10);
       if (!d || d < rangeA.start || d > rangeA.end) return;
       if (!daily[d]) daily[d] = { date: d, sales: 0, gmv: 0, revenue: 0, profit: 0, refund: 0, orders: 0 };
-      daily[d].sales += parseInt(o['商品数量(件)'] || '1') || 1;
-      daily[d].gmv += parseFloat(o['商品总价(元)'] || '0') || 0;
-      daily[d].revenue += parseFloat(o['商家实收金额(元)'] || '0') || 0;
-      daily[d].refund += parseFloat(o['退款金额(元)'] || '0') || 0;
+      daily[d].sales += parseInt(findField(o, '商品数量(件)', '商品数量', '数量') || '1') || 1;
+      daily[d].gmv += parseFloat(findField(o, '商品总价(元)', '商品总价', '商品金额') || '0') || 0;
+      daily[d].revenue += parseFloat(findField(o, '商家实收金额(元)', '商家实收', '实收金额') || '0') || 0;
+      daily[d].refund += parseFloat(findField(o, '退款金额(元)', '退款金额', '退款') || '0') || 0;
       daily[d].orders++;
     });
-    const promoForProduct = timeFilteredPromoProducts.filter((p: any) => String(p['商品ID'] || '') === selectedId);
+    const promoForProduct = timeFilteredPromoProducts.filter((p: any) => String(findField(p, '商品ID', '商品编号') || '') === selectedId);
     const promoByDate: Record<string, number> = {};
     promoForProduct.forEach((p: any) => {
-      const d = String(p['日期'] || '').slice(0, 10);
-      promoByDate[d] = (promoByDate[d] || 0) + (parseFloat(p['总花费(元)'] || '0') || 0);
+      const d = String(findField(p, '日期') || '').slice(0, 10);
+      promoByDate[d] = (promoByDate[d] || 0) + (parseFloat(findField(p, '成交花费(元)', '总花费(元)', '花费(元)') || '0') || 0);
     });
     // 估算每日商品成本 = GMV × 30%（默认成本比例）
     Object.values(daily).forEach((d: any) => {
@@ -1320,19 +1622,19 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   const hourlyData = useMemo(() => {
     if (!selectedId || timeGranularity !== 'hour') return [];
     const productOrds = timeFilteredOrders.filter(o =>
-      String(o['商品ID'] || o['商品id'] || '') === selectedId
+      String(findField(o, '商品ID', '商品编号') || '') === selectedId
     );
     const hourly: Record<string, { hour: string; orders: number; gmv: number; sales: number; revenue: number; refund: number }> = {};
     productOrds.forEach(o => {
-      const payTime = String(o['支付时间'] || '');
+      const payTime = String(findField(o, '支付时间', '付款时间', '支付日期') || '');
       const hour = payTime.slice(11, 13) || '00';
       if (!/^\d{2}$/.test(hour)) return;
       if (!hourly[hour]) hourly[hour] = { hour: hour + ':00', orders: 0, gmv: 0, sales: 0, revenue: 0, refund: 0 };
       hourly[hour].orders++;
-      hourly[hour].gmv += parseFloat(o['商品总价(元)'] || '0') || 0;
-      hourly[hour].sales += parseInt(o['商品数量(件)'] || '1') || 1;
-      hourly[hour].revenue += parseFloat(o['商家实收金额(元)'] || '0') || 0;
-      hourly[hour].refund += parseFloat(o['退款金额(元)'] || '0') || 0;
+      hourly[hour].gmv += parseFloat(findField(o, '商品总价(元)', '商品总价', '商品金额') || '0') || 0;
+      hourly[hour].sales += parseInt(findField(o, '商品数量(件)', '商品数量', '数量') || '1') || 1;
+      hourly[hour].revenue += parseFloat(findField(o, '商家实收金额(元)', '商家实收', '实收金额') || '0') || 0;
+      hourly[hour].refund += parseFloat(findField(o, '退款金额(元)', '退款金额', '退款') || '0') || 0;
     });
     return Object.values(hourly).sort((a: any, b: any) => a.hour.localeCompare(b.hour));
   }, [selectedId, timeFilteredOrders, timeGranularity]);
@@ -1365,7 +1667,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   const timeFilteredKpis = useMemo(() => {
     if (!selectedId) return null;
     const ords = timeFilteredOrders.filter(o =>
-      String(o['商品ID'] || o['商品id'] || '') === selectedId
+      String(findField(o, '商品ID', '商品编号') || '') === selectedId
     );
     const sum = (key: string) => ords.reduce((s, o) => s + (parseFloat(o[key]) || 0), 0);
     const cnt = (key: string) => ords.filter(o => {
@@ -1374,9 +1676,9 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     const totalGmv = sum('商品总价(元)');
     const totalRevenue = sum('商家实收金额(元)');
     const totalOrders = ords.length;
-    const totalSales = ords.reduce((s, o) => s + (parseInt(o['商品数量(件)']) || 1), 0);
+    const totalSales = ords.reduce((s, o) => s + (parseInt(findField(o, '商品数量(件)', '商品数量', '数量') || '1') || 1), 0);
     const totalRefund = sum('退款金额(元)');
-    const refundCnt = ords.filter(o => parseFloat(o['退款金额(元)'] || '0') > 0).length;
+    const refundCnt = ords.filter(o => parseFloat(findField(o, '退款金额(元)', '退款金额', '退款') || '0') > 0).length;
     const promoCost = timeFilteredPromoProducts
       .filter((p: any) => String(p['商品ID'] || '') === selectedId)
       .reduce((s: number, p: any) => s + (parseFloat(p['总花费(元)'] || p['花费(元)'] || '0')), 0);
@@ -1399,7 +1701,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   const productOrders = useMemo(() => {
     if (!selectedId) return [];
     return timeFilteredOrders.filter(o => {
-      const oId = String(o['商品ID'] || o['商品id'] || o['productId'] || '');
+      const oId = String(findField(o, '商品ID', '商品编号', 'productId') || '');
       return oId === selectedId;
     });
   }, [timeFilteredOrders, selectedId]);
@@ -1427,18 +1729,18 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       const spec = findField(o, ...specFields) || '';
       const key = `${skuId}|${spec}`;
       if (!skuMap[key]) skuMap[key] = { skuId, spec, sales: 0, revenue: 0, gmv: 0, orderCount: 0, orderNos: new Set() };
-      skuMap[key].sales += Number(o['商品数量'] || o['交易数量'] || 1) || 1;
-      skuMap[key].revenue += Number(o['商家实收金额(元)'] || o['成交金额'] || o['支付金额'] || 0) || 0;
-      skuMap[key].gmv += Number(o['订单金额'] || o['商品原价金额'] || o['支付金额'] || 0) || 0;
+      skuMap[key].sales += Number(findField(o, '商品数量(件)', '商品数量', '交易数量', '数量') ?? 1) || 1;
+      skuMap[key].revenue += Number(findField(o, '商家实收金额(元)', '商家实收', '实收金额', '成交金额', '支付金额') || 0) || 0;
+      skuMap[key].gmv += Number(findField(o, '订单金额', '商品总价(元)', '商品原价金额', '支付金额') || 0) || 0;
       skuMap[key].orderCount++;
-      const orderNo = o['订单编号'] || o['订单号'] || '';
+      const orderNo = findField(o, '订单号', '订单编号') || '';
       if (orderNo) skuMap[key].orderNos.add(String(orderNo));
     });
 
     // 从售后记录中统计每个SKU的退款
     const orderNoToSkuKey: Record<string, string> = {};
     productOrders.forEach(o => {
-      const orderNo = String(o['订单编号'] || o['订单号'] || '');
+      const orderNo = String(findField(o, '订单号', '订单编号') || '');
       if (!orderNo) return;
       const skuId = findField(o, ...skuFields) || '默认规格';
       const spec = findField(o, ...specFields) || '';
@@ -1447,9 +1749,9 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
     const skuRefundMap: Record<string, { refundCount: number; refundAmount: number; refundDays: number[]; reasons: Record<string, number> }> = {};
     const reasonFields = ['退款原因', '售后原因', '售后类型', '原因', 'reason'];
-    const productAfterSales = timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
+    const productAfterSales = timeFilteredAfterSales.filter(r => String(findField(r, '商品ID', '商品编号') || '') === selectedId);
     productAfterSales.forEach(r => {
-      const orderNo = String(r['订单编号'] || r['订单号'] || '');
+      const orderNo = String(findField(r, '订单号', '订单编号') || '');
       const skuInfo = r['商品规格'] || r['sku信息'] || '';
       let matchedKey: string | null = null;
       if (orderNo && orderNoToSkuKey[orderNo]) {
@@ -1468,7 +1770,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       skuRefundMap[matchedKey].reasons[reason] = (skuRefundMap[matchedKey].reasons[reason] || 0) + 1;
       // 退款天数计算
       const applyDate = new Date(r['申请时间'] || r['售后创建时间'] || r['退款申请时间'] || '');
-      const payDateStr = productOrders.find(o => String(o['订单编号'] || o['订单号'] || '') === orderNo)?.['支付时间'] || '';
+      const payDateStr = productOrders.find(o => String(findField(o, '订单号', '订单编号') || '') === orderNo)?.['支付时间'] || '';
       if (applyDate.getTime() > 0 && payDateStr) {
         const payDate = new Date(payDateStr);
         if (payDate.getTime() > 0) skuRefundMap[matchedKey].refundDays.push(Math.round((applyDate.getTime() - payDate.getTime()) / 86400000));
@@ -1528,7 +1830,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   const refundReasonAnalysis = useMemo(() => {
     if (!selectedId) return [];
     const reasonFields = ['退款原因', '售后原因', '售后类型', '原因', 'reason'];
-    const productAfterSales = timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
+    const productAfterSales = timeFilteredAfterSales.filter(r => String(findField(r, '商品ID', '商品编号') || '') === selectedId);
     const reasonMap: Record<string, { count: number; amount: number }> = {};
     let skipped = 0;
     productAfterSales.forEach(r => {
@@ -1551,8 +1853,8 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     // 构建orderNo→支付时间 Map
     const orderPayMap: Record<string, string> = {};
     allOrders.forEach(o => {
-      const orderNo = String(o['订单编号'] || o['订单号'] || '');
-      const payTime = o['支付时间'] || o['订单支付时间'] || o['付款时间'] || '';
+      const orderNo = String(findField(o, '订单号', '订单编号') || '');
+      const payTime = findField(o, '支付时间', '订单支付时间', '付款时间', '支付日期') || '';
       if (orderNo && payTime) orderPayMap[orderNo] = payTime;
     });
 
@@ -1566,12 +1868,12 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
     let skippedNoPay = 0;
     let skippedNoApply = 0;
-    const productAfterSales = timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
+    const productAfterSales = timeFilteredAfterSales.filter(r => String(findField(r, '商品ID', '商品编号') || '') === selectedId);
 
     productAfterSales.forEach(r => {
       const applyTime = r['申请时间'] || r['售后创建时间'] || r['退款申请时间'] || '';
       if (!applyTime) { skippedNoApply++; return; }
-      const orderNo = String(r['订单编号'] || r['订单号'] || '');
+      const orderNo = String(findField(r, '订单号', '订单编号') || '');
       const payTime = orderPayMap[orderNo];
       if (!payTime) { skippedNoPay++; return; }
 
@@ -1612,15 +1914,15 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
       const prov = findField(o, ...provinceFields);
       if (!prov) return;
       provinceOrders[prov] = (provinceOrders[prov] || 0) + 1;
-      const orderNo = String(o['订单编号'] || o['订单号'] || '');
+      const orderNo = String(findField(o, '订单号', '订单编号') || '');
       if (orderNo) orderNoToProvince[orderNo] = prov;
     });
 
     // 按省统计售后
     const provinceAfterSales: Record<string, { count: number; amount: number }> = {};
-    const productAfterSales = timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
+    const productAfterSales = timeFilteredAfterSales.filter(r => String(findField(r, '商品ID', '商品编号') || '') === selectedId);
     productAfterSales.forEach(r => {
-      const orderNo = String(r['订单编号'] || r['订单号'] || '');
+      const orderNo = String(findField(r, '订单号', '订单编号') || '');
       const prov = orderNoToProvince[orderNo];
       if (!prov) return;
       if (!provinceAfterSales[prov]) provinceAfterSales[prov] = { count: 0, amount: 0 };
@@ -1664,77 +1966,11 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     };
   }, [selectedStats]);
 
-  // ─── 增强计算 #6：五维健康度评分 ────────────────────────────
-  const healthScore = useMemo(() => {
-    if (!selectedStats) return null;
-    const all = Object.values(productStats);
-    if (all.length < 2) return { score: 50, rating: '数据不足', dims: [] as any[] };
-
-    const percentile = (arr: number[], val: number) => {
-      if (arr.length === 0) return 50;
-      const sorted = [...arr].sort((a, b) => a - b);
-      const pos = sorted.findIndex(v => v >= val);
-      return pos === -1 ? 100 : (pos / sorted.length) * 100;
-    };
-
-    // 销售力 35%: GMV百分位
-    const gmvVals = all.map(s => s.gmv);
-    const salesScore = percentile(gmvVals, selectedStats.gmv);
-
-    // 盈利力 30%: CM3利润率百分位
-    const profitRateVals = all.map(s => {
-      const cb = s.costBreakdown || {} as CostBreakdown;
-      // 注意：商家实收已扣平台费，CM3 不含 platformFee
-      const cm3 = (s.revenue || 0) - (cb.productCost || 0) - (s.discount || 0) - (s.refund || 0) - (cb.insuranceFee || 0) - ((cb.packagingFee || 0) + (cb.shippingFee || 0)) - (s.promoCost || 0);
-      return s.gmv > 0 ? (cm3 / s.gmv) * 100 : 0;
-    });
-    const cb = selectedStats.costBreakdown || {} as CostBreakdown;
-    const cm3Val = (selectedStats.revenue || 0) - (cb.productCost || 0) - (selectedStats.discount || 0) - (selectedStats.refund || 0) - (cb.insuranceFee || 0) - ((cb.packagingFee || 0) + (cb.shippingFee || 0)) - (selectedStats.promoCost || 0);
-    const cm3Rate = selectedStats.gmv > 0 ? (cm3Val / selectedStats.gmv) * 100 : 0;
-    const profitScore = percentile(profitRateVals, cm3Rate);
-
-    // 品质力 20%: 退款率(反向)百分位
-    const refundVals = all.map(s => s.refundRate);
-    const refundScore = 100 - percentile(refundVals, selectedStats.refundRate);
-
-    // 运营力 10%: 库存周转(反向)百分位
-    const turnoverVals = all.map(s => s.turnoverDays || 999);
-    const turnoverScore = 100 - percentile(turnoverVals, selectedStats.turnoverDays || 999);
-
-    // 增长力 5%: 近7天销量变化百分位
-    const growthVals = all.map(s => {
-      const recent = s.dailySales?.slice(-7)?.reduce((sum, d) => sum + d.sales, 0) ?? 0;
-      const earlier = s.dailySales?.slice(-14, -7)?.reduce((sum, d) => sum + d.sales, 0) ?? 0;
-      return earlier > 0 ? ((recent - earlier) / earlier) * 100 : 0;
-    });
-    const recentSales = selectedStats.dailySales?.slice(-7)?.reduce((sum, d) => sum + d.sales, 0) ?? 0;
-    const earlierSales = selectedStats.dailySales?.slice(-14, -7)?.reduce((sum, d) => sum + d.sales, 0) ?? 0;
-    const growthVal = earlierSales > 0 ? ((recentSales - earlierSales) / earlierSales) * 100 : 0;
-    const growthScore = percentile(growthVals, growthVal);
-
-    const dims = [
-      { name: '销售力', weight: 35, score: salesScore, icon: <ShoppingCart size={12} />, color: '#e02e24' },
-      { name: '盈利力', weight: 30, score: profitScore, icon: <DollarSign size={12} />, color: '#16a34a' },
-      { name: '品质力', weight: 20, score: refundScore, icon: <Shield size={12} />, color: '#f97316' },
-      { name: '运营力', weight: 10, score: turnoverScore, icon: <Clock size={12} />, color: '#0891b2' },
-      { name: '增长力', weight: 5, score: growthScore, icon: <TrendingUp size={12} />, color: '#7c3aed' },
-    ];
-
-    const totalScore = dims.reduce((s, d) => s + d.score * (d.weight / 100), 0);
-    let rating: string;
-    if (totalScore >= 80) rating = '优秀';
-    else if (totalScore >= 60) rating = '良好';
-    else if (totalScore >= 40) rating = '一般';
-    else rating = '预警';
-
-    return { score: Math.round(totalScore), rating, dims };
-  }, [selectedStats, productStats]);
-
   // ─── 增强计算 #2b：全店退款原因TOP10（用于对比）────────────
   const storeRefundReasonAnalysis = useMemo(() => {
     if (!selectedId || comparisonMode === 'none') return [];
     const reasonFields = ['退款原因', '售后原因', '售后类型', '原因', 'reason'];
-    const otherAfterSales = timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') !== selectedId);
+    const otherAfterSales = timeFilteredAfterSales.filter(r => String(findField(r, '商品ID', '商品编号') || '') !== selectedId);
     const reasonMap: Record<string, { count: number; amount: number }> = {};
     otherAfterSales.forEach(r => {
       const reason = findField(r, ...reasonFields) || '未分类';
@@ -1767,10 +2003,10 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     // 2. SKU级价格变动检测：按SKU分组取单价，任意SKU价格变化>15%标记
     const skuPrices: Record<string, Record<string, number[]>> = {}; // skuId -> date -> prices[]
     productOrders.forEach(o => {
-      const date = String(o['支付时间'] || '').slice(0, 10);
+      const date = String(findField(o, '支付时间', '付款时间', '支付日期') || '').slice(0, 10);
       if (!date) return;
       const skuId = findField(o, '商家编码-SKU维度', '规格编码', 'SKU编码') || '默认';
-      const price = parseFloat(o['商品单价(元)'] || '0') || (parseFloat(o['商家实收金额(元)'] || '0') / Math.max(1, parseFloat(o['商品数量(件)'] || '1')));
+      const price = parseFloat(findField(o, '商品单价(元)', '商品单价') || '0') || (parseFloat(findField(o, '商家实收金额(元)', '商家实收', '实收金额') || '0') / Math.max(1, parseFloat(findField(o, '商品数量(件)', '商品数量', '数量') || '1')));
       if (!price || price <= 0) return;
       if (!skuPrices[skuId]) skuPrices[skuId] = {};
       if (!skuPrices[skuId][date]) skuPrices[skuId][date] = [];
@@ -1791,7 +2027,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
           markers.push({
             date: sortedDates[i],
             label: `${skuId.length>8?skuId.slice(-6):skuId}调价${dir}${Math.abs(pctChange).toFixed(0)}%`,
-            color: pctChange > 0 ? '#16a34a' : '#e02e24',
+            color: pctChange > 0 ? '#16a34a' : SEMANTIC.loss,
             type: 'price'
           });
         }
@@ -1817,17 +2053,17 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
   const profitBreakdownData = useMemo(() => {
     if (!selectedId) return null;
     const ords = productOrders;
-    const totalGmv = ords.reduce((s, o) => s + (parseFloat(o['商品总价(元)'] || '0') || 0), 0);
-    const totalRevenue = ords.reduce((s, o) => s + (parseFloat(o['商家实收金额(元)'] || '0') || 0), 0);
-    const totalItems = ords.reduce((s, o) => s + (parseInt(o['商品数量(件)'] || '1') || 1), 0);
+    const totalGmv = ords.reduce((s, o) => s + (parseFloat(findField(o, '商品总价(元)', '商品总价', '商品金额') || '0') || 0), 0);
+    const totalRevenue = ords.reduce((s, o) => s + (parseFloat(findField(o, '商家实收金额(元)', '商家实收', '实收金额') || '0') || 0), 0);
+    const totalItems = ords.reduce((s, o) => s + (parseInt(findField(o, '商品数量(件)', '商品数量', '数量') || '1') || 1), 0);
     const totalOrders = ords.length;
     // 从 SKU 成本配置汇总商品成本
     let totalProductCost = 0;
     ords.forEach(o => {
       const skuId = findField(o, '商家编码-SKU维度', '规格编码', 'SKU编码') || '';
-      const pid = String(o['商品ID'] || o['商品id'] || '');
+      const pid = String(findField(o, '商品ID', '商品编号') || '');
       const skuKey = skuId ? `${pid}_${skuId}` : pid;
-      const qty = parseInt(o['商品数量(件)'] || '1') || 1;
+      const qty = parseInt(findField(o, '商品数量(件)', '商品数量', '数量') || '1') || 1;
       const unitCost = productCosts?.[skuKey] ?? productCosts?.[pid] ?? 0;
       totalProductCost += unitCost * qty;
     });
@@ -1836,17 +2072,17 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     const totalPromoCost = promoForProduct.reduce((s: number, p: any) => s + (parseFloat(p['总花费(元)'] || '0') || 0), 0);
     // 运费险
     const totalInsurance = (currentDisplayData?.shippingInsurance || [])
-      .filter((r: any) => ords.some(o => String(o['订单号'] || '') === String(r['订单编号'] || r['订单号'] || '')))
+      .filter((r: any) => ords.some(o => String(findField(o, '订单号') || '') === String(findField(r, '订单号', '订单编号') || '')))
       .reduce((s: number, r: any) => s + (parseFloat(r['服务费用（元）'] || r['服务费用(元)'] || r['保费（元）'] || '0') || 0), 0);
     // 平台佣金统计（仅供参考，已含在商家实收中）
     const estPlatformFee = totalRevenue * ((platformCommissionRate || 0) / 100);
     const actualPlatformFee = (currentDisplayData?.financialRecords || [])
-      .filter((f: any) => ords.some(o => String(o['订单号'] || '') === String(f['商户订单号'] || '')))
+      .filter((f: any) => ords.some(o => String(findField(o, '订单号') || '') === String(findField(f, '商户订单号', '订单号', '订单编号') || '')))
       .filter((f: any) => String(f['业务描述'] || '').includes('技术服务费'))
       .reduce((s: number, f: any) => s + (parseFloat(f['支出金额（-元）'] || f['支出金额(元)'] || '0') || 0), 0);
     // 罚款
     const totalPenalties = (currentDisplayData?.financialRecords || [])
-      .filter((f: any) => ords.some(o => String(o['订单号'] || '') === String(f['商户订单号'] || '')))
+      .filter((f: any) => ords.some(o => String(findField(o, '订单号') || '') === String(findField(f, '商户订单号', '订单号', '订单编号') || '')))
       .filter((f: any) => { const d = String(f['业务描述'] || ''); return d.startsWith('004') || d.startsWith('006'); })
       .reduce((s: number, f: any) => s + (parseFloat(f['支出金额（-元）'] || f['支出金额(元)'] || '0') || 0), 0);
     // 包装费+快递费（按配置估算）
@@ -1865,10 +2101,19 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     return detectAnomalies(gmvData, 'GMV', 14);
   }, [timeFilteredDailySales]);
 
+  // ─── 选中指标驱动图表（★ 必须在所有早期 return 之前声明）────
+  const [activeMetrics, setActiveMetrics] = useState<string[]>(['gmv', 'revenue', 'profit']);
+
+  const toggleMetric = (key: string) => {
+    setActiveMetrics(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
+    );
+  };
+
   // ─── 增强计算 #7：退款日趋势（替代假数据）──────────────────
   const refundDailyTrend = useMemo(() => {
     if (!selectedId) return { trend: [], spikeDays: [] as string[] };
-    const productAfterSales = timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId);
+    const productAfterSales = timeFilteredAfterSales.filter(r => String(findField(r, '商品ID', '商品编号') || '') === selectedId);
 
     // 售后按日期分组
     const dailyRefund: Record<string, { count: number; amount: number }> = {};
@@ -1883,7 +2128,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     // 订单按日期分组
     const dailyOrder: Record<string, number> = {};
     productOrders.forEach(o => {
-      const dateStr = String(o['订单支付时间'] || o['支付时间'] || o['订单创建时间'] || '').slice(0, 10);
+      const dateStr = String(findField(o, '支付时间', '订单支付时间', '付款时间', '订单创建时间') || '').slice(0, 10);
       if (!dateStr) return;
       dailyOrder[dateStr] = (dailyOrder[dateStr] || 0) + 1;
     });
@@ -1923,6 +2168,17 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
     return { trend: withMA, spikeDays };
   }, [selectedId, timeFilteredAfterSales, productOrders]);
 
+  // ★★★ 服务端数据覆盖：当服务器返回数据时，优先使用服务器计算结果（必须放在 enhancedDiagnoses 之前，因为 enhancedDiagnoses 引用了 finalRefundWindows）
+  const finalTrendData = serverDeepData?.trendData?.length ? serverDeepData.trendData : localTrendData;
+  const finalHourlyData = serverDeepData?.hourlyData?.length ? serverDeepData.hourlyData : hourlyData;
+  const finalSkuMatrix = serverDeepData?.skuMatrix?.length ? serverDeepData.skuMatrix : skuDeepMatrix;
+  const finalRefundReasons = serverDeepData?.refundAnalysis?.byReason?.length ? serverDeepData.refundAnalysis.byReason : refundReasonAnalysis;
+  const finalRefundWindows = serverDeepData?.refundAnalysis?.timeWindow?.length
+    ? { windows: serverDeepData.refundAnalysis.timeWindow, skippedNoPay: 0, skippedNoApply: 0 }
+    : refundTimeWindow;
+  const finalAnomalies = serverDeepData?.anomalies?.length ? serverDeepData.anomalies : anomalyAlerts;
+  const finalProfitWaterfall = serverDeepData?.profitWaterfall?.length ? serverDeepData.profitWaterfall : profitBreakdownData;
+
   // ─── 增强计算 #8：增强诊断（在 generateDiagnoses 基础上增加4条）──
   const enhancedDiagnoses = useMemo(() => {
     if (!selectedStats) return [];
@@ -1938,10 +2194,10 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
     // 10. 快速退款预警
     if (finalRefundWindows.windows.length > 0) {
-      const win07 = finalRefundWindows.windows.find(w => w.label === '0-7天');
-      const total = finalRefundWindows.windows.reduce((s, w) => s + w.count, 0);
+      const win07 = finalRefundWindows.windows.find((w: any) => w.label === '0-7天');
+      const total = finalRefundWindows.windows.reduce((s: number, w: any) => s + w.count, 0);
       if (win07 && total > 0 && (win07.count / total) > 0.5) {
-        extras.push({ priority: 'urgent', title: '快速退款占比偏高', description: `0-7天内退款占比${((win07.count / total) * 100).toFixed(0)}%，可能存在商品质量问题或描述不符，建议检查详情页准确性和商品品质。`, icon: <Clock size={14} />, color: '#e02e24', bg: '#fef2f2' });
+        extras.push({ priority: 'urgent', title: '快速退款占比偏高', description: `0-7天内退款占比${((win07.count / total) * 100).toFixed(0)}%，可能存在商品质量问题或描述不符，建议检查详情页准确性和商品品质。`, icon: <Clock size={14} />, color: SEMANTIC.loss, bg: 'rgba(239,68,68,0.08)' });
       }
     }
 
@@ -2045,37 +2301,14 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
   if (!isOpen) return null;
 
-  // 导航锚点
-  const sections = [
-    { id: 'sec-overview', label: '趋势', icon: <TrendingUp size={12} /> },
-    { id: 'sec-profit', label: '利润', icon: <DollarSign size={12} /> },
-    { id: 'sec-traffic', label: '流量', icon: <Target size={12} /> },
-    { id: 'sec-sku', label: 'SKU', icon: <Layers size={12} /> },
-    { id: 'sec-aftersale', label: '售后', icon: <Shield size={12} /> },
-    { id: 'sec-diagnosis', label: '诊断', icon: <Gauge size={12} /> },
-  ];
-
-  const scrollTo = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-  // ─── 选中指标驱动图表 ────────────────────────────────
-  const [activeMetrics, setActiveMetrics] = useState<string[]>(['gmv', 'revenue', 'profit']);
-
-  const toggleMetric = (key: string) => {
-    setActiveMetrics(prev =>
-      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key]
-    );
+  const scrollTo = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const y = el.getBoundingClientRect().top + el.closest('.overflow-y-auto')?.scrollTop! - 20;
+    el.closest('.overflow-y-auto')?.scrollTo({ top: y, behavior: 'smooth' });
   };
 
-  // ★ 服务端数据覆盖：当服务器返回数据时，优先使用服务器计算结果
-  const finalTrendData = serverDeepData?.trendData?.length ? serverDeepData.trendData : localTrendData;
-  const finalHourlyData = serverDeepData?.hourlyData?.length ? serverDeepData.hourlyData : hourlyData;
-  const finalSkuMatrix = serverDeepData?.skuMatrix?.length ? serverDeepData.skuMatrix : skuDeepMatrix;
-  const finalRefundReasons = serverDeepData?.refundAnalysis?.byReason?.length ? serverDeepData.refundAnalysis.byReason : refundReasonAnalysis;
-  const finalRefundWindows = serverDeepData?.refundAnalysis?.timeWindow?.length
-    ? { windows: serverDeepData.refundAnalysis.timeWindow, skippedNoPay: 0, skippedNoApply: 0 }
-    : refundTimeWindow;
-  const finalAnomalies = serverDeepData?.anomalies?.length ? serverDeepData.anomalies : anomalyAlerts;
-  const finalProfitWaterfall = serverDeepData?.profitWaterfall?.length ? serverDeepData.profitWaterfall : profitBreakdownData;
+  // ★ 服务端数据覆盖（其余 final* 已在 enhancedDiagnoses 前定义）
   const finalStoreBenchmark = serverDeepData?.storeBenchmark ? serverDeepData.storeBenchmark : storeBenchmark;
   const finalClassification = serverDeepData?.productClassification ? serverDeepData.productClassification : null;
   const finalRankings = serverDeepData?.rankings ? serverDeepData.rankings : null;
@@ -2092,66 +2325,70 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
           initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96 }}
           transition={{ duration: 0.2 }}
           onClick={e => e.stopPropagation()}
-          className="absolute inset-3 bg-[#f5f6f8] rounded-2xl shadow-2xl flex flex-col overflow-hidden"
+          className="absolute inset-3 bg-pdd-bg/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden"
         >
           {/* ═══════════════════════════════════════ 顶栏 ═══════════════════════════════════════ */}
-          <div className="shrink-0 bg-white border-b border-gray-200 px-4 py-2.5 flex items-center gap-3">
-            <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 shrink-0">
+          <div className="shrink-0 bg-pdd-card border-b border-pdd-border px-4 py-2.5 flex items-center gap-3">
+            <Button variant="ghost" size="sm" className="p-1.5 h-auto shrink-0" onClick={onClose}>
               <X size={16} />
-            </button>
+            </Button>
 
             <div className="relative flex-1 max-w-[240px]">
-              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" />
-              <input type="text" placeholder="搜索商品..."
+              <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-pdd-text-secondary/50" />
+              <Input type="text" placeholder="搜索商品..."
                 value={search} onChange={e => { setSearch(e.target.value); setShowSidebar(true); }}
                 onFocus={() => setShowSidebar(true)}
-                className="w-full pl-7 pr-2 py-1.5 border border-gray-200 rounded-lg text-xs focus:outline-none focus:border-indigo-400 bg-gray-50 focus:bg-white transition-colors" />
+                className="pl-7 h-8 text-xs" />
             </div>
 
             {serverLoading && (
               <div className="flex items-center gap-2">
-                <div className="w-4 h-4 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-                <span className="text-xs text-indigo-500 font-medium">正在从服务器加载数据...</span>
+                <div className="w-4 h-4 border-2 border-pdd-primary border-t-transparent rounded-full animate-spin" />
+                <span className="text-xs font-medium" style={{ color: CHART.all[0] }}>正在从服务器加载数据...</span>
               </div>
             )}
             {!serverLoading && selectedStats && (
               <div className="flex items-center gap-2 min-w-0">
-                <span className="text-sm font-bold text-gray-800 truncate max-w-[200px]">{selectedStats.productName}</span>
-                <span className="text-[10px] text-gray-400 font-mono bg-gray-100 px-1.5 py-0.5 rounded">{selectedStats.productCode || selectedId}</span>
+                <span className="text-sm font-bold text-pdd-text truncate max-w-[200px]">{selectedStats.productName}</span>
+                <span className="text-[10px] font-mono bg-pdd-bg/80 px-1.5 py-0.5 rounded" style={{ color: SEMANTIC.neutral }}>{selectedStats.productCode || selectedId}</span>
               </div>
             )}
             {!serverLoading && !selectedStats && selectedId && (
-              <span className="text-xs text-amber-500 font-medium">⏳ 正在计算商品数据，请稍候...</span>
+              <span className="text-xs font-medium" style={{ color: SEMANTIC.warning }}>⏳ 正在计算商品数据，请稍候...</span>
             )}
             {!serverLoading && !selectedStats && !selectedId && (
-              <span className="text-xs text-gray-400 italic">← 从左侧列表选择商品开始深度分析</span>
+              <span className="text-xs italic" style={{ color: SEMANTIC.neutral }}>← 从左侧列表选择商品开始深度分析</span>
             )}
 
             <div className="flex-1" />
 
             {/* 时间粒度 */}
-            <div className="flex items-center bg-gray-100 rounded-lg p-0.5">
+            <div className="flex items-center bg-pdd-bg rounded-lg p-0.5 gap-0.5">
               {(['hour', 'day', 'week'] as const).map(g => (
-                <button key={g} onClick={() => setTimeGranularity(g)}
-                  className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${
-                    timeGranularity === g ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>
+                <Badge key={g} variant={timeGranularity === g ? 'default' : 'outline'}
+                  className="px-2.5 py-1 text-[10px] cursor-pointer rounded-md"
+                  onClick={() => setTimeGranularity(g)}>
                   {{ hour: '时', day: '日', week: '周' }[g]}
-                </button>
+                </Badge>
               ))}
             </div>
 
             {/* 对比模式 */}
-            <select value={comparisonMode} onChange={e => setComparisonMode(e.target.value as any)}
-              className="text-[10px] border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-500 focus:outline-none">
-              <option value="storeAvg">vs 店铺均值</option>
-              <option value="topProduct">vs TOP20%</option>
-              <option value="prevPeriod">vs 上周期</option>
-              <option value="none">无对比</option>
-            </select>
+            <Select value={comparisonMode} onValueChange={v => setComparisonMode(v as any)}>
+              <SelectTrigger className="w-[110px] h-7 text-[10px] rounded-lg">
+                <SelectValue placeholder="对比模式" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="storeAvg" className="text-xs">vs 店铺均值</SelectItem>
+                <SelectItem value="topProduct" className="text-xs">vs TOP20%</SelectItem>
+                <SelectItem value="prevPeriod" className="text-xs">vs 上周期</SelectItem>
+                <SelectItem value="none" className="text-xs">无对比</SelectItem>
+              </SelectContent>
+            </Select>
 
-            <button className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-gray-700 shrink-0" onClick={() => setShowSidebar(!showSidebar)}>
+            <Button variant="ghost" size="sm" className="p-1.5 h-auto shrink-0 text-pdd-text-secondary/50" onClick={() => setShowSidebar(!showSidebar)}>
               <Layers size={14} />
-            </button>
+            </Button>
           </div>
 
           {/* ═══════════════════════════════════════ 主体 ═══════════════════════════════════════ */}
@@ -2160,15 +2397,15 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
             <AnimatePresence>
               {showSidebar && (
                 <motion.div initial={{ width: 0, opacity: 0 }} animate={{ width: 260, opacity: 1 }} exit={{ width: 0, opacity: 0 }}
-                  className="shrink-0 border-r border-gray-200 bg-white flex flex-col overflow-hidden">
-                  <div className="p-2.5 border-b border-gray-100">
-                    <div className="flex items-center gap-0.5 bg-gray-100 rounded-lg p-0.5">
+                  className="shrink-0 border-r border-pdd-border bg-pdd-card flex flex-col overflow-hidden">
+                  <div className="p-2.5 border-b border-pdd-border">
+                    <div className="flex items-center gap-0.5 bg-pdd-bg/50 rounded-lg p-0.5">
                       {(['all', 'champion', 'profit', 'hidden', 'dead'] as const).map(k => (
-                        <button key={k} onClick={() => setFilter(k)}
-                          className={`flex-1 py-1 text-[10px] rounded-md font-medium transition-all ${
-                            filter === k ? 'bg-white text-gray-800 shadow-sm' : 'text-gray-400 hover:text-gray-600'}`}>
+                        <Badge key={k} variant={filter === k ? 'default' : 'outline'}
+                          className="flex-1 py-1 text-[10px] cursor-pointer rounded-md text-center"
+                          onClick={() => setFilter(k)}>
                           {{ all: '全部', champion: '爆品', profit: '利润', hidden: '潜力', dead: '滞销' }[k]}
-                        </button>
+                        </Badge>
                       ))}
                     </div>
                   </div>
@@ -2177,13 +2414,13 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                       const pos = productStats[p.id] ? classifyProduct(productStats[p.id], productStats) : null;
                       return (
                         <button key={p.id} onClick={() => { setSelectedId(p.id); setShowSidebar(false); }}
-                          className={`w-full text-left px-3 py-2.5 border-b border-gray-50 hover:bg-indigo-50/30 transition-colors ${
+                          className={`w-full text-left px-3 py-2.5 border-b border-pdd-border hover:bg-indigo-50/30 transition-colors ${
                             selectedId === p.id ? 'bg-indigo-50/50 border-l-2 border-l-indigo-400' : ''}`}>
                           <div className="flex items-center gap-1.5">
                             {pos && <span className="text-[10px] px-1 py-0.5 rounded font-medium" style={{ backgroundColor: pos.typeBg, color: pos.typeColor }}>{pos.type}</span>}
-                            <span className="text-xs font-medium text-gray-700 truncate flex-1">{p.name || p.id}</span>
+                            <span className="text-xs font-medium text-pdd-text truncate flex-1">{p.name || p.id}</span>
                           </div>
-                          <div className="flex items-center gap-2 mt-0.5 text-gray-400" style={{ fontSize: '9px' }}>
+                          <div className="flex items-center gap-2 mt-0.5 text-pdd-text-secondary/50" style={{ fontSize: '9px' }}>
                             <span className="font-mono">{p.id}</span>
                             <span>GMV ¥{fmt(p.gmv)}</span>
                             {p.roi > 0 && <span className={p.roi >= 2 ? 'text-green-500' : 'text-red-400'}>ROI {p.roi.toFixed(1)}</span>}
@@ -2191,7 +2428,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                         </button>
                       );
                     })}
-                    {filteredProducts.length === 0 && <div className="p-4 text-xs text-gray-400 text-center">无匹配商品</div>}
+                    {filteredProducts.length === 0 && <div className="p-4 text-xs text-pdd-text-secondary/50 text-center">无匹配商品</div>}
                   </div>
                 </motion.div>
               )}
@@ -2200,7 +2437,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
             {/* 右侧分析主内容 — 单页滚动 */}
             <div className="flex-1 overflow-y-auto relative">
               {serverLoading ? (
-                <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-5">
+                <div className="h-full flex flex-col items-center justify-center text-pdd-text-secondary/50 gap-5">
                   <div className="relative">
                     <div className="w-20 h-20 rounded-2xl bg-indigo-50 flex items-center justify-center">
                       <BarChart3 size={36} className="text-indigo-300" />
@@ -2209,7 +2446,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                   </div>
                   <div className="text-center">
                     <div className="text-sm font-semibold text-indigo-600 mb-1">服务器计算中</div>
-                    <div className="text-xs text-gray-400">正在拉取商品深度数据，请稍候...</div>
+                    <div className="text-xs text-pdd-text-secondary/50">正在拉取商品深度数据，请稍候...</div>
                   </div>
                   <div className="flex gap-1.5">
                     {[0,1,2].map(i => (
@@ -2218,13 +2455,13 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                   </div>
                 </div>
               ) : !selectedStats ? (
-                <div className="h-full flex flex-col items-center justify-center text-gray-400 gap-4">
-                  <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center">
+                <div className="h-full flex flex-col items-center justify-center text-pdd-text-secondary/50 gap-4">
+                  <div className="w-16 h-16 rounded-2xl bg-pdd-bg/80 flex items-center justify-center">
                     <Search size={28} className="opacity-30" />
                   </div>
                   <div className="text-center">
-                    <div className="text-sm font-medium text-gray-500 mb-1">{selectedId ? '暂无该商品数据' : '选择商品开始分析'}</div>
-                    <div className="text-xs text-gray-400">{selectedId ? '请确认该商品有订单数据，或刷新页面重试' : '搜索或从左侧列表选择'}</div>
+                    <div className="text-sm font-medium text-pdd-text-secondary mb-1">{selectedId ? '暂无该商品数据' : '选择商品开始分析'}</div>
+                    <div className="text-xs text-pdd-text-secondary/50">{selectedId ? '请确认该商品有订单数据，或刷新页面重试' : '搜索或从左侧列表选择'}</div>
                   </div>
                   {!showSidebar && <button onClick={() => setShowSidebar(true)} className="text-xs text-indigo-500 hover:text-indigo-600 underline">打开商品列表</button>}
                 </div>
@@ -2237,13 +2474,13 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                     {finalAnomalies.length > 0 && <div className="mb-3"><AnomalyBanner anomalies={finalAnomalies} /></div>}
 
                     {/* ── 交互式指标选择器（替代静态KPI卡片）── */}
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 mb-4">
+                    <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm p-4 mb-4">
                       <div className="flex items-center justify-between mb-3">
-                        <h2 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                        <h2 className="text-sm font-bold text-pdd-text flex items-center gap-2">
                           <TrendingUp size={14} color="#16a34a" />
                           指标趋势 · 点击指标切换图表数据
                         </h2>
-                        <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
+                        <div className="flex items-center gap-1.5 text-[10px] text-pdd-text-secondary/50">
                           <Info size={11} />
                           点击数据点看当天明细
                         </div>
@@ -2252,7 +2489,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                       {/* 指标选择芯片 */}
                       <div className="flex flex-wrap items-center gap-2 mb-3">
                         {[
-                          { key: 'gmv', label: 'GMV', val: fmtMoney(selectedStats.gmv), formula: '商品总价(元) 求和', color: '#e02e24', icon: <ShoppingCart size={11} /> },
+                          { key: 'gmv', label: 'GMV', val: fmtMoney(selectedStats.gmv), formula: '商品总价(元) 求和', color: SEMANTIC.loss, icon: <ShoppingCart size={11} /> },
                           { key: 'revenue', label: '商家实收', val: fmtMoney(selectedStats.revenue), formula: '商家实收金额(元) 求和 · 已扣平台佣金', color: '#16a34a', icon: <DollarSign size={11} /> },
                           { key: 'profit', label: '净利润(估)', val: fmtMoney(selectedStats.netProfit), formula: '实收 − 商品成本 − 推广 − 退款 − 运费险 − 包装快递 − 税费', color: '#7c3aed', icon: <BarChart3 size={11} /> },
                           { key: 'sales', label: '销量', val: fmt(selectedStats.sales), formula: '商品数量(件) 求和', color: '#f97316', icon: <Package size={11} /> },
@@ -2267,15 +2504,15 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                               className={`group relative flex items-center gap-2 px-3 py-2 rounded-lg border transition-all text-left ${
                                 isActive
                                   ? 'border-current shadow-sm'
-                                  : 'border-gray-200 hover:border-gray-300 opacity-60 hover:opacity-100'
+                                  : 'border-pdd-border hover:border-pdd-border opacity-60 hover:opacity-100'
                               }`}
                               style={isActive ? { borderColor: m.color, backgroundColor: m.color + '08' } : {}}>
                               <span className="w-5 h-5 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: m.color + '18' }}>
                                 <span style={{ color: m.color }}>{m.icon}</span>
                               </span>
                               <div>
-                                <div className="text-[10px] text-gray-400">{m.label}</div>
-                                <div className="text-xs font-bold font-mono" style={{ color: isActive ? m.color : '#374151' }}>{m.val}</div>
+                                <div className="text-[10px] text-pdd-text-secondary/50">{m.label}</div>
+                                <div className="text-xs font-bold font-mono" style={{ color: isActive ? m.color : 'var(--pdd-text)' }}>{m.val}</div>
                               </div>
                               {isActive && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full" style={{ backgroundColor: m.color }} />}
                             </button>
@@ -2293,7 +2530,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                                 <XAxis dataKey="date" tick={{ fontSize: 10, fill: '#9ca3af' }} />
                                 <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
                                 <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: 12 }} />
-                                {activeMetrics.includes('gmv') && <Bar dataKey="gmv" fill="#e02e24" opacity={0.7} name="GMV" radius={[4, 4, 0, 0]} />}
+                                {activeMetrics.includes('gmv') && <Bar dataKey="gmv" fill={SEMANTIC.loss} opacity={0.7} name="GMV" radius={[4, 4, 0, 0]} />}
                                 {activeMetrics.includes('sales') && <Bar dataKey="sales" fill="#f97316" opacity={0.5} name="销量" radius={[4, 4, 0, 0]} />}
                                 {activeMetrics.includes('revenue') && <Bar dataKey="revenue" fill="#16a34a" opacity={0.5} name="实收" radius={[4, 4, 0, 0]} />}
                               </BarChart>
@@ -2304,7 +2541,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                                 <YAxis tick={{ fontSize: 10, fill: '#9ca3af' }} />
                                 <Tooltip contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontSize: 12 }} />
                                 {activeMetrics.includes('sales') && <Bar dataKey="sales" fill="#f97316" opacity={0.3} name="销量" radius={[4, 4, 0, 0]} />}
-                                {activeMetrics.includes('gmv') && <Line type="monotone" dataKey="gmv" stroke="#e02e24" strokeWidth={2.5} dot={false} name="GMV" />}
+                                {activeMetrics.includes('gmv') && <Line type="monotone" dataKey="gmv" stroke={SEMANTIC.loss} strokeWidth={2.5} dot={false} name="GMV" />}
                                 {activeMetrics.includes('revenue') && <Line type="monotone" dataKey="revenue" stroke="#16a34a" strokeWidth={2} dot={false} name="实收" />}
                                 {activeMetrics.includes('profit') && <Line type="monotone" dataKey="profit" stroke="#7c3aed" strokeWidth={2.5} dot={false} name="利润(估)" />}
                                 {activeMetrics.includes('refund') && <Line type="monotone" dataKey="refund" stroke="#ef4444" strokeWidth={1.5} dot={false} name="退款" />}
@@ -2317,9 +2554,9 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                           </ResponsiveContainer>
 
                           {/* 图例 */}
-                          <div className="flex items-center gap-4 mt-2 text-[10px] text-gray-400 flex-wrap">
+                          <div className="flex items-center gap-4 mt-2 text-[10px] text-pdd-text-secondary/50 flex-wrap">
                             {[
-                              { key: 'gmv', color: '#e02e24', label: 'GMV' },
+                              { key: 'gmv', color: SEMANTIC.loss, label: 'GMV' },
                               { key: 'revenue', color: '#16a34a', label: '实收' },
                               { key: 'profit', color: '#7c3aed', label: '利润(估)' },
                               { key: 'sales', color: '#f97316', label: '销量' },
@@ -2327,11 +2564,11 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                             ].filter(l => activeMetrics.includes(l.key)).map(l => (
                               <span key={l.key} style={{ color: l.color }}>● {l.label}</span>
                             ))}
-                            {activeMetrics.length === 0 && <span className="text-gray-400 italic">← 请在上方选择要查看的指标</span>}
+                            {activeMetrics.length === 0 && <span className="text-pdd-text-secondary/50 italic">← 请在上方选择要查看的指标</span>}
                           </div>
 
                           {/* 选中指标的计算公式说明 */}
-                          <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap gap-2">
+                          <div className="mt-3 pt-3 border-t border-pdd-border flex flex-wrap gap-2">
                             {[
                               { key: 'gmv', label: 'GMV', formula: '商品总价(元) 求和（缺省时用 用户实付金额）' },
                               { key: 'revenue', label: '实收', formula: '商家实收金额(元) 求和（已扣除平台服务费/佣金）' },
@@ -2341,16 +2578,16 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                               { key: 'refund', label: '退款', formula: '订单退款金额 + 售后退款（自动去重订单退款）' },
                               { key: 'refundRate', label: '退款率', formula: '退款笔数(订单+售后) ÷ 总订单数 × 100' },
                             ].filter(f => activeMetrics.includes(f.key)).map(f => (
-                              <div key={f.key} className="flex items-center gap-1.5 px-2 py-1 bg-gray-50 rounded text-[10px] text-gray-500">
-                                <span className="font-medium text-gray-700">{f.label}</span>
-                                <span className="text-gray-400">=</span>
+                              <div key={f.key} className="flex items-center gap-1.5 px-2 py-1 bg-pdd-bg/50 rounded text-[10px] text-pdd-text-secondary">
+                                <span className="font-medium text-pdd-text">{f.label}</span>
+                                <span className="text-pdd-text-secondary/50">=</span>
                                 <span className="font-mono">{f.formula}</span>
                               </div>
                             ))}
                           </div>
                         </div>
                       ) : (
-                        <div className="h-[320px] flex items-center justify-center text-xs text-gray-400">
+                        <div className="h-[320px] flex items-center justify-center text-xs text-pdd-text-secondary/50">
                           暂无{timeGranularity === 'hour' ? '分时' : '趋势'}数据
                         </div>
                       )}
@@ -2359,22 +2596,22 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                       <AnimatePresence>
                         {detailChartPoint && (
                           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 8 }}
-                            className="mt-3 p-3 bg-gray-50 rounded-xl border border-gray-200">
+                            className="mt-3 p-3 bg-pdd-bg/50 rounded-xl border border-pdd-border">
                             <div className="flex items-center justify-between mb-2">
-                              <span className="text-xs font-bold text-gray-700">{detailChartPoint.date} 原始数据明细</span>
-                              <button onClick={() => setDetailChartPoint(null)} className="text-gray-400 hover:text-gray-600"><X size={12} /></button>
+                              <span className="text-xs font-bold text-pdd-text">{detailChartPoint.date} 原始数据明细</span>
+                              <button onClick={() => setDetailChartPoint(null)} className="text-pdd-text-secondary/50 hover:text-pdd-text"><X size={12} /></button>
                             </div>
                             <div className="grid grid-cols-6 gap-2 text-xs">
                               {[
-                                { label: 'GMV', val: fmtMoney(detailChartPoint.data?.gmv || 0), color: '#e02e24' },
+                                { label: 'GMV', val: fmtMoney(detailChartPoint.data?.gmv || 0), color: SEMANTIC.loss },
                                 { label: '实收', val: fmtMoney(detailChartPoint.data?.revenue || 0), color: '#16a34a' },
                                 { label: '销量', val: fmt(detailChartPoint.data?.sales || 0), color: '#f97316' },
                                 { label: '利润(估)', val: fmtMoney(detailChartPoint.data?.profit || 0), color: '#7c3aed' },
                                 { label: '退款', val: fmtMoney(detailChartPoint.data?.refund || 0), color: '#ef4444' },
                                 { label: '订单数', val: fmt(detailChartPoint.data?.orders || 0), color: '#0891b2' },
                               ].map(m => (
-                                <div key={m.label} className="text-center p-2 bg-white rounded-lg">
-                                  <div className="text-gray-400 mb-0.5">{m.label}</div>
+                                <div key={m.label} className="text-center p-2 bg-pdd-card rounded-lg">
+                                  <div className="text-pdd-text-secondary/50 mb-0.5">{m.label}</div>
                                   <div className="font-mono font-bold" style={{ color: m.color }}>{m.val}</div>
                                 </div>
                               ))}
@@ -2390,11 +2627,11 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                       {cmLayers && [cmLayers.cm1, cmLayers.cm2, cmLayers.cm3].map(layer => (
                         <div key={layer.name} className={`rounded-xl border p-3 flex flex-col items-center justify-center gap-1 ${
                           layer.positive ? 'bg-green-50/30 border-green-200' : 'bg-red-50/30 border-red-200'}`}>
-                          <span className="text-[10px] text-gray-500">{layer.name}</span>
+                          <span className="text-[10px] text-pdd-text-secondary">{layer.name}</span>
                           <span className={`text-base font-bold font-mono ${layer.positive ? 'text-green-600' : 'text-red-500'}`}>
                             {layer.positive ? '+' : ''}¥{fmt(Math.abs(layer.value))}
                           </span>
-                          <span className="text-[9px] text-gray-400">{layer.desc}</span>
+                          <span className="text-[9px] text-pdd-text-secondary/50">{layer.desc}</span>
                         </div>
                       ))}
                     </div>
@@ -2402,23 +2639,23 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
                   {/* ═══════════ ③ 利润 — 扣费明细 + 瀑布 + CM ═══════════ */}
                   <section id="sec-profit">
-                    <h2 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+                    <h2 className="text-sm font-bold text-pdd-text mb-3 flex items-center gap-2">
                       <DollarSign size={14} color="#16a34a" />💰 利润拆解
-                      <span className="text-[10px] font-normal text-gray-400">每一笔费用清楚可见</span>
+                      <span className="text-[10px] font-normal text-pdd-text-secondary/50">每一笔费用清楚可见</span>
                     </h2>
 
                     <div className="grid grid-cols-12 gap-4">
                       {/* 扣费明细表 */}
-                      <div className="col-span-7 bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+                      <div className="col-span-7 bg-pdd-card rounded-xl border border-pdd-border shadow-sm overflow-hidden">
                         <DeductionDetailTable stats={selectedStats} allProductStats={productStats}
                           comparisonMode={comparisonMode} onViewFullDetail={() => setShowProfitDrawer(true)} />
                       </div>
                       {/* CM 层级 + 瀑布 */}
                       <div className="col-span-5 space-y-4">
-                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                        <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm">
                           <CmLayerCascade layers={cmLayers} allProductStats={productStats} comparisonMode={comparisonMode} />
                         </div>
-                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                        <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm">
                           <ProfitWaterfall stats={selectedStats} allProductStats={productStats} comparisonMode={comparisonMode} />
                         </div>
                       </div>
@@ -2427,22 +2664,22 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
                   {/* ═══════════ ④ 流量 — 漏斗 + 渠道 ═══════════ */}
                   <section id="sec-traffic">
-                    <h2 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+                    <h2 className="text-sm font-bold text-pdd-text mb-3 flex items-center gap-2">
                       <Target size={14} color="#7c3aed" />📈 流量 & 转化
-                      <span className="text-[10px] font-normal text-gray-400">曝光 → 点击 → 成交</span>
+                      <span className="text-[10px] font-normal text-pdd-text-secondary/50">曝光 → 点击 → 成交</span>
                     </h2>
 
                     <div className="grid grid-cols-12 gap-4">
                       {/* 转化漏斗 */}
-                      <div className="col-span-5 bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="col-span-5 bg-pdd-card rounded-xl border border-pdd-border shadow-sm">
                         <ConversionFunnel stats={selectedStats} orders={productOrders}
                           allProductStats={productStats} comparisonMode={comparisonMode} />
                       </div>
                       {/* 日销售趋势（小时级） */}
-                      <div className="col-span-7 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
+                      <div className="col-span-7 bg-pdd-card rounded-xl border border-pdd-border shadow-sm p-4">
                         {finalHourlyData.length > 0 ? (
                           <>
-                            <h3 className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
+                            <h3 className="text-xs font-semibold text-pdd-text-secondary mb-2 flex items-center gap-1.5">
                               <Clock size={12} color="#0891b2" />24小时销售分布
                             </h3>
                             <ResponsiveContainer width="100%" height={220}>
@@ -2451,11 +2688,11 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                                 <XAxis dataKey="hour" tick={{ fontSize: 9, fill: '#9ca3af' }} />
                                 <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} />
                                 <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 11 }} />
-                                <Bar dataKey="gmv" fill="#e02e24" opacity={0.5} name="GMV" radius={[3, 3, 0, 0]} />
+                                <Bar dataKey="gmv" fill={SEMANTIC.loss} opacity={0.5} name="GMV" radius={[3, 3, 0, 0]} />
                                 <Line type="monotone" dataKey="orders" stroke="#7c3aed" strokeWidth={2} dot={{ r: 2 }} name="订单" />
                               </ComposedChart>
                             </ResponsiveContainer>
-                            <div className="flex items-center gap-3 text-[10px] text-gray-400 mt-1">
+                            <div className="flex items-center gap-3 text-[10px] text-pdd-text-secondary/50 mt-1">
                               <span>🔴 GMV</span><span>🟣 订单数</span>
                               <span className="ml-auto">峰值时段：{
                                 [...hourlyData].sort((a: any, b: any) => b.gmv - a.gmv)[0]?.hour || '--'
@@ -2463,7 +2700,7 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                             </div>
                           </>
                         ) : (
-                          <div className="h-[220px] flex items-center justify-center text-xs text-gray-400">
+                          <div className="h-[220px] flex items-center justify-center text-xs text-pdd-text-secondary/50">
                             <div className="text-center">
                               <Clock size={24} className="mx-auto mb-1 opacity-30" />
                               <span>按「时」切换查看24小时分布</span>
@@ -2476,11 +2713,11 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                     {/* 推广渠道 */}
                     {selectedStats.promoSourceDetails && selectedStats.promoSourceDetails.length > 0 && (
                       <div className="grid grid-cols-2 gap-4 mt-4">
-                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                          <h3 className="text-xs font-semibold text-gray-500 mb-3">推广渠道 ROI</h3>
+                        <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm p-4">
+                          <h3 className="text-xs font-semibold text-pdd-text-secondary mb-3">推广渠道 ROI</h3>
                           <div className="space-y-2.5">
                             {(() => {
-                              const grouped = selectedStats.promoSourceDetails.reduce((acc: Record<string, { cost: number; transaction: number; clicks: number; impressions: number }>, s) => {
+                              const grouped = selectedStats.promoSourceDetails.reduce((acc: Record<string, { cost: number; transaction: number; clicks: number; impressions: number }>, s: any) => {
                                 if (!acc[s.source]) acc[s.source] = { cost: 0, transaction: 0, clicks: 0, impressions: 0 };
                                 acc[s.source].cost += s.cost;
                                 acc[s.source].transaction += s.transaction;
@@ -2488,40 +2725,40 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                                 acc[s.source].impressions += s.impressions;
                                 return acc;
                               }, {});
-                              return Object.entries(grouped).map(([source, data], i) => {
+                              return Object.entries(grouped).map(([source, data]: [string, any], i) => {
                                 const roi = data.cost > 0 ? data.transaction / data.cost : 0;
                                 return (
                                   <div key={source} className="flex items-center gap-2 text-xs">
-                                    <span className="w-16 shrink-0 text-gray-600 font-medium">{source}</span>
-                                    <div className="flex-1 h-6 bg-gray-100 rounded-sm overflow-hidden">
+                                    <span className="w-16 shrink-0 text-pdd-text-secondary font-medium">{source}</span>
+                                    <div className="flex-1 h-6 bg-pdd-bg/80 rounded-sm overflow-hidden">
                                       <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(roi / 5 * 100, 100)}%` }}
                                         transition={{ duration: 0.4, delay: i * 0.04 }}
                                         className="h-full rounded-sm flex items-center text-[9px] text-white font-mono px-1.5"
-                                        style={{ backgroundColor: roi < 1 ? '#e02e24' : roi < 2 ? '#f97316' : roi < 3 ? '#eab308' : '#22c55e' }}>
+                                        style={{ backgroundColor: roi < 1 ? SEMANTIC.loss : roi < 2 ? '#f97316' : roi < 3 ? '#eab308' : '#22c55e' }}>
                                         {roi.toFixed(1)}
                                       </motion.div>
                                     </div>
-                                    <span className="w-24 text-right text-gray-400">花费 ¥{fmt(data.cost)}</span>
-                                    <span className="w-20 text-right text-gray-400">{fmt(data.clicks)} 点击</span>
+                                    <span className="w-24 text-right text-pdd-text-secondary/50">花费 ¥{fmt(data.cost)}</span>
+                                    <span className="w-20 text-right text-pdd-text-secondary/50">{fmt(data.clicks)} 点击</span>
                                   </div>
                                 );
                               });
                             })()}
                           </div>
                         </div>
-                        <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                          <h3 className="text-xs font-semibold text-gray-500 mb-3">流量来源分布</h3>
+                        <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm p-4">
+                          <h3 className="text-xs font-semibold text-pdd-text-secondary mb-3">流量来源分布</h3>
                           <ResponsiveContainer width="100%" height={180}>
                             <RechartsPieChart>
                               <Pie data={
                                 Object.entries(
-                                  selectedStats.promoSourceDetails.reduce((acc: Record<string, number>, s) => {
+                                  selectedStats.promoSourceDetails.reduce((acc: Record<string, number>, s: any) => {
                                     acc[s.source] = (acc[s.source] || 0) + s.impressions;
                                     return acc;
                                   }, {})
                                 ).map(([name, value]) => ({ name, value }))
                               } cx="50%" cy="50%" innerRadius={35} outerRadius={65} paddingAngle={3} dataKey="value">
-                                {Object.keys(selectedStats.promoSourceDetails.reduce((acc: Record<string, number>, s) => { acc[s.source] = 1; return acc; }, {})).map((_, i) => (
+                                {Object.keys(selectedStats.promoSourceDetails.reduce((acc: Record<string, number>, s: any) => { acc[s.source] = 1; return acc; }, {})).map((_, i) => (
                                   <Cell key={i} fill={COLORS[i % COLORS.length]} />
                                 ))}
                               </Pie>
@@ -2535,33 +2772,33 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
                   {/* ═══════════ ⑤ SKU — 深度对比表 ═══════════ */}
                   <section id="sec-sku">
-                    <h2 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+                    <h2 className="text-sm font-bold text-pdd-text mb-3 flex items-center gap-2">
                       <Layers size={14} color="#f97316" />🏷️ SKU 表现对比
                     </h2>
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                    <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm">
                       <SkuDeepTable matrix={skuDeepMatrix} />
                     </div>
                   </section>
 
                   {/* ═══════════ ⑥ 售后 — 退款分析 ═══════════ */}
                   <section id="sec-aftersale">
-                    <h2 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
+                    <h2 className="text-sm font-bold text-pdd-text mb-3 flex items-center gap-2">
                       <Shield size={14} color="#f97316" />🛡️ 售后 & 质量分析
                     </h2>
 
                     <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm">
                         <RefundReasonBarChart data={refundReasonAnalysis} storeData={storeRefundReasonAnalysis} />
                       </div>
-                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
+                      <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm">
                         <TimeWindowStackedBar data={finalRefundWindows.windows}
                           skippedNoPay={finalRefundWindows.skippedNoPay} skippedNoApply={finalRefundWindows.skippedNoApply} />
                       </div>
                     </div>
 
                     <div className="grid grid-cols-12 gap-4">
-                      <div className="col-span-7 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                        <h3 className="text-xs font-semibold text-gray-500 mb-2">退款日趋势 & 异常检测</h3>
+                      <div className="col-span-7 bg-pdd-card rounded-xl border border-pdd-border shadow-sm p-4">
+                        <h3 className="text-xs font-semibold text-pdd-text-secondary mb-2">退款日趋势 & 异常检测</h3>
                         {refundDailyTrend.trend.length > 0 ? (
                           <ResponsiveContainer width="100%" height={180}>
                             <ComposedChart data={refundDailyTrend.trend}>
@@ -2570,18 +2807,18 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                               <YAxis tick={{ fontSize: 9, fill: '#9ca3af' }} />
                               <Tooltip contentStyle={{ borderRadius: 10, border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)', fontSize: 11 }} />
                               <Bar dataKey="refundCount" fill="#f97316" opacity={0.4} name="退款笔数" radius={[3, 3, 0, 0]} />
-                              <Line type="monotone" dataKey="ma7Rate" stroke="#e02e24" strokeWidth={2} dot={false} name="7日均退款率%" />
+                              <Line type="monotone" dataKey="ma7Rate" stroke={SEMANTIC.loss} strokeWidth={2} dot={false} name="7日均退款率%" />
                             </ComposedChart>
                           </ResponsiveContainer>
-                        ) : <div className="h-[180px] flex items-center justify-center text-xs text-gray-400">暂无数据</div>}
+                        ) : <div className="h-[180px] flex items-center justify-center text-xs text-pdd-text-secondary/50">暂无数据</div>}
                         {refundDailyTrend.spikeDays.length > 0 && (
                           <div className="mt-2 text-xs text-red-500 flex items-center gap-1 bg-red-50 px-2 py-1 rounded">
                             <AlertTriangle size={10} /> 异常突增：{refundDailyTrend.spikeDays.slice(0, 5).join('、')}
                           </div>
                         )}
                       </div>
-                      <div className="col-span-5 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                        <h3 className="text-xs font-semibold text-gray-500 mb-2">价格带 × 销量分布</h3>
+                      <div className="col-span-5 bg-pdd-card rounded-xl border border-pdd-border shadow-sm p-4">
+                        <h3 className="text-xs font-semibold text-pdd-text-secondary mb-2">价格带 × 销量分布</h3>
                         {selectedStats.priceDistribution && selectedStats.priceDistribution.length > 0 ? (
                           <ResponsiveContainer width="100%" height={180}>
                             <BarChart data={selectedStats.priceDistribution}>
@@ -2592,30 +2829,30 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                               <Bar dataKey="count" fill="#0891b2" opacity={0.7} name="销量" radius={[4, 4, 0, 0]} />
                             </BarChart>
                           </ResponsiveContainer>
-                        ) : <div className="h-[180px] flex items-center justify-center text-xs text-gray-400">暂无</div>}
-                        <div className="text-[10px] text-gray-400 mt-1.5">
-                          均价 ¥{selectedStats.avgOrderValue.toFixed(0)}
-                          {selectedStats.priceDistribution?.length ? ` · 热销 ${selectedStats.priceDistribution.sort((a, b) => b.count - a.count)[0]?.range || ''}` : ''}
+                        ) : <div className="h-[180px] flex items-center justify-center text-xs text-pdd-text-secondary/50">暂无</div>}
+                        <div className="text-[10px] text-pdd-text-secondary/50 mt-1.5">
+                          均价 ¥{(selectedStats.avgOrderValue || 0).toFixed(0)}
+                          {selectedStats.priceDistribution?.length ? ` · 热销 ${selectedStats.priceDistribution.sort((a: any, b: any) => b.count - a.count)[0]?.range || ''}` : ''}
                         </div>
                       </div>
                     </div>
 
                     {/* 地域售后交叉 */}
-                    <div className="mt-4 bg-white rounded-xl border border-gray-200 shadow-sm">
+                    <div className="mt-4 bg-pdd-card rounded-xl border border-pdd-border shadow-sm">
                       <RegionHeatTable data={regionAfterSaleAnalysis} />
                     </div>
 
                     {/* 关联商品 */}
                     {selectedStats.relatedProducts?.length > 0 && (
-                      <div className="mt-4 bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                        <h3 className="text-xs font-semibold text-gray-500 mb-2 flex items-center gap-1.5">
+                      <div className="mt-4 bg-pdd-card rounded-xl border border-pdd-border shadow-sm p-4">
+                        <h3 className="text-xs font-semibold text-pdd-text-secondary mb-2 flex items-center gap-1.5">
                           <Layers size={12} color="#0891b2" />关联购买 TOP5
                         </h3>
                         <div className="grid grid-cols-5 gap-2">
-                          {selectedStats.relatedProducts.slice(0, 5).map((rp, i) => (
-                            <div key={i} className="text-center p-2 bg-gray-50 rounded-lg">
-                              <div className="text-xs text-gray-600 truncate">{rp.productName || rp.productId}</div>
-                              <div className="text-[10px] text-gray-400">共购 {rp.coOccurrenceCount} 次</div>
+                          {selectedStats.relatedProducts.slice(0, 5).map((rp: any, i: number) => (
+                            <div key={i} className="text-center p-2 bg-pdd-bg/50 rounded-lg">
+                              <div className="text-xs text-pdd-text-secondary truncate">{rp.productName || rp.productId}</div>
+                              <div className="text-[10px] text-pdd-text-secondary/50">共购 {rp.coOccurrenceCount} 次</div>
                             </div>
                           ))}
                         </div>
@@ -2623,41 +2860,45 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                     )}
                   </section>
 
-                  {/* ═══════════ ⑦ 诊断 — 健康度 + 建议 ═══════════ */}
-                  <section id="sec-diagnosis">
-                    <h2 className="text-sm font-bold text-gray-800 mb-3 flex items-center gap-2">
-                      <Gauge size={14} color="#7c3aed" />🩺 诊断 & 建议
+                  {/* ═══════════ ⑦ 操作时间线 Operation Timeline ═══════════ */}
+                  <section id="sec-timeline">
+                    <h2 className="text-sm font-bold text-pdd-text mb-3 flex items-center gap-2">
+                      <Clock size={14} color="#0891b2" />📋 操作时间线
+                      <span className="text-[10px] font-normal text-pdd-text-secondary/50">商品全生命周期事件回溯</span>
                     </h2>
 
-                    <div className="grid grid-cols-2 gap-4 mb-4">
-                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm">
-                        <HealthScoreGauge score={healthScore} allProductStats={productStats} comparisonMode={comparisonMode} />
-                      </div>
-                      <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4 flex flex-col justify-center">
-                        <h3 className="text-xs font-semibold text-gray-500 mb-3">售后质量速览</h3>
-                        <div className="space-y-2.5">
-                          {[
-                            { label: '退款率', val: fmtPct(selectedStats.refundRate), warn: selectedStats.refundRate > 10, target: '<10%' },
-                            { label: '售后率', val: fmtPct(selectedStats.afterSaleRate), warn: selectedStats.afterSaleRate > 20, target: '<20%' },
-                            { label: '退款金额', val: fmtMoney(selectedStats.refund || 0), warn: (selectedStats.refund || 0) > selectedStats.gmv * 0.1, target: '' },
-                            { label: '异常天数', val: `${refundDailyTrend.spikeDays.length}天`, warn: refundDailyTrend.spikeDays.length > 0, target: '0天' },
-                            { label: '异常地域', val: `${regionAfterSaleAnalysis.filter(r => r.isAnomaly).length}个`, warn: regionAfterSaleAnalysis.filter(r => r.isAnomaly).length > 0, target: '0个' },
-                          ].map((item, i) => (
-                            <div key={i} className="flex items-center justify-between text-xs">
-                              <span className="text-gray-500">{item.label}</span>
-                              <div className="flex items-center gap-2">
-                                <span className={`font-mono font-semibold ${item.warn ? 'text-red-500' : 'text-green-600'}`}>{item.val}</span>
-                                {item.target && <span className="text-gray-300">/ {item.target}</span>}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
+                    <OperationTimeline
+                      productOrders={productOrders}
+                      productAfterSales={timeFilteredAfterSales.filter(r => String(findField(r, '商品ID', '商品编号') || '') === selectedId)}
+                      financialRecords={currentDisplayData?.financialRecords || []}
+                      selectedStats={selectedStats}
+                    />
+                  </section>
+
+                  {/* ═══════════ ⑧ 订单追溯 Order Traceability ═══════════ */}
+                  <section id="sec-traceability">
+                    <h2 className="text-sm font-bold text-pdd-text mb-3 flex items-center gap-2">
+                      <Search size={14} color="#16a34a" />🔍 订单追溯
+                      <span className="text-[10px] font-normal text-pdd-text-secondary/50">从商品到订单到明细的完整追溯</span>
+                    </h2>
+
+                    <OrderTraceability
+                      productOrders={productOrders}
+                      productAfterSales={timeFilteredAfterSales.filter(r => String(findField(r, '商品ID', '商品编号') || '') === selectedId)}
+                      financialRecords={currentDisplayData?.financialRecords || []}
+                      selectedStats={selectedStats}
+                    />
+                  </section>
+
+                  {/* ═══════════ ⑨ 诊断 — 建议 ═══════════ */}
+                  <section id="sec-diagnosis">
+                    <h2 className="text-sm font-bold text-pdd-text mb-3 flex items-center gap-2">
+                      💡 诊断 & 建议
+                    </h2>
 
                     {/* 诊断建议列表 */}
-                    <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-4">
-                      <h3 className="text-xs font-semibold text-gray-500 mb-3">运营诊断建议 · 点击展开详情</h3>
+                    <div className="bg-pdd-card rounded-xl border border-pdd-border shadow-sm p-4">
+                      <h3 className="text-xs font-semibold text-pdd-text-secondary mb-3">运营诊断建议 · 点击展开详情</h3>
                       {diagnoses.length > 0 ? (
                         <div className="space-y-2">
                           {diagnoses.map((d, i) => {
@@ -2672,34 +2913,34 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                                     <div className="flex items-center gap-2 mb-0.5">
                                       <span className="text-xs font-semibold" style={{ color: d.color }}>{d.title}</span>
                                       <span className="px-1.5 py-0.5 rounded text-[10px] font-medium"
-                                        style={{ color: d.priority === 'urgent' ? '#e02e24' : d.priority === 'important' ? '#f97316' : '#6b7280',
-                                          backgroundColor: d.priority === 'urgent' ? '#fef2f2' : d.priority === 'important' ? '#fff7ed' : '#f9fafb' }}>
+                                        style={{ color: d.priority === 'urgent' ? SEMANTIC.loss : d.priority === 'important' ? '#f97316' : SEMANTIC.neutral,
+                                          backgroundColor: d.priority === 'urgent' ? '#fef2f2' : d.priority === 'important' ? '#fff7ed' : '#F3F4F6' }}>
                                         {{ urgent: '紧急', important: '重要', reference: '参考' }[d.priority]}
                                       </span>
                                     </div>
-                                    <p className="text-xs text-gray-600 leading-relaxed">{d.description}</p>
+                                    <p className="text-xs text-pdd-text-secondary leading-relaxed">{d.description}</p>
                                   </div>
-                                  <div className="shrink-0 text-gray-400 mt-0.5">
+                                  <div className="shrink-0 text-pdd-text-secondary/50 mt-0.5">
                                     {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                                   </div>
                                 </div>
                                 {isExpanded && (
                                   <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }}
-                                    className="mx-3 mb-2 px-3 py-2.5 bg-white/60 rounded-b-lg border border-t-0 border-gray-100 overflow-hidden">
+                                    className="mx-3 mb-2 px-3 py-2.5 bg-pdd-card/60 rounded-b-lg border border-t-0 border-pdd-border overflow-hidden">
                                     {d.title.includes('退款率偏高') && (
                                       <div className="space-y-2 text-xs">
                                         <div className="flex items-center gap-4">
-                                          <span className="text-gray-500">退款率：<span className="font-mono font-semibold text-red-500">{fmtPct(selectedStats.refundRate)}</span></span>
-                                          <span className="text-gray-500">全店均：<span className="font-mono">{storeBenchmark ? fmtPct(storeBenchmark.refundRate.avg) : '--'}</span></span>
-                                          <span className="text-gray-500">退款额：<span className="font-mono text-red-500">{fmtMoney(selectedStats.refund || 0)}</span></span>
+                                          <span className="text-pdd-text-secondary">退款率：<span className="font-mono font-semibold text-red-500">{fmtPct(selectedStats.refundRate)}</span></span>
+                                          <span className="text-pdd-text-secondary">全店均：<span className="font-mono">{storeBenchmark ? fmtPct(storeBenchmark.refundRate.avg) : '--'}</span></span>
+                                          <span className="text-pdd-text-secondary">退款额：<span className="font-mono text-red-500">{fmtMoney(selectedStats.refund || 0)}</span></span>
                                         </div>
-                                        <div className="text-gray-500">
+                                        <div className="text-pdd-text-secondary">
                                           受影响SKU：{skuDeepMatrix.filter(s => s.isHighRefund).map(s => (
                                             <span key={s.skuId} className="inline-block ml-1 px-1.5 py-0.5 bg-red-50 text-red-600 rounded font-mono">{s.skuId}({s.refundRate.toFixed(0)}%)</span>
                                           ))}
-                                          {skuDeepMatrix.filter(s => s.isHighRefund).length === 0 && <span className="text-gray-400">无异常</span>}
+                                          {skuDeepMatrix.filter(s => s.isHighRefund).length === 0 && <span className="text-pdd-text-secondary/50">无异常</span>}
                                         </div>
-                                        <div className="text-gray-500">
+                                        <div className="text-pdd-text-secondary">
                                           主原因：{refundReasonAnalysis.slice(0, 3).map((r, ri) => (
                                             <span key={ri} className="inline-block ml-1 px-1.5 py-0.5 bg-orange-50 text-orange-600 rounded">{r.reason}({r.ratio.toFixed(0)}%)</span>
                                           ))}
@@ -2708,14 +2949,14 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                                     )}
                                     {d.title.includes('SKU集中度过高') && (
                                       <div className="space-y-1 text-xs">
-                                        <div className="text-gray-500 mb-1">各SKU销量占比：</div>
+                                        <div className="text-pdd-text-secondary mb-1">各SKU销量占比：</div>
                                         {skuDeepMatrix.slice(0, 5).map(s => (
                                           <div key={s.skuId} className="flex items-center gap-2">
-                                            <span className="w-20 truncate font-mono text-gray-600">{s.skuId}</span>
-                                            <div className="flex-1 h-4 bg-gray-100 rounded-sm overflow-hidden">
+                                            <span className="w-20 truncate font-mono text-pdd-text-secondary">{s.skuId}</span>
+                                            <div className="flex-1 h-4 bg-pdd-bg/80 rounded-sm overflow-hidden">
                                               <div className="h-full rounded-sm bg-purple-400" style={{ width: `${Math.min(s.salesRatio, 100)}%`, opacity: 0.7 }} />
                                             </div>
-                                            <span className="font-mono w-12 text-right">{s.salesRatio.toFixed(0)}%</span>
+                                            <span className="font-mono w-12 text-right">{(s.salesRatio||0).toFixed(0)}%</span>
                                           </div>
                                         ))}
                                       </div>
@@ -2723,13 +2964,13 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                                     {d.title.includes('推广ROI偏低') && (
                                       <div className="space-y-2 text-xs">
                                         <div className="flex items-center gap-4">
-                                          <span className="text-gray-500">ROI：<span className="font-mono font-semibold text-red-500">{selectedStats.roi > 0 ? selectedStats.roi.toFixed(2) : '--'}</span></span>
-                                          <span className="text-gray-500">全店均：<span className="font-mono">{storeBenchmark ? storeBenchmark.roi.avg.toFixed(2) : '--'}</span></span>
-                                          <span className="text-gray-500">花费：<span className="font-mono">{fmtMoney(selectedStats.promoCost || 0)}</span></span>
+                                          <span className="text-pdd-text-secondary">ROI：<span className="font-mono font-semibold text-red-500">{selectedStats.roi > 0 ? selectedStats.roi.toFixed(2) : '--'}</span></span>
+                                          <span className="text-pdd-text-secondary">全店均：<span className="font-mono">{storeBenchmark ? storeBenchmark.roi.avg.toFixed(2) : '--'}</span></span>
+                                          <span className="text-pdd-text-secondary">花费：<span className="font-mono">{fmtMoney(selectedStats.promoCost || 0)}</span></span>
                                         </div>
                                         {selectedStats.promoSourceDetails?.length > 0 && (
-                                          <div className="text-gray-500">
-                                            渠道ROI：{selectedStats.promoSourceDetails.map((src, si) => {
+                                          <div className="text-pdd-text-secondary">
+                                            渠道ROI：{selectedStats.promoSourceDetails.map((src: any, si: number) => {
                                               const roi = src.cost > 0 ? src.transaction / src.cost : 0;
                                               return <span key={si} className={`inline-block ml-1 px-1.5 py-0.5 rounded font-mono ${roi < 1 ? 'bg-red-50 text-red-600' : roi < 2 ? 'bg-orange-50 text-orange-600' : 'bg-green-50 text-green-600'}`}>{src.source}:{roi.toFixed(1)}</span>;
                                             })}
@@ -2740,29 +2981,29 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                                     {d.title.includes('库存积压') && (
                                       <div className="space-y-2 text-xs">
                                         <div className="flex items-center gap-4">
-                                          <span className="text-gray-500">周转：<span className="font-mono font-semibold text-red-500">{selectedStats.turnoverDays}天</span></span>
-                                          <span className="text-gray-500">全店均：<span className="font-mono">{storeBenchmark ? storeBenchmark.turnoverDays.avg.toFixed(0) + '天' : '--'}</span></span>
-                                          <span className="text-gray-500">安全线：30天</span>
+                                          <span className="text-pdd-text-secondary">周转：<span className="font-mono font-semibold text-red-500">{selectedStats.turnoverDays}天</span></span>
+                                          <span className="text-pdd-text-secondary">全店均：<span className="font-mono">{storeBenchmark ? storeBenchmark.turnoverDays.avg.toFixed(0) + '天' : '--'}</span></span>
+                                          <span className="text-pdd-text-secondary">安全线：30天</span>
                                         </div>
                                       </div>
                                     )}
                                     {d.title.includes('GMV显著下降') && (
                                       <div className="space-y-2 text-xs">
                                         <div className="flex items-center gap-4">
-                                          <span className="text-gray-500">GMV：<span className="font-mono font-semibold">{fmtMoney(selectedStats.gmv)}</span></span>
-                                          {prevStats && <span className="text-gray-500">上周期：<span className="font-mono">{fmtMoney(prevStats.gmv)}</span></span>}
+                                          <span className="text-pdd-text-secondary">GMV：<span className="font-mono font-semibold">{fmtMoney(selectedStats.gmv)}</span></span>
+                                          {prevStats && <span className="text-pdd-text-secondary">上周期：<span className="font-mono">{fmtMoney(prevStats.gmv)}</span></span>}
                                           {prevStats && prevStats.gmv > 0 && (
                                             <span className="font-mono text-red-500">↓ {Math.abs(((selectedStats.gmv - prevStats.gmv) / prevStats.gmv) * 100).toFixed(1)}%</span>
                                           )}
                                         </div>
-                                        <div className="text-gray-500">
+                                        <div className="text-pdd-text-secondary">
                                           访客{fmt(selectedStats.promoImpressions || 0)} → 点击{fmt(selectedStats.promoClicks || 0)}(CTR {fmtPct(selectedStats.ctr)}) → 成交{(selectedStats.orders || 0)}单(CVR {fmtPct(selectedStats.cvr)}) | 客单价 {fmtMoney(selectedStats.avgOrderValue || 0)}
                                         </div>
                                       </div>
                                     )}
                                     {d.title.includes('利润率过低') && (
                                       <div className="space-y-2 text-xs">
-                                        <div className="text-gray-500">
+                                        <div className="text-pdd-text-secondary">
                                           利润率：<span className="font-mono font-semibold text-red-500">{fmtPct(selectedStats.profitRate)}</span>
                                           <span className="ml-2">全店均：<span className="font-mono">{storeBenchmark ? fmtPct(storeBenchmark.profitRate.avg) : '--'}</span></span>
                                         </div>
@@ -2770,12 +3011,12 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                                     )}
                                     {d.title.includes('快速退款占比偏高') && (
                                       <div className="space-y-1 text-xs">
-                                        <div className="text-gray-500">退款时间分布：</div>
-                                        {finalRefundWindows.windows.map((w, wi) => (
+                                        <div className="text-pdd-text-secondary">退款时间分布：</div>
+                                        {finalRefundWindows.windows.map((w: any, wi: number) => (
                                           <div key={wi} className="flex items-center gap-2">
-                                            <span className="w-16 text-gray-500">{w.label}</span>
-                                            <div className="flex-1 h-4 bg-gray-100 rounded-sm overflow-hidden">
-                                              <div className={`h-full rounded-sm ${wi === 0 ? 'bg-red-400' : 'bg-gray-300'}`}
+                                            <span className="w-16 text-pdd-text-secondary">{w.label}</span>
+                                            <div className="flex-1 h-4 bg-pdd-bg/80 rounded-sm overflow-hidden">
+                                              <div className={`h-full rounded-sm ${wi === 0 ? 'bg-red-400' : 'bg-pdd-text-secondary/30'}`}
                                                 style={{ width: `${Math.max((w as any).ratio || 0, 1)}%`, opacity: 0.7 }} />
                                             </div>
                                             <span className="font-mono w-12 text-right">{w.count}笔</span>
@@ -2789,16 +3030,16 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                                         {regionAfterSaleAnalysis.filter(r => r.isAnomaly).map((r, ri) => (
                                           <div key={ri} className="flex items-center gap-3">
                                             <span className="w-16 font-semibold text-red-500">{r.province}</span>
-                                            <span className="text-gray-500">售后率 <span className="font-mono text-red-500">{r.afterSaleRate.toFixed(1)}%</span></span>
-                                            <span className="text-gray-500">退款 <span className="font-mono">{fmtMoney(r.refundAmount)}</span></span>
+                                            <span className="text-pdd-text-secondary">售后率 <span className="font-mono text-red-500">{r.afterSaleRate.toFixed(1)}%</span></span>
+                                            <span className="text-pdd-text-secondary">退款 <span className="font-mono">{fmtMoney(r.refundAmount)}</span></span>
                                           </div>
                                         ))}
-                                        {regionAfterSaleAnalysis.filter(r => r.isAnomaly).length === 0 && <span className="text-gray-400">无异常</span>}
+                                        {regionAfterSaleAnalysis.filter(r => r.isAnomaly).length === 0 && <span className="text-pdd-text-secondary/50">无异常</span>}
                                       </div>
                                     )}
                                     {d.title.includes('折扣依赖') && (
                                       <div className="space-y-2 text-xs">
-                                        <div className="text-gray-500">
+                                        <div className="text-pdd-text-secondary">
                                           折扣占比：<span className="font-mono font-semibold text-orange-500">{fmtPct(selectedStats.discountRatio)}</span>
                                           <span className="ml-2">折扣额：<span className="font-mono">{fmtMoney(selectedStats.discount || 0)}</span></span>
                                         </div>
@@ -2806,10 +3047,10 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
                                     )}
                                     {d.title.includes('关联销售') && selectedStats.relatedProducts && (
                                       <div className="space-y-1 text-xs">
-                                        {selectedStats.relatedProducts.slice(0, 3).map((rp, ri) => (
+                                        {selectedStats.relatedProducts.slice(0, 3).map((rp: any, ri: number) => (
                                           <div key={ri} className="flex items-center gap-2">
-                                            <span className="text-gray-600 truncate max-w-[150px]">{rp.productName || rp.productId}</span>
-                                            <span className="text-gray-400">共购 {rp.coOccurrenceCount} 次</span>
+                                            <span className="text-pdd-text-secondary truncate max-w-[150px]">{rp.productName || rp.productId}</span>
+                                            <span className="text-pdd-text-secondary/50">共购 {rp.coOccurrenceCount} 次</span>
                                           </div>
                                         ))}
                                       </div>
@@ -2833,34 +3074,41 @@ export default function ProductDeepAnalysis({ isOpen, onClose, initialProductId,
 
             {/* 右侧导航锚点 */}
             {selectedStats && (
-              <div className="shrink-0 w-11 bg-white border-l border-gray-200 flex flex-col items-center py-3 gap-1">
-                {sections.map(s => (
-                  <button key={s.id} onClick={() => scrollTo(s.id)}
-                    className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors tooltip-left"
-                    title={s.label}>
-                    {s.icon}
-                  </button>
-                ))}
+              <div className="shrink-0 w-11 bg-pdd-card border-l border-pdd-border flex flex-col items-center py-3 gap-1">
+                {SECTIONS.map(s => {
+                  const isActive = activeSection === s.id;
+                  return (
+                    <button key={s.id} onClick={() => scrollTo(s.id)}
+                      className={`p-1.5 rounded-lg transition-colors tooltip-left ${
+                        isActive
+                          ? 'bg-pdd-primary/10 text-pdd-primary shadow-sm'
+                          : 'text-pdd-text-secondary/50 hover:text-pdd-text hover:bg-pdd-bg/80'
+                      }`}
+                      title={s.label}>
+                      {s.icon}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
 
           {/* 底部状态栏 */}
-          <div className="shrink-0 h-7 bg-white border-t border-gray-200 flex items-center justify-between px-4 text-gray-400" style={{ fontSize: '9px' }}>
+          <div className="shrink-0 h-7 bg-pdd-card border-t border-pdd-border flex items-center justify-between px-4 text-pdd-text-secondary/50" style={{ fontSize: '9px' }}>
             <span>数据更新：{selectedStats?.lastOrderDate || '--'}</span>
             <span>
               数据质量：
               <span className={selectedStats?.hasOrderData ? 'text-green-500' : 'text-red-400'}>订单{selectedStats?.hasOrderData ? '✓' : '✗'}</span>
               {' · '}
-              <span className={selectedStats?.hasPromoData ? 'text-green-500' : 'text-gray-300'}>推广{selectedStats?.hasPromoData ? '✓' : '✗'}</span>
+              <span className={selectedStats?.hasPromoData ? 'text-green-500' : 'text-pdd-text-secondary/50'}>推广{selectedStats?.hasPromoData ? '✓' : '✗'}</span>
               {' · '}
-              <span className={timeFilteredAfterSales.length > 0 ? 'text-green-500' : 'text-gray-300'}>售后{timeFilteredAfterSales.length > 0 ? '✓' : '✗'}</span>
+              <span className={timeFilteredAfterSales.length > 0 ? 'text-green-500' : 'text-pdd-text-secondary/50'}>售后{timeFilteredAfterSales.length > 0 ? '✓' : '✗'}</span>
               {' · '}
-              <span className={selectedStats?.profitConfidence === 'high' ? 'text-green-500' : selectedStats?.profitConfidence === 'medium' ? 'text-yellow-500' : 'text-gray-300'}>
-                利润置信度：{{ high: '高', medium: '中', low: '低' }[selectedStats?.profitConfidence || 'low']}
+              <span className={selectedStats?.profitConfidence === 'high' ? 'text-green-500' : selectedStats?.profitConfidence === 'medium' ? 'text-yellow-500' : 'text-pdd-text-secondary/50'}>
+                利润置信度：{{ high: '高', medium: '中', low: '低' }[(selectedStats?.profitConfidence || 'low') as 'high' | 'medium' | 'low']}
               </span>
             </span>
-            <span>{selectedStats?.activeDays || 0}天活跃 · {timeFilteredAfterSales.filter(r => String(r['商品ID'] || r['商品id'] || '') === selectedId).length}条售后</span>
+            <span>{selectedStats?.activeDays || 0}天活跃 · {timeFilteredAfterSales.filter(r => String(findField(r, '商品ID', '商品编号') || '') === selectedId).length}条售后</span>
           </div>
         </motion.div>
       </motion.div>

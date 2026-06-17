@@ -3,6 +3,7 @@
  */
 import React from 'react';
 import { TrendingUp, TrendingDown } from 'lucide-react';
+import { SEMANTIC, CHART } from '../../ui/tokens/colors';
 
 interface RankItem {
   id: string;
@@ -53,7 +54,7 @@ export default function MiniRanking({ title, items, valueFormat, direction, maxI
               <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-bold flex-shrink-0 ${
                 i === 0 ? (isUp ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700')
                 : i === 1 ? 'bg-orange-50 text-orange-600'
-                : 'bg-gray-100 text-gray-500'
+                : 'bg-pdd-bg/50 text-pdd-text-secondary/50'
               }`}>{i + 1}</span>
               <span className="truncate text-pdd-text">{item.label}</span>
             </div>

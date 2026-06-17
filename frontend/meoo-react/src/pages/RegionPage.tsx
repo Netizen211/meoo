@@ -5,6 +5,7 @@ import { MapPin, TrendingUp, DollarSign, Lock, Mountain, Building2, Flag, ArrowU
 import { useData, useAuth } from '../App';
 import { findField } from '../utils';
 import TimeFilter, { useTimeFilter, safeFloat, filterByTimeRange, getCompareOrders, getAllDateGroups, changePct } from '../components/TimeFilter';
+import FilterToolbar from '../components/FilterToolbar';
 import ChinaMap from '../components/ChinaMap';
 import { chartColorArray } from '../utils/colorMap';
 import { normalizeProvinceName } from '../utils/chinaMapData';
@@ -25,7 +26,7 @@ export default function RegionPage() {
   const { currentDisplayData } = useData();
   const { isPaid } = useAuth();
   const tf = useTimeFilter('all', 'day');
-  const { timeRange, granularity, compareEnabled, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
+  const { timeRange, granularity, compareEnabled, useNaturalDate, setUseNaturalDate, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
   const [selectedProvinces, setSelectedProvinces] = useState<string[]>([]);
   const [expandedCity, setExpandedCity] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'penetration' | 'logistics' | 'growth'>('overview');
@@ -36,7 +37,7 @@ export default function RegionPage() {
   }, [currentDisplayData]);
 
   const allDates = useMemo(() => getAllDateGroups(validOrders), [validOrders]);
-  const filteredOrders = useMemo(() => filterByTimeRange(validOrders, allDates, timeRange, customStart, customEnd, quickRange), [validOrders, allDates, timeRange, customStart, customEnd, quickRange]);
+  const filteredOrders = useMemo(() => filterByTimeRange(validOrders, allDates, timeRange, customStart, customEnd, quickRange, useNaturalDate), [validOrders, allDates, timeRange, customStart, customEnd, quickRange]);
   const compareOrders = useMemo(() => compareEnabled ? getCompareOrders(validOrders, allDates, timeRange, compareStart, compareEnd, customStart, customEnd, quickRange) : [], [validOrders, allDates, timeRange, compareStart, compareEnd, customStart, customEnd, quickRange, compareEnabled]);
 
   const noData = filteredOrders.length === 0;
@@ -254,7 +255,15 @@ export default function RegionPage() {
 
   return (
     <div className="p-4 space-y-3">
-      <TimeFilter state={tf} />
+      <FilterToolbar tf={tf} />
+        {timeRange !== 'all' && timeRange !== 'custom' && (
+          <div className="flex items-center rounded border border-pdd-border overflow-hidden text-[11px]">
+            <button onClick={() => setUseNaturalDate(false)}
+              className={`px-2 py-1 transition-colors ${!useNaturalDate ? 'bg-pdd-primary text-white' : 'text-pdd-text-secondary hover:text-pdd-text'}`}>按订单时间</button>
+            <button onClick={() => setUseNaturalDate(true)}
+              className={`px-2 py-1 transition-colors ${useNaturalDate ? 'bg-pdd-primary text-white' : 'text-pdd-text-secondary hover:text-pdd-text'}`}>按当前时间</button>
+          </div>
+        )}
 
       {/* Tab 导航 */}
       <div className="flex gap-2 border-b border-[var(--pdd-border)] pb-2">

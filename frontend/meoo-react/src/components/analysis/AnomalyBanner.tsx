@@ -28,7 +28,7 @@ export default function AnomalyBanner({ anomalies }: Props) {
             {a.direction === 'up' ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
             <span className="font-mono">{a.date}</span>
             <span>{a.metric}: {typeof a.value === 'number' ? (isNaN(a.value) ? '--' : (a.value < 100 ? a.value.toFixed(1) + '%' : a.value.toFixed(0))) : '--'}</span>
-            <span className="text-pdd-gray-400">(Z={a.zScore})</span>
+            <span className="text-pdd-text-secondary/50">(Z={a.zScore})</span>
           </div>
         ))}
       </div>
