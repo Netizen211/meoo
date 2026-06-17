@@ -108,6 +108,7 @@ export default function TimeWindowPage() {
   const [compareSettings, setCompareSettings] = useState({ beforeAfterDays: 7, selectedEventType: "", samePeriodOffset: "lastMonth" });
   const [sliceDimension, setSliceDimension] = useState<string>("hour");
   const [showEventOverlay, setShowEventOverlay] = useState(true);
+  const [viewMode, setViewMode] = useState<string>("day");
 
   // Finance tab state
   const [financeTab, setFinanceTab] = useState<string>("overview");

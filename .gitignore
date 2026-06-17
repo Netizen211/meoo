@@ -27,9 +27,30 @@ index_fix.html
 
 # 大文件 / 数据文件
 *.xlsx
+*.xls
 *.csv
+*.docx
+*.png
+*.jpg
+*.gif
+*.ico
 mysql-data/
 test-results/
+
+# 一次性生成脚本
+_*_gen.py
+_tmp_*
+match_script.js
+meoo_nginx_b64.txt
+_*.js
+write_*.mjs
+gen_*.py
+gen_*.js
+build_*.py
+simple_test.py
+test_*.py
+_*_part*.py
+_*_part*.txt
 
 # 一次性生成脚本
 _*_gen.py
