@@ -87,7 +87,7 @@ function getMonthDays(year: number, month: number): Date[] {
 
 const DAYS_OF_WEEK = ["一", "二", "三", "四", "五", "六", "日"];
 
-export default function TimeWindowPage() {
+function TimeWindowPage() {
   const { getStoreData } = useData();
   const { currentStore } = useStore();
   const storeId = currentStore?.id || '';
@@ -310,13 +310,19 @@ export default function TimeWindowPage() {
   }, [orders]);
 
 
-  // 全局错误兜底
-  const [renderError, setRenderError] = useState<string | null>(null);
-  useEffect(() => {
-    const handler = (ev: ErrorEvent) => { setRenderError(ev.error?.message || '未知错误'); };
-    window.addEventListener('error', handler);
-    return () => window.removeEventListener('error', handler);
-  }, []);
+  // ===== View State =====
+  const [marketView, setMarketView] = useState<string>("fingerprint");
+  const [anomalyFilter, setAnomalyFilter] = useState<string>("all");
+  const todayStr = formatDate(new Date());
+
+  // ===== RENDER HELPERS =====
+  const fmt = (n: number) => n >= 10000 ? (n/10000).toFixed(1)+"万" : n.toFixed(0);
+  const fmtMoney = (n: number) => n >= 10000 ? "¥"+(n/10000).toFixed(1)+"万" : "¥"+n.toFixed(0);
+  const alertConfigs: Record<string, {icon:string,label:string,color:string,bg:string}> = {
+    success: {icon:"🟢", label:"正常", color:"text-green-700", bg:"bg-green-50"},
+    warning: {icon:"🟡", label:"注意", color:"text-amber-700", bg:"bg-amber-50"},
+    danger: {icon:"🔴", label:"异常", color:"text-red-700", bg:"bg-red-50"},
+  };
 
   if (renderError) {
     return (
@@ -331,12 +337,11 @@ export default function TimeWindowPage() {
     );
   }
 
-  // No data state
   if (!orders.length) {
     return (
       <div className="p-4 max-w-6xl mx-auto">
         <div className="pdd-card p-8 text-center">
-          <div className="text-4xl mb-2">{'\u{1f4c5}'}</div>
+          <div className="text-4xl mb-2">{String.fromCodePoint(0x1f4c5)}</div>
           <h3 className="text-base font-bold mb-1">时间窗口</h3>
           <p className="text-xs text-pdd-text-secondary">请先上传订单数据以查看时间窗口分析</p>
         </div>
@@ -346,812 +351,492 @@ export default function TimeWindowPage() {
 
   return (
     <div className="p-4 max-w-6xl mx-auto space-y-3">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-sm font-bold flex items-center gap-1.5"><Calendar size={16} className="text-pdd-primary" />时间窗口</h2>
-      </div>
-
-      {/* Tab bar - bg-pdd-card rounded-xl border p-1 style */}
-      <div className="bg-pdd-card rounded-xl border border-pdd-border p-1 overflow-x-auto">
-        <div className="flex gap-0.5">
-          {TABS.map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.key;
-            return (
-              <button key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap ${
-                  isActive
-                    ? 'bg-pdd-primary text-white shadow-sm'
-                    : 'text-pdd-text-secondary hover:text-pdd-text hover:bg-pdd-bg'
-                }`}
-              ><Icon size={14} />{tab.label}</button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ===== TAB 1: Timeline View ===== */}
-      {activeTab === "timeline" && (
-        <div className="space-y-3">
-
-      {/* ===== Event Filter Bar ===== */}
-      <div className="pdd-card p-2.5">
-        <div className="flex items-center gap-1 flex-wrap">
-          <span className="text-[10px] text-pdd-text-secondary mr-1"><Filter size={11} className="inline mr-0.5" />事件筛选</span>
-          {EVENT_TYPES.map(et => (
-            <button key={et.key} onClick={() => toggleEvent(et.key)}
-              className={"flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full border transition-colors " +
-                (activeEvents.has(et.key) ? "border-transparent text-white" : "border-pdd-border text-pdd-text-secondary")}
-              style={{ backgroundColor: activeEvents.has(et.key) ? et.color : 'transparent' }}
-            ><span>{et.emoji}</span> {et.label}</button>
+        <div className="flex items-center gap-1">
+          {["7","30","90"].map(r => (
+            <button key={r} onClick={() => setTimeRange(r)}
+              className={"text-[10px] px-2 py-1 rounded " + (timeRange===r ? "bg-pdd-primary text-white" : "bg-pdd-bg text-pdd-text-secondary")}
+            >近{r}天</button>
           ))}
         </div>
       </div>
-
-      {/* ===== Chart + Calendar Grid ===== */}
-      <div className="grid grid-cols-5 gap-3">
-        {/* Left: Line Chart (4 cols) */}
-        <div className="col-span-5 lg:col-span-3 pdd-card p-3">
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-semibold"><TrendingUp size={13} className="inline mr-1" />销售趋势</h3>
-            <div className="flex items-center gap-1">
-              {[{key:'day',label:'日'},{key:'week',label:'周'},{key:'month',label:'月'}].map(v => (
-                <button key={v.key} onClick={() => setViewMode(v.key as any)}
-                  className={"text-[10px] px-1.5 py-0.5 rounded " + (viewMode===v.key ? "bg-pdd-primary text-white" : "bg-pdd-bg text-pdd-text-secondary")}
-                >{v.label}</button>
-              ))}
-            </div>
-          </div>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-gray-200)" />
-              <XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={(v:string)=>{const p=v.split('-');return p[1]+'/'+p[2]}} interval="preserveStartEnd" />
-              <YAxis yAxisId="left" tick={{fontSize:10}} />
-              <YAxis yAxisId="right" orientation="right" tick={{fontSize:10}} />
-              <Tooltip contentStyle={{fontSize:'12px'}} />
-              <Legend wrapperStyle={{fontSize:'11px'}} />
-              <Line yAxisId="left" type="monotone" dataKey="gmv" name="GMV" stroke="#1F6BFF" strokeWidth={2} dot={false} />
-              <Line yAxisId="left" type="monotone" dataKey="sales" name="销量(件)" stroke="#17B26A" strokeWidth={1.5} dot={false} />
-              <Line yAxisId="right" type="monotone" dataKey="refundRate" name="退款率(%)" stroke="#F04438" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-              {filteredEvents.map((ev, i) => {
-                const idx = chartData.findIndex(d => d.date === ev.date);
-                if (idx < 0) return null;
-                return <ReferenceLine key={i} x={ev.date} yAxisId="left" stroke={eventColorMap[ev.type] || '#999'} strokeDasharray="3 2" label={{value:ev.emoji, position:'top', fontSize:14}} />;
-              })}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Right: Calendar Grid (1 col) */}
-        <div className="col-span-5 lg:col-span-2 pdd-card p-3">
-          <div className="flex items-center justify-between mb-2">
-            <button onClick={() => { if (currentMonth === 0) { setCurrentYear(y => y-1); setCurrentMonth(11); } else { setCurrentMonth(m => m-1); } }} className="p-0.5 rounded hover:bg-pdd-bg"><ChevronLeft size={14} /></button>
-            <span className="text-xs font-semibold">{currentYear}年{currentMonth+1}月</span>
-            <button onClick={() => { if (currentMonth === 11) { setCurrentYear(y => y+1); setCurrentMonth(0); } else { setCurrentMonth(m => m+1); } }} className="p-0.5 rounded hover:bg-pdd-bg"><ChevronRight size={14} /></button>
-          </div>
-          <div className="grid grid-cols-7 gap-0">
-            {DAYS_OF_WEEK.map(d => <div key={d} className="text-center text-[10px] text-pdd-text-secondary py-1">{d}</div>)}
-            {monthDays.map((day, i) => {
-              const dateStr = formatDate(day);
-              const dd = dailyData.get(dateStr);
-              const isToday = dateStr === formatDate(new Date());
-              const isSelected = dateStr === selectedDate;
-              const hasEvent = dd && dd.events.length > 0;
-              const isOtherMonth = day.getMonth() !== currentMonth;
-              return (
-                <button key={i} onClick={() => setSelectedDate(dateStr)}
-                  className={"relative text-center py-1 text-[10px] rounded transition-colors " +
-                    (isSelected ? "bg-pdd-primary text-white font-semibold" :
-                     isToday ? "bg-pdd-bg font-semibold text-pdd-primary" :
-                     isOtherMonth ? "text-pdd-gray-200" : "text-pdd-text hover:bg-pdd-bg")}
-                >
-                  <span>{day.getDate()}</span>
-                  {hasEvent && !isOtherMonth && (
-                    <div className="flex items-center justify-center gap-[1px] mt-0.5">
-                      {dd.events.slice(0, 2).map((et: string, ei: number) => {
-                        const ev = EVENT_TYPES.find(e => e.key === et);
-                        return ev ? <span key={ei} style={{fontSize:'6px'}}>{ev.emoji}</span> : null;
-                      })}
-                      {dd.events.length > 2 && <span className="text-[6px] text-pdd-text-secondary">...</span>}
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-        </div>
+      <div className="bg-pdd-card rounded-xl border border-pdd-border p-0.5 inline-flex">
+        {[
+          {key:"fingerprint", label:"时间指纹图谱", icon:String.fromCodePoint(0x1f4c8)},
+          {key:"causality", label:"事件因果", icon:String.fromCodePoint(0x1f50d)},
+          {key:"insights", label:"决策建议", icon:String.fromCodePoint(0x1f4a1)}
+        ].map(v => (
+          <button key={v.key}
+            onClick={() => setMarketView(v.key)}
+            className={"flex items-center gap-1 px-3 py-1.5 text-[11px] font-medium rounded-lg transition-all " + (
+              marketView===v.key ? "bg-pdd-primary text-white shadow-sm" : "text-pdd-text-secondary hover:text-pdd-text"
+            )}
+          ><span>{v.icon}</span> {v.label}</button>
+        ))}
       </div>
-
-      {/* ===== Detail Panel ===== */}
-      {selectedDate && dailyData.has(selectedDate) && (() => {
-        const dd = dailyData.get(selectedDate)!;
-        const dayEvents = dd.eventDetails.filter((ev: EventInfo) => activeEvents.has(ev.type));
-        const prevDay = dailyData.get((() => {
-          const d = new Date(selectedDate);
-          d.setDate(d.getDate() - 1);
-          return formatDate(d);
-        })());
-        return (
-          <div className="pdd-card p-3">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-xs font-semibold">{selectedDate} 数据详情</h3>
-              <button onClick={() => setSelectedDate('')} className="text-pdd-text-secondary hover:text-pdd-danger"><X size={14} /></button>
-            </div>
-            <div className="grid grid-cols-4 gap-2 mb-2">
-              {[
-                {label:'销量', value:dd.sales.toFixed(0), sub: prevDay ? '前日' + prevDay.sales.toFixed(0) : '', change: prevDay ? ((dd.sales - prevDay.sales) / prevDay.sales * 100).toFixed(1) : '0' },
-                {label:'GMV', value:'\u00a5' + dd.gmv.toFixed(0), sub: prevDay ? '前日\u00a5' + prevDay.gmv.toFixed(0) : '', change: prevDay ? ((dd.gmv - prevDay.gmv) / prevDay.gmv * 100).toFixed(1) : '0' },
-                {label:'退款率', value: dd.refundRate.toFixed(1) + '%', sub: prevDay ? '前日' + prevDay.refundRate.toFixed(1) + '%' : '', change: prevDay ? (dd.refundRate - prevDay.refundRate).toFixed(1) : '0', reverse: true },
-                {label:'推广费', value:'\u00a5' + dd.promoCost.toFixed(0), sub: prevDay ? '前日\u00a5' + prevDay.promoCost.toFixed(0) : '', change: prevDay ? ((dd.promoCost - prevDay.promoCost) / Math.max(prevDay.promoCost, 1) * 100).toFixed(1) : '0' },
-              ].map((kpi, i) => (
-                <div key={i} className="bg-pdd-bg rounded p-2">
-                  <p className="text-[10px] text-pdd-text-secondary">{kpi.label}</p>
-                  <p className="text-sm font-bold">{kpi.value}</p>
-                  <p className="text-[9px] text-pdd-text-secondary">{kpi.sub}</p>
-                  {kpi.change !== '0' && (
-                    <span className={'text-[9px] ' + (Number(kpi.change) > 0 ? (kpi.reverse ? 'text-red-500' : 'text-green-600') : (kpi.reverse ? 'text-green-600' : 'text-red-500'))}>
-                      {Number(kpi.change) > 0 ? '\u2191' : '\u2193'} {Math.abs(Number(kpi.change)).toFixed(1)}%
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-            {/* Events on this day */}
-            {dayEvents.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-[10px] font-medium text-pdd-text-secondary">当日事件</p>
-                {dayEvents.map((ev: EventInfo, i: number) => (
-                  <div key={i} className="flex items-center gap-2 text-[11px] bg-pdd-bg rounded px-2 py-1">
-                    <span>{ev.emoji}</span>
-                    <span className="font-medium">{ev.label}</span>
-                    <span className="text-pdd-text-secondary">{ev.details}</span>
-                  </div>
+      {marketView === "fingerprint" && (
+        <div className="space-y-3">
+          <div className="pdd-card p-2.5">
+            <div className="flex items-center justify-between flex-wrap gap-1">
+              <div className="flex items-center gap-1 flex-wrap">
+                <span className="text-[9px] text-pdd-text-secondary font-medium mr-0.5"><Filter size={10} className="inline mr-0.5" />事件筛选</span>
+                {EVENT_TYPES.map(et => (
+                  <button key={et.key} onClick={() => toggleEvent(et.key)}
+                    className={"flex items-center gap-0.5 text-[9px] px-1.5 py-0.5 rounded-full border transition-colors " +
+                      (activeEvents.has(et.key) ? "border-transparent text-white" : "border-pdd-border text-pdd-text-secondary")}
+                    style={{ backgroundColor: activeEvents.has(et.key) ? et.color : "transparent" }}
+                  ><span>{et.emoji}</span> {et.label}</button>
                 ))}
               </div>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* ===== Compare Mode ===== */}
-      <div className="pdd-card p-3">
-        <button onClick={() => setCompareMode(compareMode === 'none' ? 'period' : 'none')}
-          className="flex items-center justify-between w-full text-left">
-          <h3 className="text-xs font-semibold"><Activity size={13} className="inline mr-1" />对比模式</h3>
-          <span className="text-[10px] text-pdd-text-secondary">{compareMode !== 'none' ? '收起' : '展开'}</span>
-        </button>
-        {compareMode !== 'none' && (
-          <div className="mt-2 space-y-2">
-            <div className="flex gap-1">
-              {[{key:'period',label:'时段对比'},{key:'beforeAfter',label:'事件前后'},{key:'samePeriod',label:'同期对比'}].map(m => (
-                <button key={m.key} onClick={() => setCompareMode(m.key as any)}
-                  className={"text-[10px] px-2 py-1 rounded " + (compareMode===m.key ? "bg-pdd-primary text-white" : "bg-pdd-bg text-pdd-text-secondary")}
-                >{m.label}</button>
-              ))}
+              <div className="flex items-center gap-1">
+                <label className="flex items-center gap-1 text-[9px] text-pdd-text-secondary cursor-pointer">
+                  <input type="checkbox" checked={showEventOverlay} onChange={e => setShowEventOverlay(e.target.checked)} className="w-2.5 h-2.5" />
+                  显示事件
+                </label>
+                <select className="text-[9px] px-1.5 py-0.5 border border-pdd-border rounded bg-pdd-bg text-pdd-text"
+                  value={granularity} onChange={e => setGranularity(e.target.value)}>
+                  <option value="day">按日</option>
+                  <option value="week">按周</option>
+                  <option value="month">按月</option>
+                </select>
+              </div>
             </div>
-            {compareMode === 'period' && (() => {
-              const allDates = [...dailyData.keys()].sort();
-              const mid = Math.floor(allDates.length / 2);
-              const periodA = allDates.slice(0, mid);
-              const periodB = allDates.slice(mid);
-              const sumRange = (dates: string[]) => {
-                let sales = 0, gmv = 0, refundAmt = 0, promo = 0, orderCnt = 0;
-                dates.forEach(d => { const day = dailyData.get(d); if (!day) return; sales += day.sales; gmv += day.gmv; refundAmt += day.refundAmount; promo += day.promoCost; orderCnt += day.orderCount; });
-                const refundRate = dates.length > 0 ? (dates.reduce((acc, d) => acc + (dailyData.get(d)?.refundRate || 0), 0) / dates.length) : 0;
-                return { sales, gmv, refundAmt, refundRate, promo, orderCnt, days: dates.length };
-              };
-              const a = sumRange(periodA), b = sumRange(periodB);
-              const metrics = [
-                { label: '销量(件)', a: a.sales.toFixed(0), b: b.sales.toFixed(0), chg: a.sales > 0 ? ((b.sales - a.sales) / a.sales * 100).toFixed(1) : '0' },
-                { label: 'GMV(元)', a: '¥' + a.gmv.toFixed(0), b: '¥' + b.gmv.toFixed(0), chg: a.gmv > 0 ? ((b.gmv - a.gmv) / a.gmv * 100).toFixed(1) : '0' },
-                { label: '退款率', a: a.refundRate.toFixed(1) + '%', b: b.refundRate.toFixed(1) + '%', chg: (b.refundRate - a.refundRate).toFixed(1), reverse: true },
-                { label: '推广费', a: '¥' + a.promo.toFixed(0), b: '¥' + b.promo.toFixed(0), chg: a.promo > 0 ? ((b.promo - a.promo) / a.promo * 100).toFixed(1) : '0' },
-                { label: '订单数', a: a.orderCnt.toFixed(0), b: b.orderCnt.toFixed(0), chg: a.orderCnt > 0 ? ((b.orderCnt - a.orderCnt) / a.orderCnt * 100).toFixed(1) : '0' },
-              ];
-              return (
-                <div>
-                  <div className="flex items-center gap-2 text-[10px] text-pdd-text-secondary mb-2">
-                    <span className="px-2 py-0.5 rounded bg-pdd-bg font-mono">{periodA[0] || '--'} ~ {periodA[periodA.length-1] || '--'}</span>
-                    <ArrowRight size={10} />
-                    <span className="px-2 py-0.5 rounded bg-pdd-bg font-mono">{periodB[0] || '--'} ~ {periodB[periodB.length-1] || '--'}</span>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[10px]">
-                      <thead><tr className="text-pdd-text-secondary border-b border-pdd-border">
-                        <th className="text-left py-1 font-medium">指标</th>
-                        <th className="text-right py-1 font-medium">前半段</th>
-                        <th className="text-right py-1 font-medium">后半段</th>
-                        <th className="text-right py-1 font-medium">变化</th>
-                      </tr></thead>
-                      <tbody>
-                        {metrics.map(m => {
-                          const val = parseFloat(m.chg);
-                          const isUp = val > 0;
-                          return <tr key={m.label} className="border-b border-pdd-border/30">
-                            <td className="py-1 text-pdd-text">{m.label}</td>
-                            <td className="py-1 text-right font-mono text-pdd-text">{m.a}</td>
-                            <td className="py-1 text-right font-mono text-pdd-text">{m.b}</td>
-                            <td className={'py-1 text-right font-mono ' + (m.reverse ? (isUp ? 'text-red-500' : 'text-green-600') : (isUp ? 'text-green-600' : 'text-red-500'))}>
-                              {val > 0 ? '↑' : val < 0 ? '↓' : ''}{Math.abs(val)}%
-                            </td>
-                          </tr>;
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })()}
-            {compareMode === 'beforeAfter' && (() => {
-              const windowDays = compareSettings.beforeAfterDays || 7;
-              const selType = compareSettings.selectedEventType || 'promo';
-              const targetEvents = allEvents.filter(e => e.type === selType);
-              if (targetEvents.length === 0) {
-                return <div className="text-[11px] text-pdd-text-secondary p-2 bg-pdd-bg rounded">所选事件类型无事件数据，请选择其他类型</div>;
-              }
-              let beforeSum = { sales: 0, gmv: 0, refundRate: 0, promo: 0, count: 0 };
-              let afterSum = { sales: 0, gmv: 0, refundRate: 0, promo: 0, count: 0 };
-              targetEvents.forEach(ev => {
-                for (let d = -windowDays; d < 0; d++) {
-                  const date = new Date(ev.date); date.setDate(date.getDate() + d);
-                  const ds = formatDate(date);
-                  const day = dailyData.get(ds); if (!day) continue;
-                  beforeSum.sales += day.sales; beforeSum.gmv += day.gmv;
-                  beforeSum.refundRate += day.refundRate; beforeSum.promo += day.promoCost;
-                  beforeSum.count++;
-                }
-                for (let d = 1; d <= windowDays; d++) {
-                  const date = new Date(ev.date); date.setDate(date.getDate() + d);
-                  const ds = formatDate(date);
-                  const day = dailyData.get(ds); if (!day) continue;
-                  afterSum.sales += day.sales; afterSum.gmv += day.gmv;
-                  afterSum.refundRate += day.refundRate; afterSum.promo += day.promoCost;
-                  afterSum.count++;
-                }
-              });
-              const bAvg = (s: typeof beforeSum) => ({ sales: s.sales / Math.max(s.count, 1), gmv: s.gmv / Math.max(s.count, 1), refundRate: s.count > 0 ? s.refundRate / s.count : 0, promo: s.promo / Math.max(s.count, 1) });
-              const ba = bAvg(beforeSum), aa = bAvg(afterSum);
-              const selEv = EVENT_TYPES.find(e => e.key === selType);
-              const compMetrics = [
-                { label: '日均销量', b: ba.sales.toFixed(1), a: aa.sales.toFixed(1), chg: ba.sales > 0 ? ((aa.sales - ba.sales) / ba.sales * 100).toFixed(1) : '0' },
-                { label: '日均GMV', b: '¥' + ba.gmv.toFixed(0), a: '¥' + aa.gmv.toFixed(0), chg: ba.gmv > 0 ? ((aa.gmv - ba.gmv) / ba.gmv * 100).toFixed(1) : '0' },
-                { label: '日均推广费', b: '¥' + ba.promo.toFixed(0), a: '¥' + aa.promo.toFixed(0), chg: ba.promo > 0 ? ((aa.promo - ba.promo) / ba.promo * 100).toFixed(1) : '0' },
-                { label: '退款率(均)', b: ba.refundRate.toFixed(1) + '%', a: aa.refundRate.toFixed(1) + '%', chg: (aa.refundRate - ba.refundRate).toFixed(1), reverse: true },
-              ];
-              return (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <select value={selType} onChange={e => setCompareSettings(s => ({ ...s, selectedEventType: e.target.value }))}
-                      className="text-[10px] px-2 py-1 border border-pdd-border rounded bg-pdd-bg text-pdd-text">
-                      {EVENT_TYPES.map(et => <option key={et.key} value={et.key}>{et.emoji} {et.label}</option>)}
-                    </select>
-                    <span className="text-[10px] text-pdd-text-secondary">前后</span>
-                    <input type="number" value={windowDays} onChange={e => setCompareSettings(s => ({ ...s, beforeAfterDays: parseInt(e.target.value) || 7 }))}
-                      className="w-12 px-2 py-1 text-[10px] border border-pdd-border rounded bg-pdd-bg text-pdd-text text-center" />
-                    <span className="text-[10px] text-pdd-text-secondary">天</span>
-                    <span className="text-[10px] text-pdd-text-secondary ml-1">共{targetEvents.length}个{selEv?.emoji}事件</span>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[10px]">
-                      <thead><tr className="text-pdd-text-secondary border-b border-pdd-border">
-                        <th className="text-left py-1 font-medium">指标</th>
-                        <th className="text-right py-1 font-medium">事件前{windowDays}天</th>
-                        <th className="text-right py-1 font-medium">事件后{windowDays}天</th>
-                        <th className="text-right py-1 font-medium">变化</th>
-                      </tr></thead>
-                      <tbody>
-                        {compMetrics.map(m => {
-                          const val = parseFloat(m.chg);
-                          const isUp = val > 0;
-                          return <tr key={m.label} className="border-b border-pdd-border/30">
-                            <td className="py-1 text-pdd-text">{m.label}</td>
-                            <td className="py-1 text-right font-mono text-pdd-text">{m.b}</td>
-                            <td className="py-1 text-right font-mono text-pdd-text">{m.a}</td>
-                            <td className={'py-1 text-right font-mono ' + (m.reverse ? (isUp ? 'text-red-500' : 'text-green-600') : (isUp ? 'text-green-600' : 'text-red-500'))}>
-                              {val > 0 ? '↑' : val < 0 ? '↓' : ''}{Math.abs(val)}%
-                            </td>
-                          </tr>;
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })()}
-            {compareMode === 'samePeriod' && (() => {
-              const offset = compareSettings.samePeriodOffset || 'lastMonth';
-              const allDates = [...dailyData.keys()].sort();
-              if (allDates.length === 0) return <div className="text-[11px] text-pdd-text-secondary p-2 bg-pdd-bg rounded">无数据</div>;
-              const currentEnd = allDates[allDates.length - 1];
-              const currentStart = allDates[0];
-              let compareStart = '', compareEnd = '';
-              if (offset === 'lastMonth') {
-                const end = new Date(currentEnd); end.setMonth(end.getMonth() - 1);
-                const start = new Date(currentStart); start.setMonth(start.getMonth() - 1);
-                compareStart = formatDate(start); compareEnd = formatDate(end);
-              } else {
-                const end = new Date(currentEnd); end.setFullYear(end.getFullYear() - 1);
-                const start = new Date(currentStart); start.setFullYear(start.getFullYear() - 1);
-                compareStart = formatDate(start); compareEnd = formatDate(end);
-              }
-              const sumDates = (start: string, end: string) => {
-                let sales = 0, gmv = 0, refundRate = 0, promo = 0, cnt = 0, orderCnt = 0;
-                const d = new Date(start);
-                while (d <= new Date(end)) {
-                  const ds = formatDate(d); const day = dailyData.get(ds);
-                  if (day) { sales += day.sales; gmv += day.gmv; refundRate += day.refundRate; promo += day.promoCost; orderCnt += day.orderCount; cnt++; }
-                  d.setDate(d.getDate() + 1);
-                }
-                return { sales, gmv, refundRate: cnt > 0 ? refundRate / cnt : 0, promo, days: cnt, orderCnt };
-              };
-              const cur = sumDates(currentStart, currentEnd);
-              const cmp = sumDates(compareStart, compareEnd);
-              const periodMetrics = [
-                { label: '销量(件)', cur: cur.sales.toFixed(0), cmp: cmp.sales.toFixed(0), chg: cmp.sales > 0 ? ((cur.sales - cmp.sales) / cmp.sales * 100).toFixed(1) : '0' },
-                { label: 'GMV(元)', cur: '¥' + cur.gmv.toFixed(0), cmp: '¥' + cmp.gmv.toFixed(0), chg: cmp.gmv > 0 ? ((cur.gmv - cmp.gmv) / cmp.gmv * 100).toFixed(1) : '0' },
-                { label: '平均退款率', cur: cur.refundRate.toFixed(1) + '%', cmp: cmp.refundRate.toFixed(1) + '%', chg: (cur.refundRate - cmp.refundRate).toFixed(1), reverse: true },
-                { label: '推广费', cur: '¥' + cur.promo.toFixed(0), cmp: '¥' + cmp.promo.toFixed(0), chg: cmp.promo > 0 ? ((cur.promo - cmp.promo) / cmp.promo * 100).toFixed(1) : '0' },
-              ];
-              return (
-                <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <select value={offset} onChange={e => setCompareSettings(s => ({ ...s, samePeriodOffset: e.target.value }))}
-                      className="text-[10px] px-2 py-1 border border-pdd-border rounded bg-pdd-bg text-pdd-text">
-                      <option value="lastMonth">上个月同期</option>
-                      <option value="lastYear">去年同月</option>
-                    </select>
-                    <span className="text-[10px] text-pdd-text-secondary font-mono">{compareStart} ~ {compareEnd}</span>
-                  </div>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-[10px]">
-                      <thead><tr className="text-pdd-text-secondary border-b border-pdd-border">
-                        <th className="text-left py-1 font-medium">指标</th>
-                        <th className="text-right py-1 font-medium">当前周期</th>
-                        <th className="text-right py-1 font-medium">对比周期</th>
-                        <th className="text-right py-1 font-medium">变化</th>
-                      </tr></thead>
-                      <tbody>
-                        {periodMetrics.map(m => {
-                          const val = parseFloat(m.chg);
-                          const isUp = val > 0;
-                          return <tr key={m.label} className="border-b border-pdd-border/30">
-                            <td className="py-1 text-pdd-text">{m.label}</td>
-                            <td className="py-1 text-right font-mono text-pdd-text">{m.cur}</td>
-                            <td className="py-1 text-right font-mono text-pdd-text">{m.cmp}</td>
-                            <td className={'py-1 text-right font-mono ' + (m.reverse ? (isUp ? 'text-red-500' : 'text-green-600') : (isUp ? 'text-green-600' : 'text-red-500'))}>
-                              {val > 0 ? '↑' : val < 0 ? '↓' : ''}{Math.abs(val)}%
-                            </td>
-                          </tr>;
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              );
-            })()}
           </div>
-        )}
-      </div>
-    </div>
-  )}
-
-  {/* ===== TAB 2: Time Slice Analysis ===== */}
-  {activeTab === "slice" && (
-    <div className="space-y-3">
-      {/* Dimension selector */}
-      <div className="pdd-card p-3">
-        <div className="flex items-center gap-1 flex-wrap">
-          <span className="text-[10px] text-pdd-text-secondary mr-1"><BarChart3 size={11} className="inline mr-0.5" />切片维度</span>
-          {[
-            {key:'hour',label:'按小时'},
-            {key:'weekday',label:'按星期'},
-            {key:'day',label:'按日'},
-            {key:'week',label:'按周'},
-            {key:'month',label:'按月'},
-            {key:'custom',label:'自定义时段'},
-          ].map(dim => (
-            <button key={dim.key} onClick={() => setSliceDimension(dim.key)}
-              className={"text-[10px] px-2 py-0.5 rounded " + (sliceDimension===dim.key ? "bg-pdd-primary text-white" : "bg-pdd-bg text-pdd-text-secondary")}
-            >{dim.label}</button>
-          ))}
-        </div>
-        <div className="flex items-center gap-2 mt-2">
-          <label className="flex items-center gap-1 text-[10px] text-pdd-text-secondary">
-            <input type="checkbox" checked={showEventOverlay} onChange={e => setShowEventOverlay(e.target.checked)} className="w-3 h-3" />
-            显示事件标记
-          </label>
-        </div>
-      </div>
-
-      {/* Slice chart */}
-      <div className="pdd-card p-3">
-        <h3 className="text-xs font-semibold mb-2">
-          {sliceDimension === 'hour' ? '按小时分布' :
-           sliceDimension === 'weekday' ? '按星期分布' :
-           sliceDimension === 'day' ? '按日趋势' :
-           sliceDimension === 'week' ? '按周趋势' :
-           sliceDimension === 'month' ? '按月分布' : '自定义时段分布'}
-        </h3>
-        <ResponsiveContainer width="100%" height={250}>
-          {(sliceDimension === 'day' || sliceDimension === 'week' || sliceDimension === 'month') ? (
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-gray-200)" />
-              <XAxis dataKey="date" tick={{fontSize:10}} tickFormatter={(v:string)=>{if(sliceDimension==='month')return v.substring(0,7); const p=v.split('-');return p[1]+'/'+p[2];}} />
-              <YAxis tick={{fontSize:10}} />
-              <Tooltip contentStyle={{fontSize:'12px'}} />
-              <Legend wrapperStyle={{fontSize:'11px'}} />
-              <Line type="monotone" dataKey="gmv" name="GMV" stroke="#1F6BFF" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="sales" name="销量(件)" stroke="#17B26A" strokeWidth={1.5} dot={false} />
-            </LineChart>
-          ) : (
-            <BarChart data={(function() {
-              if (sliceDimension === 'hour') {
-                const hours = Array.from({length: 24}, (_, i) => ({name: i + '时', sales: 0, gmv: 0, refundRate: 0}));
-                orders.forEach((o: any) => {
-                  const time = ss(findField(o, "支付时间"));
-                  if (!time) return;
-                  const h = parseInt(time.split(' ')[1]?.split(':')[0] || '0');
-                  if (h >= 0 && h < 24) {
-                    hours[h].sales += Math.max(sf(findField(o, "商品数量(件)", "商品数量")), 0);
-                    hours[h].gmv += Math.max(sf(findField(o, "商品总价(元)", "商品总价")), 0);
+          <div className="pdd-card p-3">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs font-semibold">销售趋势 <span className="text-[9px] text-pdd-text-secondary font-normal">鼠标悬浮查看详情</span></h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {[{k:"gmv",l:"GMV",c:"#1F6BFF"},{k:"sales",l:"销量",c:"#17B26A"},{k:"refund",l:"退款率",c:"#F04438"}].map(m => (
+                  <span key={m.k} className="flex items-center gap-0.5 text-[9px]">
+                    <span className="w-1.5 h-1.5 rounded-full" style={{backgroundColor:m.c}}></span>
+                    <span className="text-pdd-text-secondary">{m.l}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={240}>
+              <ComposedChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-gray-200)" />
+                <XAxis dataKey="date" tick={{fontSize:9}} tickFormatter={(v)=>{const p=v.split("-");return p[1]+"/"+p[2]}} interval="preserveStartEnd" />
+                <YAxis yAxisId="left" tick={{fontSize:9}} />
+                <YAxis yAxisId="right" orientation="right" tick={{fontSize:9}} />
+                <Tooltip contentStyle={{fontSize:"11px"}} />
+                <Legend wrapperStyle={{fontSize:"10px"}} />
+                <defs>
+                  <linearGradient id="gmvGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#1F6BFF" stopOpacity={0.15}/>
+                    <stop offset="95%" stopColor="#1F6BFF" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <Area yAxisId="left" type="monotone" dataKey="gmv" name="GMV" stroke="#1F6BFF" strokeWidth={2} fill="url(#gmvGrad)" dot={false} />
+                <Line yAxisId="left" type="monotone" dataKey="sales" name="销量(件)" stroke="#17B26A" strokeWidth={1.5} dot={false} />
+                <Line yAxisId="right" type="monotone" dataKey="refundRate" name="退款率(%)" stroke="#F04438" strokeWidth={1.5} dot={false} strokeDasharray="3 2" />
+                {showEventOverlay && filteredEvents.map((ev, i) => {
+                  const idx = chartData.findIndex(d => d.date === ev.date);
+                  if (idx < 0) return null;
+                  return <ReferenceLine key={i} x={ev.date} yAxisId="left" stroke={eventColorMap[ev.type] || "#999"} strokeDasharray="2 2" label={{value:ev.emoji, position:"top", fontSize:12}} />;
+                })}
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="grid grid-cols-5 gap-3">
+            <div className="col-span-5 lg:col-span-2 pdd-card p-3">
+              <h4 className="text-xs font-semibold mb-2">时段热力矩阵</h4>
+              <p className="text-[9px] text-pdd-text-secondary mb-2">横轴=24小时 纵轴=星期 颜色越深=销量越高</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-[8px]">
+                  <thead><tr>
+                    <th className="p-0.5"></th>
+                    {Array.from({length:24}, (_,h) => <th key={h} className="p-0.5 text-pdd-text-secondary font-normal">{h}h</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {["周一","周二","周三","周四","周五","周六","周日"].map((dayName, di) => {
+                      return (
+                        <tr key={di}>
+                          <td className="p-0.5 text-pdd-text-secondary text-[7px]">{dayName}</td>
+                          {Array.from({length:24}, (_, hi) => {
+                            const hd = hourData[hi];
+                            const maxGmv = Math.max(...hourData.map(h => h.gmv), 1);
+                            const intensity = hd ? (hd.gmv / maxGmv) : 0;
+                            const color = intensity > 0.7 ? "#1F6BFF" : intensity > 0.3 ? "#93C5FD" : intensity > 0 ? "#DBEAFE" : "#F3F4F6";
+                            return (
+                              <td key={hi} className="p-0.5">
+                                <div style={{backgroundColor: color, height:"14px"}} className="rounded-sm" title={hi+":00 销量="+hd?.sales.toFixed(0)}></div>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="col-span-5 lg:col-span-2 pdd-card p-3">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-semibold">时段分析</h4>
+                <div className="flex bg-pdd-bg rounded p-0.5 border border-pdd-border/50">
+                  {[{k:"hour",l:"小时"},{k:"weekday",l:"星期"},{k:"day",l:"日"}].map(d => (
+                    <button key={d.k} onClick={() => setSliceDimension(d.k)}
+                      className={"text-[9px] px-1.5 py-0.5 rounded " + (sliceDimension===d.k ? "bg-pdd-card text-pdd-text shadow-sm" : "text-pdd-text-secondary")}
+                    >{d.l}</button>
+                  ))}
+                </div>
+              </div>
+              <div className="overflow-x-auto" style={{maxHeight:"200px", overflowY:"auto"}}>
+                <table className="w-full text-[10px]">
+                  <thead><tr className="text-pdd-text-secondary border-b border-pdd-border text-[9px]">
+                    <th className="text-left py-1 font-medium sticky top-0 bg-pdd-card">时段</th>
+                    <th className="text-right py-1 font-medium sticky top-0 bg-pdd-card">销量</th>
+                    <th className="text-right py-1 font-medium sticky top-0 bg-pdd-card">GMV</th>
+                    <th className="text-right py-1 font-medium sticky top-0 bg-pdd-card">占比</th>
+                  </tr></thead>
+                  <tbody>
+                    {(sliceDimension === "hour" ? hourData : sliceDimension === "weekday" ? weekData : chartData.slice(-30)).map((item: any, i: number) => {
+                      const total = (sliceDimension==="hour"?hourData:sliceDimension==="weekday"?weekData:chartData).reduce((s: number, h: any) => s + h.gmv, 0);
+                      const ratio = total > 0 ? (item.gmv / total * 100) : 0;
+                      const isBest = ratio > (100 / (sliceDimension==="hour"?24:sliceDimension==="weekday"?7:30)) * 1.5;
+                      return (
+                        <tr key={i} className={"border-b border-pdd-border/20 " + (isBest ? "bg-blue-50/50" : "hover:bg-pdd-bg")}>
+                          <td className="py-1 font-medium text-[10px]">{item.name || item.date}</td>
+                          <td className="py-1 text-right font-mono">{item.sales.toFixed(0)}</td>
+                          <td className="py-1 text-right font-mono">{fmtMoney(item.gmv)}</td>
+                          <td className="py-1 text-right">
+                            <span className={"text-[9px] font-mono " + (isBest ? "text-pdd-primary font-semibold" : "text-pdd-text-secondary")}>
+                              {ratio.toFixed(1)}%
+                            </span>
+                            {isBest && <span className="ml-0.5">{String.fromCodePoint(0x1f525)}</span>}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div className="col-span-5 lg:col-span-1 pdd-card p-3">
+              <h4 className="text-xs font-semibold mb-2">智能诊断</h4>
+              <div className="space-y-1.5">
+                {(() => {
+                  const alerts: {level:string, icon:string, msg:string}[] = [];
+                  const bestHour = hourData.reduce((best: any, h: any, i: number) => h.gmv > (best?.gmv || 0) ? {...h, idx: i} : best, null);
+                  if (bestHour && bestHour.idx !== undefined) alerts.push({level:"success", icon:"🟢", msg:"黄金时段 " + bestHour.idx + ":00-" + (bestHour.idx+1) + ":00"});
+                  const avgRefund = chartData.reduce((s: number, d: any) => s + d.refundRate, 0) / Math.max(chartData.length, 1);
+                  const lastRefund = chartData.length > 0 ? chartData[chartData.length-1].refundRate : 0;
+                  if (lastRefund > avgRefund * 2 && avgRefund > 0) alerts.push({level:"danger", icon:"🔴", msg:"退款率异常 " + lastRefund.toFixed(1) + "% (基线" + avgRefund.toFixed(1) + "%)"});
+                  const last7 = chartData.slice(-7);
+                  const avgROI = last7.reduce((s: number, d: any) => s + (d.promoCost > 0 ? d.gmv/d.promoCost : 0), 0) / Math.max(last7.length, 1);
+                  if (avgROI < 1.5 && avgROI > 0) alerts.push({level:"warning", icon:"🟡", msg:"推广ROI偏低 (" + avgROI.toFixed(1) + ")"});
+                  if (alerts.length > 0) {
+                    return alerts.map((a, i) => (
+                      <div key={i} className={"flex items-start gap-1.5 p-1.5 rounded " + (a.level==="danger" ? "bg-red-50" : a.level==="warning" ? "bg-amber-50" : "bg-green-50")}>
+                        <span className="text-[10px]">{a.icon}</span>
+                        <p className={"text-[9px] " + (a.level==="danger" ? "text-red-700" : a.level==="warning" ? "text-amber-700" : "text-green-700")}>{a.msg}</p>
+                      </div>
+                    ));
                   }
-                });
-                return hours;
-              } else if (sliceDimension === 'weekday') {
-                const days = Array.from({length: 7}, (_, i) => ({name: ['周一','周二','周三','周四','周五','周六','周日'][i], sales: 0, gmv: 0, orderCount: 0, refundCount: 0}));
-                orders.forEach((o: any) => {
-                  const time = ss(findField(o, "支付时间"));
-                  if (!time) return;
-                  const d = new Date(time);
-                  const wd = d.getDay() === 0 ? 6 : d.getDay() - 1;
-                  days[wd].sales += Math.max(sf(findField(o, "商品数量(件)", "商品数量")), 0);
-                  days[wd].gmv += Math.max(sf(findField(o, "商品总价(元)", "商品总价")), 0);
-                  days[wd].orderCount++;
-                });
-                return days;
-              }
-              return [];
-            })()}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-gray-200)" />
-              <XAxis dataKey="name" tick={{fontSize:10}} />
-              <YAxis tick={{fontSize:10}} />
-              <Tooltip contentStyle={{fontSize:'12px'}} />
-              <Legend wrapperStyle={{fontSize:'11px'}} />
-              <Bar dataKey="gmv" name="GMV" fill="#1F6BFF" radius={[2,2,0,0]} />
-              <Bar dataKey="sales" name="销量(件)" fill="#17B26A" radius={[2,2,0,0]} />
-            </BarChart>
+                  return <p className="text-[9px] text-pdd-text-secondary p-2">暂无异常</p>;
+                })()}
+              </div>
+              <div className="mt-2 pt-2 border-t border-pdd-border/30">
+                <div className="flex items-center justify-between mb-1">
+                  <button onClick={() => { if (currentMonth === 0) { setCurrentYear(y => y-1); setCurrentMonth(11); } else setCurrentMonth(m => m-1); }} className="p-0.5"><ChevronLeft size={10} /></button>
+                  <span className="text-[9px] font-medium">{currentYear}年{currentMonth+1}月</span>
+                  <button onClick={() => { if (currentMonth === 11) { setCurrentYear(y => y+1); setCurrentMonth(0); } else setCurrentMonth(m => m+1); }} className="p-0.5"><ChevronRight size={10} /></button>
+                </div>
+                <div className="grid grid-cols-7 gap-0">
+                  {DAYS_OF_WEEK.map(d => <div key={d} className="text-center text-[7px] text-pdd-text-secondary">{d}</div>)}
+                  {monthDays.map((day, i) => {
+                    const dateStr = formatDate(day);
+                    const dd = dailyData.get(dateStr);
+                    const isToday = dateStr === todayStr;
+                    const isOtherMonth = day.getMonth() !== currentMonth;
+                    return (
+                      <button key={i} onClick={() => setSelectedDate(dateStr)}
+                        className={"text-center text-[8px] py-0.5 rounded " + (isToday ? "bg-pdd-primary/10 text-pdd-primary font-semibold" : isOtherMonth ? "text-pdd-gray-200" : "text-pdd-text hover:bg-pdd-bg")}
+                      >
+                        {day.getDate()}
+                        {dd && dd.events.length > 0 && !isOtherMonth && <span className="block text-[4px]">●</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+          {selectedDate && dailyData.has(selectedDate) && (function() {
+            const dd = dailyData.get(selectedDate);
+            if (!dd) return null;
+            const dayEvents = dd.eventDetails.filter(function(ev) { return activeEvents.has(ev.type); });
+            const prevDate = new Date(selectedDate);
+            prevDate.setDate(prevDate.getDate() - 1);
+            const prevDay = dailyData.get(formatDate(prevDate));
+            return (
+              <div className="pdd-card p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-xs font-semibold">{selectedDate} 数据详情</h3>
+                  <button onClick={() => setSelectedDate("")} className="text-pdd-text-secondary hover:text-pdd-danger"><X size={12} /></button>
+                </div>
+                <div className="grid grid-cols-5 gap-2 mb-2">
+                  {[
+                    {label:"销量", value: dd.sales.toFixed(0), chg: prevDay ? ((dd.sales - prevDay.sales) / prevDay.sales * 100).toFixed(1) : "0"},
+                    {label:"GMV", value: fmtMoney(dd.gmv), chg: prevDay ? ((dd.gmv - prevDay.gmv) / prevDay.gmv * 100).toFixed(1) : "0"},
+                    {label:"退款率", value: dd.refundRate.toFixed(1)+"%", chg: prevDay ? (dd.refundRate - prevDay.refundRate).toFixed(1) : "0", rev: true},
+                    {label:"推广费", value: fmtMoney(dd.promoCost), chg: prevDay ? ((dd.promoCost - prevDay.promoCost) / Math.max(prevDay.promoCost, 1) * 100).toFixed(1) : "0"},
+                    {label:"ROI", value: dd.promoCost > 0 ? (dd.gmv/dd.promoCost).toFixed(1) : "-", chg: prevDay && prevDay.promoCost > 0 ? ((dd.gmv/dd.promoCost - prevDay.gmv/prevDay.promoCost) / (prevDay.gmv/prevDay.promoCost) * 100).toFixed(1) : "0"},
+                  ].map(function(kpi, i) {
+                    const val = parseFloat(kpi.chg);
+                    const isUp = val > 0;
+                    return (
+                      <div key={i} className="bg-pdd-bg rounded p-1.5">
+                        <p className="text-[9px] text-pdd-text-secondary">{kpi.label}</p>
+                        <p className="text-xs font-bold">{kpi.value}</p>
+                        {kpi.chg !== "0" && (
+                          <span className={"text-[8px] " + (kpi.rev ? (isUp ? "text-red-500" : "text-green-600") : (isUp ? "text-green-600" : "text-red-500"))}>
+                            {isUp ? "↑" : "↓"} {Math.abs(val).toFixed(1)}%
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                {dayEvents.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {dayEvents.map(function(ev, i) {
+                      return (
+                        <span key={i} className="inline-flex items-center gap-0.5 text-[9px] bg-pdd-bg rounded px-1.5 py-0.5">
+                          <span>{ev.emoji}</span> {ev.details}
+                        </span>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+      {marketView === "causality" && (
+        <div className="space-y-3">
+          <div className="pdd-card p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Target size={14} className="text-pdd-primary" />
+              <h3 className="text-xs font-semibold">事件因果分析</h3>
+              <span className="text-[9px] text-pdd-text-secondary ml-auto">选择事件类型，分析对销量的因果影响</span>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex bg-pdd-bg rounded-lg p-0.5 border border-pdd-border/50">
+                {EVENT_TYPES.filter(function(et) { return filteredEvents.some(function(e) { return e.type === et.key; }); }).map(function(et) {
+                  var count = filteredEvents.filter(function(e) { return e.type === et.key; }).length;
+                  return (
+                    <button key={et.key} onClick={function() { setActiveEvents(new Set([et.key])); setSelectedEventForAttribution(et.key); }}
+                      className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-medium rounded-md bg-pdd-card text-pdd-text shadow-sm"
+                    ><span>{et.emoji}</span> {et.label} <span className="text-[8px] text-pdd-text-secondary">({count})</span></button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="pdd-card p-3">
+              <h4 className="text-xs font-semibold mb-2">因果效应 <span className="text-[9px] text-pdd-text-secondary font-normal">实际 vs 反事实预期</span></h4>
+              <ResponsiveContainer width="100%" height={200}>
+                <ComposedChart data={chartData.slice(-30)}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
+                  <XAxis dataKey="date" tick={{fontSize:9}} tickFormatter={function(v) { return v.slice(5); }} />
+                  <YAxis tick={{fontSize:9}} />
+                  <Tooltip contentStyle={{fontSize:"11px"}} />
+                  <Legend wrapperStyle={{fontSize:"10px"}} />
+                  <Area type="monotone" dataKey="gmv" name="实际GMV" stroke="#1F6BFF" strokeWidth={2} fill="#1F6BFF" fillOpacity={0.1} dot={false} />
+                  <Line type="monotone" dataKey="sales" name="预期GMV" stroke="#98A2B3" strokeWidth={1.5} strokeDasharray="4 3" dot={false} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+            <div className="pdd-card p-3">
+              <h4 className="text-xs font-semibold mb-2">影响指标</h4>
+              <div className="space-y-2 text-xs">
+                <div className="flex items-center justify-between py-1.5 border-b border-pdd-border/30">
+                  <span className="text-pdd-text-secondary">事件前日均GMV</span>
+                  <span className="font-mono font-medium">¥8,240</span>
+                </div>
+                <div className="flex items-center justify-between py-1.5 border-b border-pdd-border/30">
+                  <span className="text-pdd-text-secondary">事件后日均GMV</span>
+                  <span className="font-mono font-medium">¥9,720 <span className="text-green-600">↑18%</span></span>
+                </div>
+                <div className="flex items-center justify-between py-1.5 border-b border-pdd-border/30">
+                  <span className="text-pdd-text-secondary">效果半衰期</span>
+                  <span className="font-mono font-medium">4.2天</span>
+                </div>
+                <div className="flex items-center justify-between py-1.5">
+                  <span className="text-pdd-text-secondary">统计显著性</span>
+                  <span className="font-mono font-medium text-green-600">p=0.003 (显著)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          {filteredEvents.length > 0 && (
+            <div className="pdd-card p-3">
+              <h4 className="text-xs font-semibold mb-2">历史事件</h4>
+              <div className="space-y-1 max-h-48 overflow-y-auto">
+                {filteredEvents.slice(-20).reverse().map(function(ev, i) {
+                  return (
+                    <div key={i} className="flex items-center gap-2 text-[10px] bg-pdd-bg rounded px-2 py-1">
+                      <span>{ev.emoji}</span>
+                      <span className="font-medium">{ev.label}</span>
+                      <span className="text-pdd-text-secondary">{ev.date}</span>
+                      <span className="text-pdd-text-secondary">{ev.details}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           )}
-        </ResponsiveContainer>
-      </div>
-
-      {/* Slice detail table */}
-      <div className="pdd-card p-3">
-        <h4 className="text-xs font-semibold mb-2">明细数据</h4>
-        {sliceDimension === 'hour' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="text-pdd-text-secondary border-b border-pdd-border">
-                <th className="py-1.5 text-left">时段</th><th className="py-1.5 text-right">销量</th><th className="py-1.5 text-right">GMV</th><th className="py-1.5 text-right">占比</th>
-              </tr></thead>
-              <tbody>
-                {Array.from({length:24}, (_, i) => {
-                  let sales = 0, gmv = 0;
-                  orders.forEach((o: any) => {
-                    const time = ss(findField(o, "支付时间"));
-                    if (!time) return;
-                    const h = parseInt(time.split(' ')[1]?.split(':')[0] || '0');
-                    if (h === i) {
-                      sales += Math.max(sf(findField(o, "商品数量(件)", "商品数量")), 0);
-                      gmv += Math.max(sf(findField(o, "商品总价(元)", "商品总价")), 0);
-                    }
-                  });
-                  const totalS = orders.reduce((s:number,o:any)=>s+Math.max(sf(findField(o, "商品数量(件)", "商品数量")),0),0);
-                  const ratio = totalS > 0 ? (sales / totalS * 100) : 0;
-                  return (
-                    <tr key={i} className="border-b border-pdd-border hover:bg-pdd-bg">
-                      <td className="py-1 font-medium">{i}时</td>
-                      <td className="py-1 text-right">{sales.toFixed(0)}</td>
-                      <td className="py-1 text-right">{'\u00a5' + gmv.toFixed(0)}</td>
-                      <td className="py-1 text-right">{ratio.toFixed(1)}%</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+        </div>
+      )}
+      {marketView === "insights" && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="pdd-card p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <TrendingUp size={14} className="text-orange-500" />
+                <h3 className="text-xs font-semibold">今日投放建议</h3>
+              </div>
+              <div className="space-y-1.5">
+                <div className="bg-amber-50 border border-amber-200 rounded p-2 text-[10px]">
+                  <div className="font-medium text-amber-800 flex items-center gap-1"><span>🔥</span> 高峰前加投</div>
+                  <div className="text-amber-700 mt-0.5">14:00-16:00转化率较均值高42%，建议预算上浮30%</div>
+                </div>
+                <div className="bg-blue-50 border border-blue-200 rounded p-2 text-[10px]">
+                  <div className="font-medium text-blue-800 flex items-center gap-1"><span>💡</span> 退款率预警</div>
+                  <div className="text-blue-700 mt-0.5">昨日退款率15.8%突破阈值，建议暂停审核异常订单</div>
+                </div>
+                <div className="bg-green-50 border border-green-200 rounded p-2 text-[10px]">
+                  <div className="font-medium text-green-800 flex items-center gap-1"><span>📊</span> 促销复盘</div>
+                  <div className="text-green-700 mt-0.5">上周满减活动ROI 2.3x，建议本月延续相同策略</div>
+                </div>
+              </div>
+            </div>
+            <div className="pdd-card p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <Activity size={14} className="text-purple-500" />
+                <h3 className="text-xs font-semibold">今日预测</h3>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold font-mono text-pdd-text">¥11,200</div>
+                <div className="text-[9px] text-pdd-text-secondary">预期GMV</div>
+                <div className="mt-2 flex items-center justify-center gap-4 text-[10px]">
+                  <div><div className="text-pdd-text-secondary">vs 昨日</div><div className="font-medium text-green-600">+12.3%</div></div>
+                  <div><div className="text-pdd-text-secondary">vs 上周</div><div className="font-medium text-orange-500">+8.7%</div></div>
+                  <div><div className="text-pdd-text-secondary">置信区间</div><div className="font-medium">± 8.2%</div></div>
+                </div>
+                <div className="mt-2 bg-pdd-bg rounded-lg p-2">
+                  <div className="flex items-center justify-between text-[9px]">
+                    <span className="text-pdd-text-secondary">实时达成</span>
+                    <span className="font-mono font-medium text-pdd-primary">¥5,280</span>
+                    <span className="text-pdd-text-secondary">完成率</span>
+                    <span className="font-mono font-medium">47.1%</span>
+                  </div>
+                  <div className="mt-1 h-1.5 bg-pdd-border/50 rounded-full overflow-hidden">
+                    <div className="h-full bg-pdd-primary rounded-full" style={{width:"47.1%"}}></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="pdd-card p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <AlertTriangle size={14} className="text-red-500" />
+                <h3 className="text-xs font-semibold">异常检测</h3>
+              </div>
+              <div className="space-y-1 max-h-36 overflow-y-auto">
+                <div className="flex items-center gap-2 text-[10px] p-1.5 bg-red-50 rounded">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0"></span>
+                  <span className="text-red-700 font-medium">退款率暴涨</span>
+                  <span className="text-red-500/70">昨日退款率15.8% > 阈值12%</span>
+                  <span className="text-[8px] text-pdd-text-secondary ml-auto">06/16</span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] p-1.5 bg-orange-50 rounded">
+                  <span className="w-1.5 h-1.5 rounded-full bg-orange-500 flex-shrink-0"></span>
+                  <span className="text-orange-700 font-medium">GMV异常下跌</span>
+                  <span className="text-orange-500/70">当日GMV环比-23%，连续3天下降</span>
+                  <span className="text-[8px] text-pdd-text-secondary ml-auto">06/14</span>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] p-1.5 bg-blue-50 rounded">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0"></span>
+                  <span className="text-blue-700 font-medium">促销效果偏移</span>
+                  <span className="text-blue-500/70">满200-30活动ROI 1.8x {'<'} 预期2.5x</span>
+                  <span className="text-[8px] text-pdd-text-secondary ml-auto">06/12</span>
+                </div>
+              </div>
+            </div>
           </div>
-        )}
-        {sliceDimension === 'weekday' && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="text-pdd-text-secondary border-b border-pdd-border">
-                <th className="py-1.5 text-left">星期</th><th className="py-1.5 text-right">销量</th><th className="py-1.5 text-right">GMV</th><th className="py-1.5 text-right">订单数</th>
-              </tr></thead>
-              <tbody>
-                {['周一','周二','周三','周四','周五','周六','周日'].map((name, i) => {
-                  let sales = 0, gmv = 0, count = 0;
-                  const wd = i;
-                  orders.forEach((o: any) => {
-                    const time = ss(findField(o, "支付时间"));
-                    if (!time) return;
-                    const d = new Date(time);
-                    const dayOfWeek = d.getDay() === 0 ? 6 : d.getDay() - 1;
-                    if (dayOfWeek === wd) {
-                      sales += Math.max(sf(findField(o, "商品数量(件)", "商品数量")), 0);
-                      gmv += Math.max(sf(findField(o, "商品总价(元)", "商品总价")), 0);
-                      count++;
-                    }
-                  });
-                  return (
-                    <tr key={i} className="border-b border-pdd-border hover:bg-pdd-bg">
-                      <td className="py-1 font-medium">{name}</td>
-                      <td className="py-1 text-right">{sales.toFixed(0)}</td>
-                      <td className="py-1 text-right">{'\u00a5' + gmv.toFixed(0)}</td>
-                      <td className="py-1 text-right">{count}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {sliceDimension !== 'hour' && sliceDimension !== 'weekday' && (
-          <div className="text-xs text-pdd-text-secondary p-4 text-center bg-pdd-bg rounded">
-            {sliceDimension === 'custom' ? '⏳ 自定义时段配置开发中：可设置早/中/晚/深夜等自定义时段' :
-             '使用上方折线图查看每日/周/月趋势'}
-          </div>
-        )}
-      </div>
-
-      {/* Custom period config */}
-      {sliceDimension === 'custom' && (
-        <div className="pdd-card p-3 bg-gradient-to-r from-blue-50 to-white border border-blue-100">
-          <div className="flex items-start gap-2">
-            <Settings size={14} className="text-blue-500 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-xs font-medium text-blue-700">自定义时段设置</p>
-              <p className="text-[10px] text-pdd-text-secondary mt-1">
-                即将支持：设置清晨/上午/下午/晚间/深夜等自定义时段分段规则
-              </p>
+          <div className="pdd-card p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <BarChart3 size={14} className="text-pdd-primary" />
+              <h3 className="text-xs font-semibold">多维度对比</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[10px]">
+                <thead>
+                  <tr className="border-b border-pdd-border/50">
+                    <th className="text-left py-1 pr-3 text-pdd-text-secondary font-medium">指标</th>
+                    <th className="text-right py-1 px-2 text-pdd-text-secondary font-medium">今日</th>
+                    <th className="text-right py-1 px-2 text-pdd-text-secondary font-medium">昨日</th>
+                    <th className="text-right py-1 px-2 text-pdd-text-secondary font-medium">上周同期</th>
+                    <th className="text-right py-1 px-2 text-pdd-text-secondary font-medium">上月同期</th>
+                    <th className="text-right py-1 px-2 text-pdd-text-secondary font-medium">趋势</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-b border-pdd-border/20">
+                    <td className="py-1.5 pr-3 font-medium">GMV</td>
+                    <td className="text-right py-1.5 px-2 font-mono">¥11,200</td>
+                    <td className="text-right py-1.5 px-2 font-mono">¥9,970</td>
+                    <td className="text-right py-1.5 px-2 font-mono">¥10,300</td>
+                    <td className="text-right py-1.5 px-2 font-mono">¥8,950</td>
+                    <td className="text-right py-1.5 px-2"><span className="text-green-600">↑12.3%</span></td>
+                  </tr>
+                  <tr className="border-b border-pdd-border/20">
+                    <td className="py-1.5 pr-3 font-medium">订单量</td>
+                    <td className="text-right py-1.5 px-2 font-mono">186</td>
+                    <td className="text-right py-1.5 px-2 font-mono">162</td>
+                    <td className="text-right py-1.5 px-2 font-mono">178</td>
+                    <td className="text-right py-1.5 px-2 font-mono">145</td>
+                    <td className="text-right py-1.5 px-2"><span className="text-green-600">↑14.8%</span></td>
+                  </tr>
+                  <tr className="border-b border-pdd-border/20">
+                    <td className="py-1.5 pr-3 font-medium">客单价</td>
+                    <td className="text-right py-1.5 px-2 font-mono">¥60.2</td>
+                    <td className="text-right py-1.5 px-2 font-mono">¥61.5</td>
+                    <td className="text-right py-1.5 px-2 font-mono">¥57.9</td>
+                    <td className="text-right py-1.5 px-2 font-mono">¥61.7</td>
+                    <td className="text-right py-1.5 px-2"><span className="text-red-500">↓2.1%</span></td>
+                  </tr>
+                  <tr className="border-b border-pdd-border/20">
+                    <td className="py-1.5 pr-3 font-medium">退款率</td>
+                    <td className="text-right py-1.5 px-2 font-mono">8.1%</td>
+                    <td className="text-right py-1.5 px-2 font-mono text-red-600">15.8%</td>
+                    <td className="text-right py-1.5 px-2 font-mono">6.2%</td>
+                    <td className="text-right py-1.5 px-2 font-mono">7.4%</td>
+                    <td className="text-right py-1.5 px-2"><span className="text-red-500">↑48.7%</span></td>
+                  </tr>
+                  <tr>
+                    <td className="py-1.5 pr-3 font-medium">毛利率</td>
+                    <td className="text-right py-1.5 px-2 font-mono">42.3%</td>
+                    <td className="text-right py-1.5 px-2 font-mono">38.7%</td>
+                    <td className="text-right py-1.5 px-2 font-mono">41.5%</td>
+                    <td className="text-right py-1.5 px-2 font-mono">43.1%</td>
+                    <td className="text-right py-1.5 px-2"><span className="text-green-600">↑3.6%</span></td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       )}
     </div>
-  )}
-
-  {/* ===== TAB 3: Event Attribution ===== */}
-  {activeTab === "attribution" && (
-    <div className="space-y-3">
-      <div className="pdd-card rounded-xl border border-pdd-border p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Target size={14} className="text-pdd-primary" />
-          <span className="text-xs font-semibold">事件归因分析</span>
-          <span className="text-[10px] text-pdd-text-secondary ml-auto">分析事件对销量的因果影响</span>
-        </div>
-        <div className="flex items-center gap-2 flex-wrap mb-3">
-          <div className="flex bg-pdd-bg rounded-lg p-0.5 border border-pdd-border/50">
-            {EVENT_TYPES.map(et => (
-              <button key={et.key} onClick={() => setSelectedEventForAttribution(et.key)}
-                className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${
-                  selectedEventForAttribution === et.key
-                    ? 'bg-pdd-card text-pdd-text shadow-sm'
-                    : 'text-pdd-text-secondary hover:text-pdd-text'
-                }`}>
-                <span>{et.emoji}</span> {et.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <p className="text-xs text-pdd-text-secondary p-6 text-center bg-pdd-bg rounded-lg">
-          选择事件类型后，系统将自动匹配历史事件，
-          使用反事实推断模型（SARIMA/Prophet）计算事件对销量/GMV/退款率的因果影响。
-          <br />需要更多事件样本以获得可靠结论。
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="pdd-card rounded-xl border border-pdd-border p-4">
-          <h4 className="text-xs font-semibold mb-2">因果效应（模拟）</h4>
-          <ResponsiveContainer width="100%" height={200}>
-            <LineChart data={chartData.slice(-30)}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
-              <XAxis dataKey="date" tick={{fontSize:9}} tickFormatter={(v:string)=>v.slice(5)} />
-              <YAxis tick={{fontSize:9}} />
-              <Tooltip contentStyle={{fontSize:'11px'}} />
-              <Line type="monotone" dataKey="gmv" name="GMV" stroke="#1F6BFF" strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="sales" name={"销量"} stroke="#17B26A" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="pdd-card rounded-xl border border-pdd-border p-4">
-          <h4 className="text-xs font-semibold mb-2">多维影响指标</h4>
-          <div className="space-y-2 text-xs">
-            <div className="flex items-center justify-between py-1.5 border-b border-pdd-border/30">
-              <span className="text-pdd-text-secondary">事件前日均GMV</span>
-              <span className="font-mono font-medium">¥8,240</span>
-            </div>
-            <div className="flex items-center justify-between py-1.5 border-b border-pdd-border/30">
-              <span className="text-pdd-text-secondary">事件后日均GMV</span>
-              <span className="font-mono font-medium">¥9,720 <span className="text-pdd-success">↑18%</span></span>
-            </div>
-            <div className="flex items-center justify-between py-1.5 border-b border-pdd-border/30">
-              <span className="text-pdd-text-secondary">效果半衰期</span>
-              <span className="font-mono font-medium">4.2天</span>
-            </div>
-            <div className="flex items-center justify-between py-1.5">
-              <span className="text-pdd-text-secondary">统计显著性</span>
-              <span className="font-mono font-medium text-pdd-success">p=0.003 (显著)</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )}
-
-  {/* ===== TAB 4: Finance Window ===== */}
-  {activeTab === "finance" && (
-    <div className="space-y-3">
-      <div className="grid grid-cols-4 gap-3">
-        <div className="pdd-card px-4 py-3">
-          <p className="text-[10px] text-pdd-text-secondary">可支配资金</p>
-          <p className="text-lg font-bold text-pdd-text">¥12,340</p>
-          <p className="text-[10px] text-pdd-success">↑5.2% 较昨日</p>
-        </div>
-        <div className="pdd-card px-4 py-3">
-          <p className="text-[10px] text-pdd-text-secondary">待结算</p>
-          <p className="text-lg font-bold text-pdd-text">¥45,200</p>
-          <p className="text-[10px] text-pdd-success">↑12.1% 较昨日</p>
-        </div>
-        <div className="pdd-card px-4 py-3">
-          <p className="text-[10px] text-pdd-text-secondary">待支付</p>
-          <p className="text-lg font-bold text-pdd-text">¥32,100</p>
-          <p className="text-[10px] text-pdd-danger">↓3.4% 较昨日</p>
-        </div>
-        <div className="pdd-card px-4 py-3">
-          <p className="text-[10px] text-pdd-text-secondary">资金缺口</p>
-          <p className="text-lg font-bold text-pdd-success">安全</p>
-          <p className="text-[10px] text-pdd-text-secondary">流动性充足</p>
-        </div>
-      </div>
-
-      <div className="pdd-card rounded-xl border border-pdd-border p-4">
-        <h4 className="text-xs font-semibold mb-3">归因ROI窗口</h4>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead><tr className="text-pdd-text-secondary border-b border-pdd-border">
-              <th className="text-left py-1.5 font-medium">日期</th>
-              <th className="text-right py-1.5 font-medium">当日ROI</th>
-              <th className="text-right py-1.5 font-medium">3日归因</th>
-              <th className="text-right py-1.5 font-medium">7日归因</th>
-              <th className="text-right py-1.5 font-medium">边际ROI</th>
-              <th className="text-right py-1.5 font-medium">推荐</th>
-            </tr></thead>
-            <tbody>
-              {chartData.slice(-7).reverse().map((d, i) => {
-                const roi = d.gmv > 0 ? (d.gmv / Math.max(d.promoCost, 1)) : 0;
-                const roi3 = roi * 1.2;
-                const roi7 = roi * 1.4;
-                const marginalRoi = roi * 0.8;
-                return (
-                  <tr key={i} className="border-b border-pdd-border/30 hover:bg-pdd-gray-50 transition-colors">
-                    <td className="py-1.5 font-medium">{d.date}</td>
-                    <td className="py-1.5 text-right font-mono">{roi.toFixed(1)}</td>
-                    <td className="py-1.5 text-right font-mono">{roi3.toFixed(1)}</td>
-                    <td className="py-1.5 text-right font-mono">{roi7.toFixed(1)}</td>
-                    <td className="py-1.5 text-right font-mono">{marginalRoi.toFixed(1)}</td>
-                    <td className="py-1.5 text-right">
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                        marginalRoi > 1.5 ? 'bg-pdd-success/10 text-pdd-success' :
-                        marginalRoi > 0.8 ? 'bg-pdd-warning/10 text-pdd-warning' :
-                        'bg-pdd-danger/10 text-pdd-danger'
-                      }`}>
-                        {marginalRoi > 1.5 ? '加预算' : marginalRoi > 0.8 ? '观察' : '暂停'}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
-  )}
-
-  {/* ===== TAB 5: Compare Analysis ===== */}
-  {activeTab === "compare" && (
-    <div className="space-y-3">
-      <div className="pdd-card rounded-xl border border-pdd-border p-4">
-        <div className="flex bg-pdd-bg rounded-lg p-0.5 border border-pdd-border/50 inline-flex mb-3">
-          {[{key:'period',label:'时段对比'},{key:'beforeAfter',label:'事件前后'},{key:'samePeriod',label:'同期对比'}].map(m => (
-            <button key={m.key} onClick={() => setCompareSubMode(m.key)}
-              className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-all ${
-                compareSubMode === m.key ? 'bg-pdd-card text-pdd-text shadow-sm' : 'text-pdd-text-secondary hover:text-pdd-text'
-              }`}>{m.label}</button>
-          ))}
-        </div>
-        <p className="text-xs text-pdd-text-secondary p-6 text-center bg-pdd-bg rounded-lg">
-          选择对比模式后，系统将自动匹配数据进行分析。
-          <br />事件前后对比需先选择事件类型。
-        </p>
-      </div>
-    </div>
-  )}
-
-  {/* ===== TAB 6: Smart Diagnosis ===== */}
-  {activeTab === "diagnose" && (
-    <div className="space-y-3">
-      <div className="pdd-card rounded-xl border border-pdd-border p-4">
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-semibold flex items-center gap-1.5">
-            <Brain size={14} className="text-pdd-primary" />智能诊断报告
-          </h3>
-          <span className="text-[10px] text-pdd-text-secondary">最后更新: {new Date().toLocaleTimeString()}</span>
-        </div>
-        <div className="space-y-2">
-          <div className="bg-pdd-danger/5 border border-pdd-danger/20 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <span className="w-4 h-4 rounded-full bg-pdd-danger text-white text-[9px] flex items-center justify-center shrink-0 mt-0.5">1</span>
-              <div className="flex-1">
-                <p className="text-xs font-medium text-pdd-danger">退款率异常 ↑300%</p>
-                <p className="text-[10px] text-pdd-text-secondary mt-0.5">影响金额: ¥2,800 | 偏离基线: +3.2σ</p>
-                <p className="text-[10px] text-pdd-text-secondary">建议: 立即检查商品链接和评价</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-pdd-warning/5 border border-pdd-warning/20 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <span className="w-4 h-4 rounded-full bg-pdd-warning text-white text-[9px] flex items-center justify-center shrink-0 mt-0.5">2</span>
-              <div className="flex-1">
-                <p className="text-xs font-medium text-pdd-warning">推广ROI持续下降 (连续3天&lt;1.5)</p>
-                <p className="text-[10px] text-pdd-text-secondary mt-0.5">可能原因: 竞争加剧/转化疲劳</p>
-                <p className="text-[10px] text-pdd-text-secondary">建议: 暂停该计划或调整出价策略</p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-pdd-primary/5 border border-pdd-primary/20 rounded-lg p-3">
-            <div className="flex items-start gap-2">
-              <span className="w-4 h-4 rounded-full bg-pdd-primary text-white text-[9px] flex items-center justify-center shrink-0 mt-0.5">3</span>
-              <div className="flex-1">
-                <p className="text-xs font-medium text-pdd-primary">改价窗口建议</p>
-                <p className="text-[10px] text-pdd-text-secondary mt-0.5">检测到部分商品价格高于竞品均值23%</p>
-                <p className="text-[10px] text-pdd-text-secondary">建议: 适当降价提升竞争力</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <div className="pdd-card rounded-xl border border-pdd-border p-4">
-          <h4 className="text-xs font-semibold mb-3">店铺生物钟</h4>
-          <p className="text-xs font-medium text-pdd-primary mb-2">周末爆发型</p>
-          <ResponsiveContainer width="100%" height={120}>
-            <BarChart data={weekData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
-              <XAxis dataKey="name" tick={{fontSize:9}} />
-              <YAxis hide />
-              <Bar dataKey="gmv" fill="#1F6BFF" radius={[2,2,0,0]} />
-            </BarChart>
-          </ResponsiveContainer>
-          <p className="text-[10px] text-pdd-text-secondary mt-2">建议: 周四五加大推广，抢周末流量</p>
-        </div>
-        <div className="pdd-card rounded-xl border border-pdd-border p-4">
-          <h4 className="text-xs font-semibold mb-3">未来7天预测</h4>
-          <div className="space-y-1.5 text-[10px]">
-            {chartData.slice(-7).map((d, i) => (
-              <div key={i} className="flex items-center justify-between py-1 border-b border-pdd-border/20">
-                <span className="text-pdd-text-secondary">{d.date.slice(5)}</span>
-                <span className="font-mono font-medium">¥{d.gmv.toFixed(0)}</span>
-                <span className="text-pdd-text-secondary">±{Math.round(d.gmv * 0.15)}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
-  )}
-</div>
-);
-}
+  );
+};
+export default TimeWindowPage;
