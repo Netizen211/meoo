@@ -1863,16 +1863,25 @@ parsingStartRef.current[file.name] = Date.now();
             }
           }
         }
-        const supportedFiles = allFiles.filter(f => /\.(csv|xlsx|xls|zip)$/i.test(f.name));
+        const supportedFiles = allFiles.filter(f =>
+          /\.(csv|xlsx|xls|zip)$/i.test(f.name) && !f.name.startsWith('~$')
+        );
         if (supportedFiles.length === 0) {
-          toast.error('文件夹中未找到支持的数据文件（.csv/.xlsx）');
+          toast.error('文件夹中未找到支持的数据文件（已过滤临时文件）');
           return;
         }
-        toast.success(`📁 从文件夹中找到 ${supportedFiles.length} 个数据文件，开始批量上传`, { duration: 3000 });
+        toast.success(`📁 从文件夹中找到 ${supportedFiles.length} 个数据文件，开始逐批上传...`, { duration: 3000 });
         if (!storageMode[dataFilter]) {
           setPendingFiles(supportedFiles); setShowModeDialog(true);
         } else {
-          supportedFiles.forEach(processFile);
+          // ★ 逐个上传，避免80+文件同时解析卡死浏览器
+          let idx = 0;
+          const next = () => {
+            if (idx >= supportedFiles.length) return;
+            processFile(supportedFiles[idx++]);
+            setTimeout(next, 100);
+          };
+          next();
         }
         return;
       }
@@ -1883,10 +1892,16 @@ parsingStartRef.current[file.name] = Date.now();
         toast.error('无法读取拖入的内容，请使用"选择文件"或"选择文件夹"按钮上传');
         return;
       }
+      // ── 普通文件拖入 ──
+      const validFiles = rawFiles.filter(f => /\.(csv|xlsx|xls|zip)$/i.test(f.name) && !f.name.startsWith('~$'));
+      if (validFiles.length === 0) {
+        toast.error('未找到支持的数据文件（已过滤临时文件）');
+        return;
+      }
       if (!storageMode[dataFilter]) {
-        setPendingFiles(rawFiles); setShowModeDialog(true);
+        setPendingFiles(validFiles); setShowModeDialog(true);
       } else {
-        rawFiles.forEach(processFile);
+        validFiles.forEach(processFile);
       }
     } catch (err) {
       console.error('[Upload] drop处理异常:', err);
@@ -1909,17 +1924,25 @@ parsingStartRef.current[file.name] = Date.now();
     const allFiles = Array.from(e.target.files || []);
     e.target.value = '';
     const supportedFiles = allFiles.filter(f =>
-      /\.(csv|xlsx|xls|zip)$/i.test(f.name)
+      /\.(csv|xlsx|xls|zip)$/i.test(f.name) && !f.name.startsWith('~$')
     );
     if (supportedFiles.length === 0) {
-      toast.error('文件夹中未找到支持的文件类型（.csv/.xlsx/.xls/.zip）');
+      toast.error('文件夹中未找到支持的数据文件（已过滤临时文件）');
       return;
     }
-    toast.info(`📁 找到 ${supportedFiles.length} 个数据文件，开始批量上传...`, { duration: 3000 });
+    toast.success(`📁 找到 ${supportedFiles.length} 个数据文件，开始逐批上传...`, { duration: 3000 });
     if (!storageMode[dataFilter]) {
       setPendingFiles(supportedFiles); setShowModeDialog(true);
     } else {
-      supportedFiles.forEach(processFile);
+      // ★ 逐个上传，避免80+文件同时解析卡死浏览器
+      let idx = 0;
+      const next = () => {
+        if (idx >= supportedFiles.length) return;
+        processFile(supportedFiles[idx++]);
+        // 每处理完一个延迟100ms再启动下一个，给浏览器喘息时间
+        setTimeout(next, 100);
+      };
+      next();
     }
   }, [processFile, dataFilter, storageMode]);
 
