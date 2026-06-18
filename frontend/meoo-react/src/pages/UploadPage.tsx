@@ -78,6 +78,10 @@ interface UploadedFile {
   dateStart?: string; dateEnd?: string;
   privacyFields?: string[];
   jsonEstimateKB?: number;
+  /** 当前处理阶段 (大厂式进度分段) */
+  stage?: 'reading' | 'parsing' | 'saving';
+  /** 重试次数 */
+  retryCount?: number;
 }
 
 
@@ -1003,6 +1007,42 @@ export default function UploadPage() {
     }
   };
 
+  // processFile 的 ref 引用（供 runConcurrent 调用，避免循环依赖）
+  const processFileRef = useRef<((file: File) => void) | null>(null);
+
+  // ★ 大厂式并发池：控制并行数量（默认3个同时上传），避免浏览器卡死
+  const runConcurrent = useCallback((fileList: File[]) => {
+    if (fileList.length === 0) return;
+    const pool = new Set<string>();
+    let idx = 0;
+    const CONCURRENCY = 3;
+    const launchNext = () => {
+      const pf = processFileRef.current;
+      if (!pf) return;
+      while (pool.size < CONCURRENCY && idx < fileList.length) {
+        const file = fileList[idx++];
+        pool.add(file.name);
+        pf(file);
+      }
+    };
+    const timer = setInterval(() => {
+      setFiles(prev => {
+        if (idx >= fileList.length && pool.size === 0) {
+          clearInterval(timer);
+          return prev;
+        }
+        prev.forEach(f => {
+          if (pool.has(f.name) && (f.status === 'done' || f.status === 'error')) {
+            pool.delete(f.name);
+          }
+        });
+        return prev;
+      });
+      launchNext();
+    }, 300);
+    launchNext();
+  }, []); // 通过 ref 访问 processFile，不依赖闭包
+
   // ══════════════════════════════════════════════
   // 数据管理 Tab 系统
   // ══════════════════════════════════════════════
@@ -1770,6 +1810,9 @@ parsingStartRef.current[file.name] = Date.now();
 
   }, [currentStore, dataFilter, processCsvFile, processXlsxFile, processZipFile]);
 
+  // ★ 同步 ref，供 runConcurrent 使用
+  processFileRef.current = processFile;
+
   // ★ 递归遍历文件夹（带超时保护和错误处理）
   const traverseDirectory = useCallback(async (entry: FileSystemDirectoryEntry): Promise<File[]> => {
     const files: File[] = [];
@@ -1874,14 +1917,7 @@ parsingStartRef.current[file.name] = Date.now();
         if (!storageMode[dataFilter]) {
           setPendingFiles(supportedFiles); setShowModeDialog(true);
         } else {
-          // ★ 逐个上传，避免80+文件同时解析卡死浏览器
-          let idx = 0;
-          const next = () => {
-            if (idx >= supportedFiles.length) return;
-            processFile(supportedFiles[idx++]);
-            setTimeout(next, 100);
-          };
-          next();
+          runConcurrent(supportedFiles);
         }
         return;
       }
@@ -1901,22 +1937,24 @@ parsingStartRef.current[file.name] = Date.now();
       if (!storageMode[dataFilter]) {
         setPendingFiles(validFiles); setShowModeDialog(true);
       } else {
-        validFiles.forEach(processFile);
+        runConcurrent(validFiles);
       }
     } catch (err) {
       console.error('[Upload] drop处理异常:', err);
       toast.error('文件拖入处理失败，请尝试使用按钮上传');
     }
-  }, [processFile, dataFilter, storageMode]);
+  }, [processFile, dataFilter, storageMode, runConcurrent]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     resetGlobalSeenKeys();
     const files = Array.from(e.target.files || []);
     e.target.value = '';
-    if (!storageMode[dataFilter] && files.length > 0) {
-      setPendingFiles(files); setShowModeDialog(true);
-    } else { files.forEach(processFile); }
-  }, [processFile, dataFilter, storageMode]);
+    const validFiles = files.filter(f => /\.(csv|xlsx|xls|zip)$/i.test(f.name) && !f.name.startsWith('~$'));
+    if (validFiles.length === 0) { toast.error('未找到支持的数据文件'); return; }
+    if (!storageMode[dataFilter]) {
+      setPendingFiles(validFiles); setShowModeDialog(true);
+    } else { runConcurrent(validFiles); }
+  }, [processFile, dataFilter, storageMode, runConcurrent]);
 
   // ★ 文件夹上传：递归扫描所有支持的文件
   const handleFolderInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1934,17 +1972,9 @@ parsingStartRef.current[file.name] = Date.now();
     if (!storageMode[dataFilter]) {
       setPendingFiles(supportedFiles); setShowModeDialog(true);
     } else {
-      // ★ 逐个上传，避免80+文件同时解析卡死浏览器
-      let idx = 0;
-      const next = () => {
-        if (idx >= supportedFiles.length) return;
-        processFile(supportedFiles[idx++]);
-        // 每处理完一个延迟100ms再启动下一个，给浏览器喘息时间
-        setTimeout(next, 100);
-      };
-      next();
+      runConcurrent(supportedFiles);
     }
-  }, [processFile, dataFilter, storageMode]);
+  }, [processFile, dataFilter, storageMode, runConcurrent]);
 
   const removeFile = useCallback((name: string) => setFiles(prev => prev.filter(f => f.name !== name)), []);
 
@@ -1984,8 +2014,8 @@ parsingStartRef.current[file.name] = Date.now();
     }
   }, [files]);
 
-  // ★ 安全网：超过5分钟还在parsing的文件自动标记为失败
-  const STUCK_TIMEOUT_MS = 300000;
+  // ★ 安全网：超过2分钟还在parsing的文件自动标记为失败（大厂普遍1-3分钟）
+  const STUCK_TIMEOUT_MS = 120000;
   React.useEffect(() => {
     if (files.length === 0) return;
     const timer = setInterval(() => {
@@ -1994,15 +2024,22 @@ parsingStartRef.current[file.name] = Date.now();
         if (f.status !== 'parsing') return f;
         const startTime = parsingStartRef.current[f.name];
         if (startTime && (now - startTime) > STUCK_TIMEOUT_MS) {
-          console.warn('[Upload] 文件解析超时(5分钟)，自动标记失败:', f.name);
+          console.warn('[Upload] 文件解析超时(2分钟)，自动标记失败:', f.name);
           toast.error(`文件 ${f.name} 解析超时，请检查文件是否损坏`);
-          return { ...f, status: 'error', errorMessage: '解析超时（超过5分钟未完成）' };
+          return { ...f, status: 'error', errorMessage: '解析超时（超过2分钟未完成）' };
         }
         return f;
       }));
-    }, 30000);
+    }, 15000); // 每15秒检查一次
     return () => clearInterval(timer);
   }, [files.length]);
+
+  // ★ 重试按钮：移除失败记录后重新触发文件选择
+  const retryFile = useCallback((fileName: string) => {
+    setFiles(prev => prev.filter(f => f.name !== fileName));
+    toast.info(`请重新选择 "${fileName}"`, { duration: 3000 });
+    fileInputRef.current?.click();
+  }, []);
 
   const toggleSelectAll = () => {
 
@@ -2373,25 +2410,28 @@ parsingStartRef.current[file.name] = Date.now();
       </div>
 
 
-      {/* ⭐ 权益1: 批量上传队列状态 */}
+      {/* ⭐ 权益1: 批量上传队列状态 — 大厂式聚合进度 */}
       {showBatchQueue && batchQueue.total > 0 && (
         <Card className="mb-3 border-pdd-primary/30 bg-pdd-primary/5">
           <CardContent className="p-3">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-medium text-pdd-text flex items-center gap-1.5">
-                <Loader2 size={12} className="animate-spin" />
-                批量上传队列
+                {batchQueue.done + batchQueue.failed === batchQueue.total
+                  ? <CheckCircle size={12} className="text-pdd-success" />
+                  : <Loader2 size={12} className="animate-spin" />}
+                批量上传
               </span>
               <span className="text-xs text-pdd-text-secondary">
-                {batchQueue.done + batchQueue.failed}/{batchQueue.total}
+                {batchQueue.done}/{batchQueue.total}
                 {batchQueue.failed > 0 && <span className="text-pdd-danger ml-1">({batchQueue.failed} 失败)</span>}
+                {batchQueue.total - batchQueue.done - batchQueue.failed > 0 && <span className="text-pdd-primary ml-1">⏳{batchQueue.total - batchQueue.done - batchQueue.failed}</span>}
               </span>
             </div>
             <Progress value={((batchQueue.done + batchQueue.failed) / batchQueue.total) * 100} className="h-1.5" />
             <div className="flex items-center gap-3 mt-1.5 text-[10px] text-pdd-text-secondary">
-              <span className="text-pdd-success">✅ {batchQueue.done} 成功</span>
+              <span className="text-pdd-success">✅ {batchQueue.done} 完成</span>
               {batchQueue.failed > 0 && <span className="text-pdd-danger">❌ {batchQueue.failed} 失败</span>}
-              <span className="text-pdd-text-secondary">⏳ {batchQueue.total - batchQueue.done - batchQueue.failed} 进行中</span>
+              <span className="text-pdd-primary">📤 {batchQueue.total - batchQueue.done - batchQueue.failed} 进行中</span>
             </div>
           </CardContent>
         </Card>
@@ -2423,7 +2463,13 @@ parsingStartRef.current[file.name] = Date.now();
 
                     <p className="text-xs text-pdd-text-secondary mt-0.5">
                       {f.detectedType || '检测中...'} · {(f.size / 1024).toFixed(1)}KB
-                      {f.detectedType && f.detectedType !== '检测中...' && f.status === 'parsing' && <span className="ml-2 text-pdd-primary">解析中...</span>}
+                      {f.status === 'parsing' && (
+                        <span className="ml-2">
+                          {f.stage === 'reading' ? <span className="text-blue-400">📖 读取中...</span>
+                            : f.stage === 'saving' ? <span className="text-purple-400">💾 保存中...</span>
+                            : <span className="text-pdd-primary">⚙️ 解析中...</span>}
+                        </span>
+                      )}
                     </p>
 
                     {/* ★ 进度条：解析状态始终显示 */}
@@ -2495,7 +2541,7 @@ parsingStartRef.current[file.name] = Date.now();
                       </div>
                     )}
 
-                    {/* ★ 错误状态 */}
+                    {/* ★ 错误状态 + 重试按钮 */}
                     {f.status === 'error' && (
                       <div className="mt-1.5">
                         <div className="flex items-center gap-1.5">
@@ -2503,6 +2549,10 @@ parsingStartRef.current[file.name] = Date.now();
                           <span className="text-xs text-pdd-danger font-medium">解析失败</span>
                         </div>
                         {f.errorMessage && <p className="text-[10px] text-pdd-danger/70 mt-0.5">{f.errorMessage}</p>}
+                        <button onClick={() => retryFile(f.name)}
+                          className="mt-1.5 px-2.5 py-1 text-[10px] bg-pdd-danger/10 text-pdd-danger border border-pdd-danger/30 rounded-md hover:bg-pdd-danger/20 transition-all">
+                          🔄 重试上传
+                        </button>
                       </div>
                     )}
 
