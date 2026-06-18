@@ -990,6 +990,7 @@ export default function UploadPage() {
   const [historySearch, setHistorySearch] = useState('');
   const [historyTypeFilter, setHistoryTypeFilter] = useState<string>('all');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   // ★ 最小解析时间（保证进度条可见）
   const MIN_PARSE_MS = 500;
@@ -1751,13 +1752,44 @@ parsingStartRef.current[file.name] = Date.now();
   }, [currentStore, dataFilter, processCsvFile, processXlsxFile, processZipFile]);
 
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault(); setDragging(false); resetGlobalSeenKeys();
+    // ★ 检测是否有文件夹拖入（用 DataTransferItem API 递归遍历）
+    const items = Array.from(e.dataTransfer.items);
+    const hasDirectory = items.some(item => {
+      const entry = item.webkitGetAsEntry?.();
+      return entry?.isDirectory;
+    });
+    if (hasDirectory) {
+      const allFiles: File[] = [];
+      for (const item of items) {
+        const entry = item.webkitGetAsEntry?.();
+        if (entry?.isDirectory) {
+          allFiles.push(...await traverseDirectory(entry as FileSystemDirectoryEntry));
+        } else if (entry?.isFile) {
+          const file = await new Promise<File>((resolve) => (entry as FileSystemFileEntry).file(resolve));
+          allFiles.push(file);
+        }
+      }
+      const supportedFiles = allFiles.filter(f => /\.(csv|xlsx|xls|zip)$/i.test(f.name));
+      if (supportedFiles.length === 0) {
+        toast.error('文件夹中未找到支持的数据文件');
+        return;
+      }
+      toast.info(`📁 从文件夹中找到 ${supportedFiles.length} 个数据文件，开始上传...`, { duration: 3000 });
+      if (!storageMode[dataFilter]) {
+        setPendingFiles(supportedFiles); setShowModeDialog(true);
+      } else {
+        supportedFiles.forEach(processFile);
+      }
+      return;
+    }
+    // 原有逻辑：普通文件拖入
     const files = Array.from(e.dataTransfer.files);
     if (!storageMode[dataFilter] && files.length > 0) {
       setPendingFiles(files); setShowModeDialog(true);
     } else { files.forEach(processFile); }
-  }, [processFile, dataFilter, storageMode]);
+  }, [processFile, dataFilter, storageMode, traverseDirectory]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     resetGlobalSeenKeys();
@@ -1767,6 +1799,48 @@ parsingStartRef.current[file.name] = Date.now();
       setPendingFiles(files); setShowModeDialog(true);
     } else { files.forEach(processFile); }
   }, [processFile, dataFilter, storageMode]);
+
+  // ★ 文件夹上传：递归扫描所有支持的文件
+  const handleFolderInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    resetGlobalSeenKeys();
+    const allFiles = Array.from(e.target.files || []);
+    e.target.value = '';
+    const supportedFiles = allFiles.filter(f =>
+      /\.(csv|xlsx|xls|zip)$/i.test(f.name)
+    );
+    if (supportedFiles.length === 0) {
+      toast.error('文件夹中未找到支持的文件类型（.csv/.xlsx/.xls/.zip）');
+      return;
+    }
+    toast.info(`📁 找到 ${supportedFiles.length} 个数据文件，开始批量上传...`, { duration: 3000 });
+    if (!storageMode[dataFilter]) {
+      setPendingFiles(supportedFiles); setShowModeDialog(true);
+    } else {
+      supportedFiles.forEach(processFile);
+    }
+  }, [processFile, dataFilter, storageMode]);
+
+  // ★ 递归遍历拖入的文件夹（DataTransferItem API）
+  const traverseDirectory = useCallback(async (entry: FileSystemDirectoryEntry): Promise<File[]> => {
+    const files: File[] = [];
+    const reader = entry.createReader();
+    const readBatch = async () => {
+      const entries = await new Promise<FileSystemEntry[]>((resolve) => {
+        reader.readEntries(resolve);
+      });
+      for (const e of entries) {
+        if (e.isFile) {
+          const file = await new Promise<File>((resolve) => (e as FileSystemFileEntry).file(resolve));
+          files.push(file);
+        } else if (e.isDirectory) {
+          files.push(...await traverseDirectory(e as FileSystemDirectoryEntry));
+        }
+      }
+      if (entries.length > 0) await readBatch(); // 继续读取剩余批次
+    };
+    await readBatch();
+    return files;
+  }, []);
 
   const removeFile = useCallback((name: string) => setFiles(prev => prev.filter(f => f.name !== name)), []);
 
@@ -2144,6 +2218,7 @@ parsingStartRef.current[file.name] = Date.now();
           onClick={() => fileInputRef.current?.click()}>
           <CardContent>
           <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.zip" multiple className="hidden" onChange={handleFileInput} />
+          <input ref={folderInputRef} type="file" webkitdirectory directory className="hidden" onChange={handleFolderInput} />
 
           <motion.div animate={{ scale: dragging ? 1.1 : 1 }} className="py-12">
 
@@ -2151,9 +2226,22 @@ parsingStartRef.current[file.name] = Date.now();
               <Upload className="w-8 h-8 text-pdd-primary" />
             </div>
 
-            <p className="text-lg font-medium text-pdd-text">拖拽文件到此处上传</p>
+            <p className="text-lg font-medium text-pdd-text">拖拽文件或文件夹到此处上传</p>
             <p className="text-pdd-text-secondary mt-1">支持 CSV、XLSX 格式 | 订单数据、推广数据、运费险数据</p>
             <p className="text-[11px] text-pdd-text-secondary/60 mt-2">点击选择文件或拖拽到此处</p>
+
+            {/* ★ 文件夹上传快捷入口 */}
+            <div className="mt-5 flex items-center justify-center gap-3">
+              <button onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}
+                className="px-4 py-2 rounded-lg bg-pdd-primary/10 text-pdd-primary hover:bg-pdd-primary/20 border border-pdd-primary/30 transition-all text-xs font-medium">
+                📄 选择文件
+              </button>
+              <span className="text-pdd-text-secondary/40 text-xs">或</span>
+              <button onClick={(e) => { e.stopPropagation(); folderInputRef.current?.click(); }}
+                className="px-4 py-2 rounded-lg bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/30 transition-all text-xs font-medium">
+                📁 选择文件夹（批量上传）
+              </button>
+            </div>
 
           </motion.div>
           </CardContent>
