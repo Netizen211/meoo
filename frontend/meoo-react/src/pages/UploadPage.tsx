@@ -1391,13 +1391,30 @@ export default function UploadPage() {
   const processXlsxFile = useCallback((file: File, targetStoreId: string, targetStoreName: string) => {
 
     const reader = new FileReader();
+    const toastId = `xlsx-${file.name}-${Date.now()}`;
+    let settled = false;  // 防止重复toast
 
     reader.onprogress = (e) => { if (e.lengthComputable) setFiles(prev => prev.map(f => f.name === file.name ? { ...f, progress: Math.round((e.loaded / e.total) * 80) } : f)); };
 
+    reader.onerror = (err) => {
+      if (settled) return; settled = true;
+      const errMsg = `文件读取失败：${file.name}`;
+      console.error('FileReader error:', err, { fileName: file.name });
+      setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error', errorMessage: errMsg } : f));
+      toast.error(errMsg, { id: toastId });
+    };
+
     reader.onload = async (e) => {
 
-      const toastId = `xlsx-${file.name}-${Date.now()}`;
       toast.loading(`正在解析 ${file.name}...`, { id: toastId });
+
+      // ★ 整个解析过程最多120秒（XLSX.read可能卡死大文件）
+      const parseTimeout = setTimeout(() => {
+        if (settled) return; settled = true;
+        const errMsg = `解析超时：${file.name} 超过120秒仍未完成`;
+        setFiles(prev => prev.map(f => f.name === file.name ? { ...f, status: 'error', errorMessage: errMsg } : f));
+        toast.error(errMsg, { id: toastId });
+      }, 120000);
 
       try {
 
@@ -1672,6 +1689,8 @@ export default function UploadPage() {
 
         toast.error(errMsg, { id: toastId });
 
+      } finally {
+        clearTimeout(parseTimeout);
       }
 
     };
@@ -1941,6 +1960,26 @@ parsingStartRef.current[file.name] = Date.now();
       return () => clearTimeout(timer);
     }
   }, [files]);
+
+  // ★ 安全网：超过5分钟还在parsing的文件自动标记为失败
+  const STUCK_TIMEOUT_MS = 300000;
+  React.useEffect(() => {
+    if (files.length === 0) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setFiles(prev => prev.map(f => {
+        if (f.status !== 'parsing') return f;
+        const startTime = parsingStartRef.current[f.name];
+        if (startTime && (now - startTime) > STUCK_TIMEOUT_MS) {
+          console.warn('[Upload] 文件解析超时(5分钟)，自动标记失败:', f.name);
+          toast.error(`文件 ${f.name} 解析超时，请检查文件是否损坏`);
+          return { ...f, status: 'error', errorMessage: '解析超时（超过5分钟未完成）' };
+        }
+        return f;
+      }));
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [files.length]);
 
   const toggleSelectAll = () => {
 
