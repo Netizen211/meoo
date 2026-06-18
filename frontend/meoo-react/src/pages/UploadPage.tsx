@@ -1751,45 +1751,129 @@ parsingStartRef.current[file.name] = Date.now();
 
   }, [currentStore, dataFilter, processCsvFile, processXlsxFile, processZipFile]);
 
+  // ★ 递归遍历文件夹（带超时保护和错误处理）
+  const traverseDirectory = useCallback(async (entry: FileSystemDirectoryEntry): Promise<File[]> => {
+    const files: File[] = [];
+    const reader = entry.createReader();
+    const BATCH_TIMEOUT = 15000; // 每批15秒超时
+
+    while (true) {
+      const batch = await new Promise<FileSystemEntry[]>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('readEntries超时')), BATCH_TIMEOUT);
+        try {
+          reader.readEntries(
+            (entries: FileSystemEntry[]) => {
+              clearTimeout(timer);
+              resolve(entries);
+            },
+            (err: Error) => {
+              clearTimeout(timer);
+              reject(err);
+            }
+          );
+        } catch (err) {
+          clearTimeout(timer);
+          reject(err);
+        }
+      });
+
+      if (batch.length === 0) break; // 读取完毕
+
+      for (const e of batch) {
+        if (e.isFile) {
+          try {
+            const file = await new Promise<File>((resolve, reject) => {
+              (e as FileSystemFileEntry).file(resolve, reject);
+            });
+            files.push(file);
+          } catch (err) {
+            console.warn('[Upload] 跳过文件:', e.name, err);
+          }
+        } else if (e.isDirectory) {
+          try {
+            const subFiles = await traverseDirectory(e as FileSystemDirectoryEntry);
+            files.push(...subFiles);
+          } catch (err) {
+            console.warn('[Upload] 跳过子目录:', e.name, err);
+          }
+        }
+      }
+    }
+
+    return files;
+  }, []);
 
   const handleDrop = useCallback(async (e: React.DragEvent) => {
     e.preventDefault(); setDragging(false); resetGlobalSeenKeys();
-    // ★ 检测是否有文件夹拖入（用 DataTransferItem API 递归遍历）
-    const items = Array.from(e.dataTransfer.items);
-    const hasDirectory = items.some(item => {
-      const entry = item.webkitGetAsEntry?.();
-      return entry?.isDirectory;
-    });
-    if (hasDirectory) {
-      const allFiles: File[] = [];
-      for (const item of items) {
-        const entry = item.webkitGetAsEntry?.();
-        if (entry?.isDirectory) {
-          allFiles.push(...await traverseDirectory(entry as FileSystemDirectoryEntry));
-        } else if (entry?.isFile) {
-          const file = await new Promise<File>((resolve) => (entry as FileSystemFileEntry).file(resolve));
-          allFiles.push(file);
-        }
+    try {
+      // ★ 同步提取所有信息（React 17事件池化，必须在异步前读完）
+      const dt = e.dataTransfer;
+      const rawFiles = Array.from(dt.files);
+      const items = Array.from(dt.items);
+
+      // ★ 检测是否有文件夹拖入
+      const hasWebkitApi = items.some(item => typeof item.webkitGetAsEntry === 'function');
+      let hasDirectory = false;
+      let entries: (FileSystemEntry | null)[] = [];
+      if (hasWebkitApi) {
+        entries = items.map(item => item.webkitGetAsEntry());
+        hasDirectory = entries.some(e => e?.isDirectory);
       }
-      const supportedFiles = allFiles.filter(f => /\.(csv|xlsx|xls|zip)$/i.test(f.name));
-      if (supportedFiles.length === 0) {
-        toast.error('文件夹中未找到支持的数据文件');
+
+      if (hasDirectory) {
+        // ── 文件夹拖入 ──
+        const allFiles: File[] = [];
+        for (const entry of entries) {
+          if (!entry) continue;
+          if (entry.isDirectory) {
+            const dirFiles = await traverseDirectory(entry as FileSystemDirectoryEntry)
+              .catch(err => {
+                console.error('[Upload] 遍历文件夹失败:', entry.name, err);
+                toast.error(`遍历文件夹失败: ${entry.name}`);
+                return [] as File[];
+              });
+            allFiles.push(...dirFiles);
+          } else if (entry.isFile) {
+            try {
+              const file = await new Promise<File>((resolve, reject) => {
+                (entry as FileSystemFileEntry).file(resolve, reject);
+              });
+              allFiles.push(file);
+            } catch (err) {
+              console.warn('[Upload] 跳过文件:', entry.name, err);
+            }
+          }
+        }
+        const supportedFiles = allFiles.filter(f => /\.(csv|xlsx|xls|zip)$/i.test(f.name));
+        if (supportedFiles.length === 0) {
+          toast.error('文件夹中未找到支持的数据文件（.csv/.xlsx）');
+          return;
+        }
+        toast.success(`📁 从文件夹中找到 ${supportedFiles.length} 个数据文件，开始批量上传`, { duration: 3000 });
+        if (!storageMode[dataFilter]) {
+          setPendingFiles(supportedFiles); setShowModeDialog(true);
+        } else {
+          supportedFiles.forEach(processFile);
+        }
         return;
       }
-      toast.info(`📁 从文件夹中找到 ${supportedFiles.length} 个数据文件，开始上传...`, { duration: 3000 });
-      if (!storageMode[dataFilter]) {
-        setPendingFiles(supportedFiles); setShowModeDialog(true);
-      } else {
-        supportedFiles.forEach(processFile);
+
+      // ── 普通文件拖入 ──
+      if (rawFiles.length === 0) {
+        // 浏览器不支持 webkitGetAsEntry 且 files 为空 → 无法读取
+        toast.error('无法读取拖入的内容，请使用"选择文件"或"选择文件夹"按钮上传');
+        return;
       }
-      return;
+      if (!storageMode[dataFilter]) {
+        setPendingFiles(rawFiles); setShowModeDialog(true);
+      } else {
+        rawFiles.forEach(processFile);
+      }
+    } catch (err) {
+      console.error('[Upload] drop处理异常:', err);
+      toast.error('文件拖入处理失败，请尝试使用按钮上传');
     }
-    // 原有逻辑：普通文件拖入
-    const files = Array.from(e.dataTransfer.files);
-    if (!storageMode[dataFilter] && files.length > 0) {
-      setPendingFiles(files); setShowModeDialog(true);
-    } else { files.forEach(processFile); }
-  }, [processFile, dataFilter, storageMode, traverseDirectory]);
+  }, [processFile, dataFilter, storageMode]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     resetGlobalSeenKeys();
@@ -1819,28 +1903,6 @@ parsingStartRef.current[file.name] = Date.now();
       supportedFiles.forEach(processFile);
     }
   }, [processFile, dataFilter, storageMode]);
-
-  // ★ 递归遍历拖入的文件夹（DataTransferItem API）
-  const traverseDirectory = useCallback(async (entry: FileSystemDirectoryEntry): Promise<File[]> => {
-    const files: File[] = [];
-    const reader = entry.createReader();
-    const readBatch = async () => {
-      const entries = await new Promise<FileSystemEntry[]>((resolve) => {
-        reader.readEntries(resolve);
-      });
-      for (const e of entries) {
-        if (e.isFile) {
-          const file = await new Promise<File>((resolve) => (e as FileSystemFileEntry).file(resolve));
-          files.push(file);
-        } else if (e.isDirectory) {
-          files.push(...await traverseDirectory(e as FileSystemDirectoryEntry));
-        }
-      }
-      if (entries.length > 0) await readBatch(); // 继续读取剩余批次
-    };
-    await readBatch();
-    return files;
-  }, []);
 
   const removeFile = useCallback((name: string) => setFiles(prev => prev.filter(f => f.name !== name)), []);
 
@@ -2218,7 +2280,7 @@ parsingStartRef.current[file.name] = Date.now();
           onClick={() => fileInputRef.current?.click()}>
           <CardContent>
           <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls,.zip" multiple className="hidden" onChange={handleFileInput} />
-          <input ref={folderInputRef} type="file" webkitdirectory directory className="hidden" onChange={handleFolderInput} />
+          <input ref={folderInputRef} type="file" {...{ webkitdirectory: true, directory: true } as any} className="hidden" onChange={handleFolderInput} />
 
           <motion.div animate={{ scale: dragging ? 1.1 : 1 }} className="py-12">
 
