@@ -311,6 +311,7 @@ function TimeWindowPage() {
 
 
   // ===== View State =====
+  const [renderError, setRenderError] = useState<string | null>(null);
   const [marketView, setMarketView] = useState<string>("fingerprint");
   const [anomalyFilter, setAnomalyFilter] = useState<string>("all");
   const todayStr = formatDate(new Date());
