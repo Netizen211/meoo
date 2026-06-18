@@ -289,6 +289,7 @@ interface StoreDataItem {
   orders: any[];
   promotionSummary: any[];
   promotionProducts: any[];
+  promotionHourly: any[];
   starStoreSummary: any[];
   liveStreamSummary: any[];
   shippingInsurance: any[];
@@ -430,6 +431,7 @@ const EMPTY_STORE_DATA: StoreDataItem = {
   orders: [],
   promotionSummary: [],
   promotionProducts: [],
+  promotionHourly: [],
   starStoreSummary: [],
   liveStreamSummary: [],
   shippingInsurance: [],
@@ -479,7 +481,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         if (raw) {
           const d = JSON.parse(raw);
           fromLocal[store.id] = {
-            orders: d.o || [], promotionSummary: d.ps || [], promotionProducts: d.pp || [],
+            orders: d.o || [], promotionSummary: d.ps || [], promotionProducts: d.pp || [], promotionHourly: d.ph || [],
             starStoreSummary: d.ss || [], liveStreamSummary: d.ls || [],
             shippingInsurance: d.si || [], afterSaleRecords: d.as || [], financialRecords: d.fr || [],
             availableFields: { csv: Array.isArray(d.af?.csv) ? d.af.csv : [], promotion: Array.isArray(d.af?.promotion) ? d.af.promotion : [], insurance: Array.isArray(d.af?.insurance) ? d.af.insurance : [], afterSale: Array.isArray(d.af?.afterSale) ? d.af.afterSale : [], financial: Array.isArray(d.af?.financial) ? d.af.financial : [] },
@@ -506,6 +508,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
             orders: sd.orders || [],
             promotionSummary: sd.promotionSummary || [],
             promotionProducts: sd.promotionProducts || [],
+            promotionHourly: sd.promotionHourly || [],
             starStoreSummary: sd.starStoreSummary || [],
             liveStreamSummary: sd.liveStreamSummary || [],
             shippingInsurance: sd.shippingInsurance || [],
@@ -623,7 +626,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const sd = serverData.data;
     const newData: StoreDataItem = {
       orders: sd.orders || [], promotionSummary: sd.promotionSummary || [],
-      promotionProducts: sd.promotionProducts || [], starStoreSummary: sd.starStoreSummary || [],
+      promotionProducts: sd.promotionProducts || [], promotionHourly: sd.promotionHourly || [],
+      starStoreSummary: sd.starStoreSummary || [],
       liveStreamSummary: sd.liveStreamSummary || [], shippingInsurance: sd.shippingInsurance || [],
       afterSaleRecords: sd.afterSaleRecords || [], financialRecords: sd.financialRecords || [],
       availableFields: {
@@ -641,11 +645,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     // ★ 非空保护：服务端为空时不覆盖本地
     const localSnap = useDataStore.getState().storeDataMap[storeId];
     const localTotal = localSnap
-      ? (localSnap.orders?.length||0)+(localSnap.promotionSummary?.length||0)+(localSnap.promotionProducts?.length||0)
+      ? (localSnap.orders?.length||0)+(localSnap.promotionSummary?.length||0)+(localSnap.promotionProducts?.length||0)+(localSnap.promotionHourly?.length||0)
         +(localSnap.starStoreSummary?.length||0)+(localSnap.liveStreamSummary?.length||0)
         +(localSnap.shippingInsurance?.length||0)+(localSnap.afterSaleRecords?.length||0)+(localSnap.financialRecords?.length||0)
       : 0;
-    const serverTotal = (newData.orders?.length||0)+(newData.promotionSummary?.length||0)+(newData.promotionProducts?.length||0)
+    const serverTotal = (newData.orders?.length||0)+(newData.promotionSummary?.length||0)+(newData.promotionProducts?.length||0)+(newData.promotionHourly?.length||0)
       +(newData.starStoreSummary?.length||0)+(newData.liveStreamSummary?.length||0)
       +(newData.shippingInsurance?.length||0)+(newData.afterSaleRecords?.length||0)+(newData.financialRecords?.length||0);
     if (serverTotal > 0 || localTotal === 0) {
@@ -926,7 +930,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const realStores = stores.filter(s => s.id !== ALL_STORES_ID);
       if (!realStores.length) return EMPTY_STORE_DATA;
       const merged: StoreDataItem = {
-        orders: [], promotionSummary: [], promotionProducts: [],
+        orders: [], promotionSummary: [], promotionProducts: [], promotionHourly: [],
         starStoreSummary: [], liveStreamSummary: [], shippingInsurance: [],
         afterSaleRecords: [], financialRecords: [],
         availableFields: { csv: [], promotion: [], insurance: [], afterSale: [], financial: [] },
@@ -939,6 +943,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         merged.orders.push(...sd.orders);
         merged.promotionSummary.push(...sd.promotionSummary);
         merged.promotionProducts.push(...sd.promotionProducts);
+        merged.promotionHourly.push(...sd.promotionHourly);
         merged.starStoreSummary.push(...sd.starStoreSummary);
         merged.liveStreamSummary.push(...sd.liveStreamSummary);
         merged.shippingInsurance.push(...sd.shippingInsurance);
@@ -1061,7 +1066,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (!prev) return EMPTY_STORE_DATA;
       const nd = { ...prev, availableFields: { ...prev.availableFields } };
       if (record.fileType === '订单数据') { nd.orders = []; nd.availableFields.csv = []; }
-      else if (record.fileType === '商品推广数据') { nd.promotionSummary = []; nd.promotionProducts = []; nd.availableFields.promotion = []; }
+      else if (record.fileType === '商品推广数据') { nd.promotionSummary = []; nd.promotionProducts = []; nd.promotionHourly = []; nd.availableFields.promotion = []; }
       else if (record.fileType === '明星店铺数据') { nd.starStoreSummary = []; }
       else if (record.fileType === '直播推广数据') { nd.liveStreamSummary = []; }
       else if (record.fileType === '运费险数据') { nd.shippingInsurance = []; nd.availableFields.insurance = []; }
@@ -1254,14 +1259,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const clearPromotionData = useCallback((storeId?: string) => {
     console.log('[CLEAR] Clearing promotion data', storeId ?? 'ALL');
-    const promoCats = ['promotionSummary', 'promotionProducts', 'starStoreSummary', 'liveStreamSummary'];
+    const promoCats = ['promotionSummary', 'promotionProducts', 'promotionHourly', 'starStoreSummary', 'liveStreamSummary'];
     const clearPromoForStore = (sid: string) => {
       promoCats.forEach(cat => {
         apiClient.delete(`/data/store/${encodeURIComponent(sid)}/category/${cat}`).catch(() => {});
       });
       zSetLocal(sid, (prev: StoreDataItem | null) => {
         if (!prev) return EMPTY_STORE_DATA;
-        return { ...prev, promotionSummary: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], availableFields: { ...prev.availableFields, promotion: [] } };
+        return { ...prev, promotionSummary: [], promotionProducts: [], promotionHourly: [], starStoreSummary: [], liveStreamSummary: [], availableFields: { ...prev.availableFields, promotion: [] } };
       });
     };
     if (storeId) {

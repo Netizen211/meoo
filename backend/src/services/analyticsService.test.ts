@@ -21,16 +21,16 @@ describe("computeDashboardKPI", () => {
 });
 
 describe("computeAllProductStats", () => {
-  it("per product", () => { const s = computeAllProductStats(mockOrders,[],[],[],[],{},{}); expect(Object.keys(s).length).toBe(2); });
-  it("GMV", () => { const s = computeAllProductStats(mockOrders,[],[],[],[],{},{}); expect(s["P001"].gmv).toBe(300); });
-  it("sales", () => { const s = computeAllProductStats(mockOrders,[],[],[],[],{},{}); expect(s["P001"].sales).toBe(5); });
-  it("refund", () => { const s = computeAllProductStats(mockOrders,[],[],[],[],{},{}); expect(s["P001"].refundCount).toBe(1); });
-  it("promo", () => { const s = computeAllProductStats(mockOrders,mockPromo,[],[],[],{},{}); expect(s["P001"].promoCost).toBe(30); });
-  it("ROI", () => { const s = computeAllProductStats(mockOrders,mockPromo,[],[],[],{},{}); expect(s["P001"].roi).toBe(10); });
-  it("daily", () => { const s = computeAllProductStats(mockOrders,[],[],[],[],{},{}); expect(s["P001"].dailySales.length).toBe(2); });
-  it("empty", () => { const s = computeAllProductStats([],[],[],[],[],{},{}); expect(Object.keys(s).length).toBe(0); });
-  it("skipEmptyId", () => { const s = computeAllProductStats([{ "商品ID": "" }],[],[],[],[],{},{}); expect(Object.keys(s).length).toBe(0); });
-  it("parseSymbols", () => { const s = computeAllProductStats([{ "商品ID": "P001", "商品总价(元)": "100.50", "商家实收金额(元)": "90", "商品数量(件)": "1" }],[],[],[],[],{},{}); expect(s["P001"].gmv).toBe(100.5); });
+  it("per product", () => { const s = computeAllProductStats(mockOrders,[],[],[],[],[],{},{}); expect(Object.keys(s).length).toBe(2); });
+  it("GMV", () => { const s = computeAllProductStats(mockOrders,[],[],[],[],[],{},{}); expect(s["P001"].gmv).toBe(300); });
+  it("sales", () => { const s = computeAllProductStats(mockOrders,[],[],[],[],[],{},{}); expect(s["P001"].sales).toBe(5); });
+  it("refund", () => { const s = computeAllProductStats(mockOrders,[],[],[],[],[],{},{}); expect(s["P001"].refundCount).toBe(1); });
+  it("promo", () => { const s = computeAllProductStats(mockOrders,mockPromo,[],[],[],[],{},{}); expect(s["P001"].promoCost).toBe(30); });
+  it("ROI", () => { const s = computeAllProductStats(mockOrders,mockPromo,[],[],[],[],{},{}); expect(s["P001"].roi).toBe(10); });
+  it("daily", () => { const s = computeAllProductStats(mockOrders,[],[],[],[],[],{},{}); expect(s["P001"].dailySales.length).toBe(2); });
+  it("empty", () => { const s = computeAllProductStats([],[],[],[],[],[],{},{}); expect(Object.keys(s).length).toBe(0); });
+  it("skipEmptyId", () => { const s = computeAllProductStats([{ "商品ID": "" }],[],[],[],[],[],{},{}); expect(Object.keys(s).length).toBe(0); });
+  it("parseSymbols", () => { const s = computeAllProductStats([{ "商品ID": "P001", "商品总价(元)": "100.50", "商家实收金额(元)": "90", "商品数量(件)": "1" }],[],[],[],[],[],{},{}); expect(s["P001"].gmv).toBe(100.5); });
 });
 
 describe("computePromotionStats", () => {

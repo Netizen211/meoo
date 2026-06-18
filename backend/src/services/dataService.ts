@@ -36,6 +36,7 @@ export async function loadStoreData(storeId: string): Promise<StoreDataItem | nu
     orders: [],
     promotionSummary: [],
     promotionProducts: [],
+    promotionHourly: [],   // 商品推广_分小时
     starStoreSummary: [],
     liveStreamSummary: [],
     shippingInsurance: [],

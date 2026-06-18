@@ -23,7 +23,7 @@ const safeStorage = {
 };
 
 export interface StoreDataItem {
-  orders: any[]; promotionSummary: any[]; promotionProducts: any[];
+  orders: any[]; promotionSummary: any[]; promotionProducts: any[]; promotionHourly: any[];
   starStoreSummary: any[]; liveStreamSummary: any[]; shippingInsurance: any[];
   afterSaleRecords: any[]; financialRecords: any[];
   availableFields: { csv: string[]; promotion: string[]; insurance: string[]; afterSale: string[]; financial: string[] };
@@ -171,7 +171,7 @@ export const useDataStore = create<DataState>()(
           return clean;
         });
         // ★ 增量同步：只发送指定 categories（或全部）
-        const ALL_CATS = ['orders','promotionSummary','promotionProducts','starStoreSummary','liveStreamSummary','shippingInsurance','afterSaleRecords','financialRecords'];
+        const ALL_CATS = ['orders','promotionSummary','promotionProducts','promotionHourly','starStoreSummary','liveStreamSummary','shippingInsurance','afterSaleRecords','financialRecords'];
         const catsToSync = categories && categories.length > 0 ? categories : ALL_CATS;
         const slim: Record<string, any[]> = {};
         catsToSync.forEach(cat => {
@@ -219,7 +219,8 @@ export const useDataStore = create<DataState>()(
             const d = r.data;
             next[r.id] = {
               orders: d.orders || [], promotionSummary: d.promotionSummary || [],
-              promotionProducts: d.promotionProducts || [], starStoreSummary: d.starStoreSummary || [],
+              promotionProducts: d.promotionProducts || [], promotionHourly: d.promotionHourly || [],
+              starStoreSummary: d.starStoreSummary || [],
               liveStreamSummary: d.liveStreamSummary || [], shippingInsurance: d.shippingInsurance || [],
               afterSaleRecords: d.afterSaleRecords || [], financialRecords: d.financialRecords || [],
               availableFields: { csv: Array.isArray(d.availableFields?.csv)?d.availableFields.csv:[], promotion: Array.isArray(d.availableFields?.promotion)?d.availableFields.promotion:[], insurance: Array.isArray(d.availableFields?.insurance)?d.availableFields.insurance:[], afterSale: Array.isArray(d.availableFields?.afterSale)?d.availableFields.afterSale:[], financial: Array.isArray(d.availableFields?.financial)?d.availableFields.financial:[] },

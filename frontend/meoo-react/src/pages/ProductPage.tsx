@@ -485,6 +485,8 @@ export default function ProductPage() {
       avgDailySales: s.avgDailySales,
       turnoverDays: s.turnoverDays,
       sellThroughRate: s.sellThroughRate,
+      hourlyPromotedOrders: s.hourlyPromotedOrders || 0,
+      hourlyConfirmed: s.hourlyConfirmed || false,
     }));
   }, [productStats, productTags]);
 
@@ -525,6 +527,8 @@ export default function ProductPage() {
       avgDailySales: s.avgDailySales,
       turnoverDays: s.turnoverDays,
       sellThroughRate: s.sellThroughRate,
+      hourlyPromotedOrders: s.hourlyPromotedOrders || 0,
+      hourlyConfirmed: s.hourlyConfirmed || false,
     }));
   }, [prevProductStats]);
 

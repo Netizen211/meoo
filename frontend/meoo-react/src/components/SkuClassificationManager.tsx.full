@@ -1,0 +1,13 @@
+import React, { useState, useMemo, useCallback, useRef } from 'react';
+import { X, Plus, Edit3, Trash2, Check } from 'lucide-react';
+import { type SkuItem, type SkuClass } from '../utils';
+
+interface Props {
+  productId: string;
+  productName: string;
+  allSkus: SkuItem[];
+  currentClasses: SkuClass[];
+  skuClassMemory: Record<string, string>;
+  onSave: (skuClassMemory: Record<string, string>) => void;
+  onClose: () => void;
+}

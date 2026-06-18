@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   X, Megaphone, TrendingUp,
   Target, BarChart3, Activity, ChevronDown,
-  ShoppingCart, Users, PieChart
+  ShoppingCart, Users, PieChart, Clock
 } from 'lucide-react';
 import {
   XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area
@@ -446,6 +446,27 @@ export default function PromotionDataPanel({ isOpen, onClose, product, timeRange
                       </div>
                     )}
                   </Section>
+
+                  {/* Section 7: 分小时推广确认 */}
+                  {(product as any).hourlyPromotedOrders > 0 && (
+                    <Section title="分小时推广确认" icon={<Clock size={13} className="text-blue-500" />}>
+                      <div className="bg-blue-50/50 rounded-lg p-3.5 border border-blue-100">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-[11px] text-gray-500">推广时段内确认订单</p>
+                            <p className="text-xl font-bold text-blue-600 tabular-nums">{(product as any).hourlyPromotedOrders} 单</p>
+                          </div>
+                          <div className="bg-blue-100 rounded-full p-2">
+                            <Clock size={20} className="text-blue-500" />
+                          </div>
+                        </div>
+                        <p className="text-[10px] text-gray-400 mt-2">
+                          该商品在分小时推广的时段内有 {(product as any).hourlyPromotedOrders} 笔订单被确认推广，
+                          说明在这些时段投放的推广带来了实际成交。
+                        </p>
+                      </div>
+                    </Section>
+                  )}
                 </>
               )}
             </div>

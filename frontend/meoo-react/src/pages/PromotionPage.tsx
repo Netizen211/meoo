@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { TrendingUp, DollarSign, Download } from "lucide-react";
+import { TrendingUp, DollarSign, Download, BarChart3 } from "lucide-react";
 import { useData } from "../App";
 import TimeFilter, { useTimeFilter, safeFloat, filterByTimeRange, getAllDateGroups, filterPromoByTimeRange } from "../components/TimeFilter";
 import { UnifiedFilterBar } from "../components/FilterToolbar";
@@ -176,6 +176,26 @@ export default function PromotionPage() {
     return Object.values(m).map((x: any) => ({ ...x, roi: x.cost > 0 ? x.gmv / x.cost : 0 })).sort((a, b) => b.cost - a.cost);
   }, [fPrd]);
 
+  // ★ 分小时推广聚合（用于时段热力图）
+  const hourlyAgg = useMemo(() => {
+    const hourly = currentDisplayData?.promotionHourly || [];
+    if (!hourly.length) return null;
+    const slotMap: Record<string, { cost: number; gmv: number; orders: number; clicks: number; impressions: number }> = {};
+    hourly.forEach((h: any) => {
+      const slot = String(h['时段'] || h['小时'] || '');
+      if (!slot) return;
+      if (!slotMap[slot]) slotMap[slot] = { cost: 0, gmv: 0, orders: 0, clicks: 0, impressions: 0 };
+      slotMap[slot].cost += sfVal(h, PROMO_FIELDS.cost);
+      slotMap[slot].gmv += sfVal(h, PROMO_FIELDS.gmv);
+      slotMap[slot].orders += sfInt(h, PROMO_FIELDS.orders);
+      slotMap[slot].clicks += sfInt(h, PROMO_FIELDS.clicks);
+      slotMap[slot].impressions += sfInt(h, PROMO_FIELDS.impressions);
+    });
+    return Object.entries(slotMap)
+      .map(([slot, v]) => ({ slot, ...v, roi: v.cost > 0 ? v.gmv / v.cost : 0 }))
+      .sort((a, b) => a.slot.localeCompare(b.slot));
+  }, [currentDisplayData?.promotionHourly]);
+
   const expCSV = () => {
     if (!tops.length) return;
     const h = ["商品名称", "花费", "GMV", "ROI", "订单", "曝光", "点击", "CTR", "CVR", "CPA", "场景"];
@@ -319,6 +339,33 @@ export default function PromotionPage() {
           <div className="h-[200px] flex items-center justify-center text-xs text-pdd-text-secondary">暂无趋势数据</div>
         )}
       </div>
+
+      {/* ★ 分小时推广分布 */}
+      {hourlyAgg && hourlyAgg.length > 0 && (
+        <div className="bg-pdd-card border border-pdd-border rounded-lg p-4">
+          <h4 className="text-xs font-bold text-gray-700 mb-3 flex items-center gap-1.5">
+            <BarChart3 size={13} className="text-pdd-text-secondary" />分小时推广分布
+            <span className="text-[10px] font-normal text-gray-400 ml-1">（{hourlyAgg.length} 个时段）</span>
+          </h4>
+          <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-2">
+            {hourlyAgg.map(h => {
+              const maxCost = Math.max(...hourlyAgg.map(x => x.cost), 1);
+              const barPct = (h.cost / maxCost) * 100;
+              return (
+                <div key={h.slot} className="bg-gray-50 rounded-lg px-2.5 py-2 border border-gray-100">
+                  <div className="text-[10px] font-bold text-gray-500 mb-1.5">{h.slot}</div>
+                  <div className="h-10 flex items-end mb-1.5">
+                    <div className="w-full bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-sm transition-all"
+                      style={{ height: barPct + '%', minHeight: barPct > 0 ? '4px' : '0' }} />
+                  </div>
+                  <div className="text-[10px] font-bold text-gray-700 tabular-nums">{YEN}{h.cost.toFixed(0)}</div>
+                  <div className="text-[9px] text-gray-400">ROI <span className={rc(h.roi)}>{h.roi.toFixed(1)}</span></div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* 场景分析 */}
       {scn.length > 0 && (

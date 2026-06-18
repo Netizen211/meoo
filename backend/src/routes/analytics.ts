@@ -255,6 +255,7 @@ router.get('/products/stats', requireStoreOwnership, async (req: Request, res: R
     const stats = analytics.computeAllProductStats(
       orders,
       data.promotionProducts || [],
+      data.promotionHourly || [],
       data.starStoreSummary || [],
       data.liveStreamSummary || [],
       data.afterSaleRecords || [],
@@ -284,6 +285,7 @@ router.get('/products/stats', requireStoreOwnership, async (req: Request, res: R
         prevStats = analytics.computeAllProductStats(
           prevOrders,
           data.promotionProducts || [],
+          data.promotionHourly || [],
           data.starStoreSummary || [],
           data.liveStreamSummary || [],
           data.afterSaleRecords || [],
@@ -310,6 +312,7 @@ router.get('/product/deep/:productId', requireStoreOwnership, async (req: Reques
     const { data, configs, productCosts } = await analytics.resolveStoreContext(storeId, req.user!.userId);
     const allStats = analytics.computeAllProductStats(
       data.orders || [], data.promotionProducts || [],
+      data.promotionHourly || [],
       data.starStoreSummary || [], data.liveStreamSummary || [],
       data.afterSaleRecords || [], productCosts, configs
     );

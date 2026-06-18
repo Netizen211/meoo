@@ -1,0 +1,312 @@
+import React, { useState, useMemo, useCallback, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Calendar, ChevronLeft, ChevronRight, TrendingUp, BarChart3, Filter,
+  ArrowRight, Activity, X, Settings, Download, Table, AlertTriangle,
+  DollarSign, Clock, Tag, Target, Zap, Brain, RefreshCw,
+  ChevronUp, ChevronDown, Info, TrendingDown, Save, Eye,
+  Megaphone, Shield, ShoppingBag, CreditCard, PieChart, BarChart4
+} from "lucide-react";
+import {
+  LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Legend, ReferenceLine, AreaChart, Area,
+  ComposedChart, RadialBarChart, RadialBar
+} from "recharts";
+import { useData, useStore } from "../App";
+import { sf, ss, findField } from "../utils";
+
+interface DayData {
+  date: string; sales: number; gmv: number; refundRate: number;
+  promoCost: number; refundAmount: number; orderCount: number;
+  events: string[]; eventDetails: EventInfo[];
+}
+
+interface EventInfo {
+  type: string; emoji: string; label: string; date: string;
+  details: string; amount?: number; products?: string[];
+}
+interface TabItem { key: string; label: string; icon: React.ElementType; }
+interface AnomalyItem {
+  level: "P1" | "P2" | "P3"; title: string; desc: string;
+  impact: string; sigma: string; suggestion: string; amount: number;
+}
+
+const EVENT_TYPES = [
+  { key: "promo", emoji: "\u2b50", label: "推广", color: "#1F6BFF" },
+  { key: "subsidy", emoji: "\u{1f4b0}", label: "百亿补贴", color: "#17B26A" },
+  { key: "priceUp", emoji: "\u2b06", label: "涨价", color: "#F04438" },
+  { key: "priceDown", emoji: "\u2b07", label: "降价", color: "#FF9F1A" },
+  { key: "fine", emoji: "\u26a0\ufe0f", label: "罚款", color: "#F04438" },
+  { key: "newProduct", emoji: "\u{1f195}", label: "新品", color: "#7C5CFC" },
+  { key: "timeout", emoji: "\u{1f4e6}", label: "\u8d85\u65f6", color: "#98A2B3" },
+];
+
+const TABS = [
+  { key: "timeline", label: "时间轴", icon: TrendingUp },
+  { key: "slice", label: "时间切片", icon: BarChart3 },
+  { key: "attribution", label: "事件归因", icon: Target },
+  { key: "finance", label: "财务窗口", icon: DollarSign },
+  { key: "compare", label: "对比分析", icon: Activity },
+  { key: "diagnose", label: "智能诊断", icon: Brain },
+];
+const RANGE_OPTIONS = [
+  { key: "7", label: "近7天" }, { key: "30", label: "近30天" },
+  { key: "90", label: "近90天" }, { key: "all", label: "全部" },
+];
+const GRANULARITY_OPTIONS = [
+  { key: "day", label: "按日" }, { key: "week", label: "按周" }, { key: "month", label: "按月" },
+];
+const weekDayNames = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
+
+const eventColorMap = {
+  promo: "#1F6BFF", subsidy: "#17B26A", priceUp: "#F04438",
+  priceDown: "#FF9F1A", fine: "#F04438", newProduct: "#7C5CFC", timeout: "#98A2B3",
+};
+
+function formatDate(d: Date): string {
+  const y = d.getFullYear(); const m = String(d.getMonth() + 1).padStart(2, "0"); const day = String(d.getDate()).padStart(2, "0");
+  return y + "-" + m + "-" + day;
+}
+
+function getMonthDays(year: number, month: number): Date[] {
+  const first = new Date(year, month, 1);
+  const last = new Date(year, month + 1, 0);
+  const days: Date[] = [];
+  const startPad = first.getDay() === 0 ? 6 : first.getDay() - 1;
+  for (let i = 0; i < startPad; i++) {
+    days.push(new Date(year, month, -startPad + i + 1));
+  }
+  for (let d = 1; d <= last.getDate(); d++) {
+    days.push(new Date(year, month, d));
+  }
+  while (days.length % 7 !== 0) {
+    days.push(new Date(year, month + 1, days.length - last.getDate()));
+  }
+  return days;
+}
+
+const DAYS_OF_WEEK = ["一", "二", "三", "四", "五", "六", "日"];
+
+function TimeWindowPage() {
+  const { getStoreData } = useData();
+  const { currentStore } = useStore();
+  const storeId = currentStore?.id || '';
+  const storeData = getStoreData(storeId);
+  const orders = storeData?.orders || [];
+  const financialRecords = storeData?.financialRecords || [];
+  const afterSaleRecords = storeData?.afterSaleRecords || [];
+  const promotionProducts = storeData?.promotionProducts || [];
+
+  const [activeTab, setActiveTab] = useState<string>("timeline");
+  const [timeRange, setTimeRange] = useState<string>("30");
+  const [granularity, setGranularity] = useState<string>("day");
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+  const [selectedDate, setSelectedDate] = useState<string>("");
+  const [activeEvents, setActiveEvents] = useState<Set<string>>(new Set(EVENT_TYPES.map(e => e.key)));
+  const [compareMode, setCompareMode] = useState<"none" | "period" | "beforeAfter" | "samePeriod">("none");
+  const [compareSettings, setCompareSettings] = useState({ beforeAfterDays: 7, selectedEventType: "", samePeriodOffset: "lastMonth" });
+  const [sliceDimension, setSliceDimension] = useState<string>("hour");
+  const [showEventOverlay, setShowEventOverlay] = useState(true);
+  const [viewMode, setViewMode] = useState<string>("day");
+
+  // Finance tab state
+  const [financeTab, setFinanceTab] = useState<string>("overview");
+  const [taxRate, setTaxRate] = useState<number>(13);
+
+  // Attribution tab state
+  const [selectedEventForAttribution, setSelectedEventForAttribution] = useState<string>("");
+  const [attributionModel, setAttributionModel] = useState<string>("sarima");
+  const [attributionWindow, setAttributionWindow] = useState<number>(14);
+
+  // Comparison tab state
+  const [compareSubMode, setCompareSubMode] = useState<string>("beforeAfter");
+  const [compareEventType, setCompareEventType] = useState<string>("promo");
+  const [compareWindow, setCompareWindow] = useState<number>(7);
+  const [compareBucket, setCompareBucket] = useState<string>("none");
+
+  // Diagnose tab state
+  const [anomalyList, setAnomalyList] = useState<AnomalyItem[]>([]);
+
+  // ===== Data Computation =====
+  // 1. 检测事件（先计算，供 dailyData 消费）
+  const allEvents = useMemo((): EventInfo[] => {
+    const events: EventInfo[] = [];
+    // Promo events
+    const promoDates = new Map<string, {cost: number; products: Set<string>}>();
+    promotionProducts.forEach((p: any) => {
+      const date = ss(findField(p, "日期"));
+      if (!date) return;
+      if (!promoDates.has(date)) promoDates.set(date, {cost: 0, products: new Set()});
+      const pd = promoDates.get(date)!;
+      pd.cost += sf(findField(p, "成交花费", "广告花费"));
+      const pid = ss(findField(p, "商品ID"));
+      if (pid) pd.products.add(pid);
+    });
+    promoDates.forEach((pd, date) => {
+      events.push({ type: "promo", emoji: "\u2b50", label: "推广", date,
+        details: "花费" + pd.cost.toFixed(0) + "元, " + pd.products.size + "个商品",
+        amount: pd.cost, products: [...pd.products] });
+    });
+    // Financial events
+    financialRecords.forEach((rec: any) => {
+      const desc = ss(findField(rec, "业务描述", "账务类型"));
+      const time = ss(findField(rec, "发生时间"));
+      if (!desc || !time) return;
+      const date = time.split(' ')[0];
+      const amount = Math.abs(sf(findField(rec, "支出金额(元)", "支出金额")));
+      if (desc.includes("0030003") || desc.includes("百亿补贴")) {
+        events.push({ type: "subsidy", emoji: "\u{1f4b0}", label: "百亿补贴", date,
+          details: "服务费" + amount.toFixed(0) + "元", amount });
+      }
+      if (desc.includes("0040002") || desc.includes("0040004") || desc.includes("罚款")) {
+        events.push({ type: "fine", emoji: "\u26a0\ufe0f", label: "罚款", date,
+          details: desc + " " + amount.toFixed(0) + "元", amount });
+      }
+    });
+    // Price change detection
+    const productPrices = new Map<string, Map<string, number>>();
+    orders.forEach((o: any) => {
+      const pid = ss(findField(o, "商品id"));
+      const date = ss(findField(o, "支付时间")).split(" ")[0];
+      if (!pid || !date) return;
+      if (!productPrices.has(pid)) productPrices.set(pid, new Map());
+      const pm = productPrices.get(pid)!;
+      const price = sf(findField(o, "商品总价(元)", "商品总价")) / Math.max(sf(findField(o, "商品数量(件)", "商品数量")), 1);
+      if (!pm.has(date) || price > pm.get(date)!) { pm.set(date, price); }
+    });
+    productPrices.forEach((pm, pid) => {
+      const sortedDates = [...pm.keys()].sort();
+      for (let i = 1; i < sortedDates.length; i++) {
+        const prev = sortedDates[i-1]; const curr = sortedDates[i];
+        const prevPrice = pm.get(prev)!; const currPrice = pm.get(curr)!;
+        const diff = ((currPrice - prevPrice) / prevPrice * 100);
+        if (Math.abs(diff) > 5) {
+          events.push({
+            type: diff > 0 ? "priceUp" : "priceDown",
+            emoji: diff > 0 ? "\u2b06" : "\u2b07",
+            label: diff > 0 ? "涨价" : "降价",
+            date: curr,
+            details: "商品" + pid + " " + (diff > 0 ? "涨" : "降") + Math.abs(diff).toFixed(0) + "%",
+            amount: currPrice - prevPrice,
+            products: [pid]
+          });
+        }
+      }
+    });
+    return events;
+  }, [orders, promotionProducts, financialRecords]);
+
+
+  // ===== Data Computation =====
+  const dailyData = useMemo((): Map<string, DayData> => {
+    const map = new Map<string, DayData>();
+    orders.forEach((o: any) => {
+      const date = ss(findField(o, "支付时间")).split(" ")[0];
+      if (!date) return;
+      if (!map.has(date)) {
+        map.set(date, { date, sales: 0, gmv: 0, refundRate: 0, promoCost: 0, refundAmount: 0, orderCount: 0, events: [], eventDetails: [] });
+      }
+      const d = map.get(date)!;
+      d.orderCount++;
+      d.sales += Math.max(sf(findField(o, "商品数量(件)", "商品数量")), 0);
+      d.gmv += Math.max(sf(findField(o, "商品总价(元)", "商品总价")), 0);
+    });
+    // Refund by date
+    const refundByDate = new Map<string, {count: number; amount: number}>();
+    afterSaleRecords.forEach((rec: any) => {
+      const oid = ss(findField(rec, "订单编号", "订单号"));
+      if (!oid) return;
+      const order = orders.find((o: any) => ss(findField(o, '订单号')) === oid);
+      if (!order) return;
+      const date = ss(findField(order, "支付时间")).split(" ")[0];
+      if (!date) return;
+      if (!refundByDate.has(date)) refundByDate.set(date, {count: 0, amount: 0});
+      const r = refundByDate.get(date)!; r.count++;
+      r.amount += sf(findField(rec, "退款金额(元)", "金额"));
+    });
+    map.forEach((d, date) => {
+      const refund = refundByDate.get(date);
+      d.refundAmount = refund?.amount || 0;
+      d.refundRate = d.orderCount > 0 ? ((refund?.count || 0) / d.orderCount * 100) : 0;
+    });
+    // Promotion costs by date
+    promotionProducts.forEach((p: any) => {
+      const date = ss(findField(p, "日期"));
+      if (!date || !map.has(date)) return;
+      const d = map.get(date)!;
+      d.promoCost += sf(findField(p, "成交花费", "广告花费"));
+    });
+    // 事件归属：在 map 创建时一次性写入，避免 useMemo 副作用重复追加
+    allEvents.forEach(ev => {
+      if (map.has(ev.date)) {
+        const d = map.get(ev.date)!;
+        d.events.push(ev.type);
+        d.eventDetails.push(ev);
+      }
+    });
+    return map;
+  }, [orders, afterSaleRecords, promotionProducts, allEvents]);
+
+  // ===== Calendar =====
+  const monthDays = useMemo(() => getMonthDays(currentYear, currentMonth), [currentYear, currentMonth]);
+  const monthStr = currentYear + "年" + (currentMonth + 1) + "月";
+
+  const toggleEvent = (key: string) => {
+    setActiveEvents(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const filteredEvents = useMemo(() => {
+    return allEvents.filter(e => activeEvents.has(e.type));
+  }, [allEvents, activeEvents]);
+
+  // Chart data
+  const chartData = useMemo(() => {
+    const sorted = [...dailyData.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    return sorted.map(([date, d]) => ({
+      date,
+      sales: d.sales,
+      gmv: Math.round(d.gmv),
+      refundRate: Math.round(d.refundRate * 10) / 10,
+      promoCost: Math.round(d.promoCost),
+      hasEvent: d.events.length > 0,
+      events: d.eventDetails.filter((ev: EventInfo) => activeEvents.has(ev.type))
+    }));
+  }, [dailyData, activeEvents]);
+
+  // ─── Data for new tabs ───
+  const hourData = useMemo(() => {
+    const hours = Array.from({length: 24}, (_, i) => ({name: i + "时", sales: 0, gmv: 0, promoCost: 0, orders: 0, refund: 0}));
+    orders.forEach((o: any) => {
+      const time = ss(findField(o, "支付时间"));
+      if (!time) return;
+      const h = parseInt(time.split(" ")[1]?.split(":")[0] || "0");
+      if (h >= 0 && h < 24) {
+        hours[h].sales += Math.max(sf(findField(o, "商品数量(件)", "商品数量")), 0);
+        hours[h].gmv += Math.max(sf(findField(o, "商品总价(元)", "商品总价")), 0);
+        hours[h].orders++;
+      }
+    });
+    return hours;
+  }, [orders]);
+
+  const weekData = useMemo(() => {
+    const days = Array.from({length: 7}, (_, i) => ({name: weekDayNames[i], sales: 0, gmv: 0, orderCount: 0, refundCount: 0}));
+    orders.forEach((o: any) => {
+      const time = ss(findField(o, "支付时间"));
+      if (!time) return;
+      const d = new Date(time);
+      const wd = d.getDay() === 0 ? 6 : d.getDay() - 1;
+      days[wd].sales += Math.max(sf(findField(o, "商品数量(件)", "商品数量")), 0);
+      days[wd].gmv += Math.max(sf(findField(o, "商品总价(元)", "商品总价")), 0);
+      days[wd].orderCount++;
+    });
+    return days;
+  }, [orders]);
+
+

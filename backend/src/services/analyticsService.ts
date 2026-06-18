@@ -41,7 +41,7 @@ export async function loadStoreConfigs(storeId: string): Promise<Record<string, 
 export async function loadAllUserStoreData(userId: string): Promise<Record<string, any[]>> {
   const storeRows = await db('stores').where('user_id', userId).select('id');
   const storeIds = storeRows.map((s: any) => s.id);
-  if (!storeIds.length) return { orders: [], promotionProducts: [], starStoreSummary: [], liveStreamSummary: [], afterSaleRecords: [], shippingInsurance: [], financialRecords: [] };
+  if (!storeIds.length) return { orders: [], promotionProducts: [], promotionHourly: [], starStoreSummary: [], liveStreamSummary: [], afterSaleRecords: [], shippingInsurance: [], financialRecords: [] };
 
   const allRows = await db('store_data').whereIn('store_id', storeIds);
   const merged: Record<string, any[]> = {};
@@ -109,6 +109,7 @@ function buildBuckets(prices: number[]): any[] {
 
 export function computeAllProductStats(
   orders: any[], promoProducts: any[],
+  promotionHourly: any[],
   starStoreSummary: any[], liveStreamSummary: any[],
   afterSaleRecords: any[],
   productCosts: Record<string, number>,
@@ -125,6 +126,26 @@ export function computeAllProductStats(
   const dgm: Record<string, { pid: string; gmv: number }[]> = {};
   // ★ 退款以售后表为准（表格口径）
   const refundOrderSet = new Set(afterSaleRecords.filter(r => String(r['售后状态'] || '').trim() === '退款成功').map(r => String(r['订单编号'] || '').trim()).filter(Boolean));
+
+  // ★ 分小时推广索引: promotionHourly → Set<date_hour_pid> (用于逐单判定是否推广中)
+  const promotedSlots = new Set<string>();
+  promotionHourly.forEach((h: any) => {
+    const pid = safeStr(h['商品ID'] || h['商品id'] || '');
+    const d = safeStr(h['日期'] || h['date'] || '');
+    const hr = safeStr(h['时段'] || h['小时'] || '');
+    if (pid && d && hr) promotedSlots.add(`${d}_${hr}_${pid}`);
+  });
+  // ★ 每个商品的分小时推广确认订单数（仅统计推广时段内的订单）
+  const hourlyPromotedOrders: Record<string, number> = {};
+
+  // ★ 辅助: 从支付时间提取小时段 (e.g., '2026-06-17 10:30:18' → '10:00-11:00')
+  function getHourSlot(payTime: string): string {
+    const t = safeStr(payTime);
+    if (!t || t.length < 13) return '';
+    const hh = parseInt(t.slice(11, 13), 10);
+    if (isNaN(hh)) return '';
+    return `${String(hh).padStart(2, '0')}:00-${String(hh + 1).padStart(2, '0')}:00`;
+  }
 
   // ★ Pass 1: 单次遍历订单 — 统计 + 日销售 + SKU + 详情 + date-GMV
   // ★ 按商品跟踪唯一订单号
@@ -160,6 +181,11 @@ export function computeAllProductStats(
       dailySalesMap[pid][dk].orders += 1;
       if (!dgm[dk]) dgm[dk] = [];
       dgm[dk].push({ pid, gmv });
+      // ★ 分小时推广匹配：如果订单支付时间所在小时有推广投放，计入hourlyPromotedOrders
+      const hourSlot = getHourSlot(o['支付时间'] || '');
+      if (hourSlot && promotedSlots.has(`${dk}_${hourSlot}_${pid}`)) {
+        hourlyPromotedOrders[pid] = (hourlyPromotedOrders[pid] || 0) + 1;
+      }
     }
     const skuId = safeStr(o['商品规格ID'] || o['sku_id'] || o['SKU ID'] || '');
     if (skuId) { if (!skuSalesMap[pid]) skuSalesMap[pid] = {}; skuSalesMap[pid][skuId] = (skuSalesMap[pid][skuId] || 0) + qty; }
@@ -168,9 +194,11 @@ export function computeAllProductStats(
     orderDetails[pid].prices.push(gmv / Math.max(1, qty));
     orderDetails[pid].orderNos.push(safeStr(o['订单号']));
   });
-  // ★ 补填唯一订单数
+  // ★ 补填唯一订单数 + 分小时推广确认订单数
   Object.keys(stats).forEach(pid => {
     stats[pid].orders = pidOrderSets[pid]?.size || 0;
+    stats[pid].hourlyPromotedOrders = hourlyPromotedOrders[pid] || 0;
+    stats[pid].hourlyConfirmed = (hourlyPromotedOrders[pid] || 0) > 0;
   });
 
   // Pass 2: 售后数据

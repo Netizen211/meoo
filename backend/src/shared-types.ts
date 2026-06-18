@@ -52,6 +52,7 @@ export interface StoreDataItem {
   orders: any[];
   promotionSummary: any[];
   promotionProducts: any[];
+  promotionHourly: any[];       // 商品推广_分小时 — 每行=某商品×某小时，日期来自Row1[0]
   starStoreSummary: any[];
   liveStreamSummary: any[];
   shippingInsurance: any[];
@@ -72,6 +73,7 @@ export type DataCategory =
   | 'orders'
   | 'promotionSummary'
   | 'promotionProducts'
+  | 'promotionHourly'    // 商品推广_分小时
   | 'starStoreSummary'
   | 'liveStreamSummary'
   | 'shippingInsurance'
@@ -82,6 +84,7 @@ export const DATA_CATEGORIES: DataCategory[] = [
   'orders',
   'promotionSummary',
   'promotionProducts',
+  'promotionHourly',     // 商品推广_分小时
   'starStoreSummary',
   'liveStreamSummary',
   'shippingInsurance',
@@ -97,6 +100,7 @@ export interface SyncRequest {
     orders: any[];
     promotionSummary: any[];
     promotionProducts: any[];
+    promotionHourly: any[];
     starStoreSummary: any[];
     liveStreamSummary: any[];
     shippingInsurance: any[];

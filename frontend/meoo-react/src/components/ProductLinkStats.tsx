@@ -63,6 +63,7 @@ export interface ProductStat {
   taxDetails: TaxDetail[]; deductionDetails: DeductionDetail[];
   profitConfidence: "high"|"medium"|"low";
   grossProfit: number; preTaxProfit: number; netProfitAfterTax: number;
+  hourlyPromotedOrders?: number; hourlyConfirmed?: boolean;
 }
 
 // ===== useProductDetail (简单查找，无计算) =====

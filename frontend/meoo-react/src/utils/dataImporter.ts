@@ -11,6 +11,7 @@ export interface StoreDataItem {
   orders: any[];
   promotionSummary: any[];
   promotionProducts: any[];
+  promotionHourly: any[];   // 商品推广_分小时 — 日期从Excel Row1[0]取
   starStoreSummary: any[];
   liveStreamSummary: any[];
   shippingInsurance: any[];
@@ -23,6 +24,7 @@ const EMPTY_STORE_DATA: StoreDataItem = {
   orders: [],
   promotionSummary: [],
   promotionProducts: [],
+  promotionHourly: [],
   starStoreSummary: [],
   liveStreamSummary: [],
   shippingInsurance: [],
@@ -31,9 +33,17 @@ const EMPTY_STORE_DATA: StoreDataItem = {
   availableFields: { csv: [], promotion: [], insurance: [], afterSale: [], financial: [] }
 };
 
-// 清理字段名
+// 清理字段名/值 — 必须处理拼多多CSV的\t及Excel隐藏字符
 function cleanField(s: string): string {
   return String(s).replace(/[\uFEFF\u00A0\t\r\n]+/g, '').trim();
+}
+
+// 安全转数字 — Excel所有值都是String，缺省值为"-或null
+function safeNum(v: any): number {
+  if (v === null || v === undefined || v === '-') return 0;
+  const cleaned = String(v).replace(/[\t%,\s]/g, '').trim();
+  const n = parseFloat(cleaned);
+  return isNaN(n) ? 0 : n;
 }
 
 /**
@@ -131,14 +141,26 @@ function detectFileTypeByContent(fields: string[], sheetName?: string, fileName?
   return '未知类型';
 }
 
-// 解析 CSV 文件
+// 解析 CSV 文件（自动清理拼多多的 \t 后缀）
 async function parseCSV(content: string): Promise<{ fields: string[]; data: any[] }> {
   return new Promise((resolve, reject) => {
     Papa.parse(content, {
       header: true,
       skipEmptyLines: true,
       encoding: 'UTF-8',
-      complete: (result) => resolve({ fields: result.meta.fields || [], data: result.data as any[] }),
+      complete: (result) => {
+        // ★ 清理所有字段值（拼多多CSV所有字段带\t，必须统一清理）
+        const fields = (result.meta.fields || []).map(f => cleanField(f));
+        const data = (result.data as any[]).map(row => {
+          const cleaned: any = {};
+          Object.keys(row).forEach(k => {
+            const cleanKey = cleanField(k);
+            cleaned[cleanKey] = typeof row[k] === 'string' ? cleanField(row[k]) : row[k];
+          });
+          return cleaned;
+        });
+        resolve({ fields, data });
+      },
       error: (err: Error) => reject(err)
     });
   });
@@ -189,22 +211,87 @@ function processOrderData(existing: StoreDataItem, data: any[], fields: string[]
 
 // 处理商品推广数据
 function processPromotionData(existing: StoreDataItem, sheets: Record<string, { fields: string[]; data: any[]; type: string }>): void {
-  const isValidDateRow = (item: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(item['日期'] || '').trim());
+  const dateRegex = /^d{4}-d{2}-d{2}$/;
+  const isValidDateRow = (item: any) => dateRegex.test(String(item['日期'] || '').trim());
+  const isHourlySheet = (fields: string[]) => fields.length > 0 && dateRegex.test(fields[0]);
   const processedTypes = new Set<string>();
 
   for (const [sn, sheet] of Object.entries(sheets)) {
     if (sheet.type !== '商品推广数据') continue;
 
-    const hasProductId = sheet.fields.includes('商品ID');
+    // ========== 检测是否为分小时Sheet ==========
+    if (isHourlySheet(sheet.fields)) {
+      const sheetDate = sheet.fields[0];  // Row1[0]=日期
 
-    if (hasProductId) {
+      if (sheet.fields.includes('商品ID')) {
+        // ========== 分小时_商品 → promotionHourly ==========
+        if (!processedTypes.has('商品推广_分小时')) {
+          existing.promotionHourly = [];
+        }
+        const seenKeys = new Set<string>();
+        sheet.data.forEach((item: any) => {
+          const hourSlot = String(item[sheetDate] || '').trim();
+          if (!hourSlot || !hourSlot.includes(':')) return;
+          const productId = String(item['商品ID'] || '').trim();
+          if (!productId) return;
+          const key = [sheetDate, productId, hourSlot].join('-');
+          if (!seenKeys.has(key)) {
+            const normalized: any = { '日期': sheetDate, '时段': hourSlot };
+            Object.keys(item).forEach(k => {
+              if (k !== sheetDate) normalized[k] = item[k];
+            });
+            existing.promotionHourly.push(normalized);
+            seenKeys.add(key);
+          }
+        });
+        sheet.fields.slice(1).forEach(f => {
+          if (!existing.availableFields.promotion.includes(f)) existing.availableFields.promotion.push(f);
+        });
+        if (!existing.availableFields.promotion.includes('时段')) existing.availableFields.promotion.push('时段');
+        processedTypes.add('商品推广_分小时');
+
+      } else {
+        // ========== 分小时_汇总 → promotionSummary(汇总为当天总计) ==========
+        const dailyTotal: any = { '日期': sheetDate };
+        const numericFields = ['曝光量', '点击量', '成交花费(元)', '交易额(元)', '成交笔数', '点击率', '转化率', '实际投产比', '收藏量', '关注量', '询单量'];
+        numericFields.forEach(f => { dailyTotal[f] = 0; });
+
+        sheet.data.forEach((item: any) => {
+          const hourSlot = String(item[sheetDate] || '').trim();
+          if (!hourSlot || !hourSlot.includes(':')) return;
+          numericFields.forEach(f => {
+            const v = parseFloat(String(item[f] || '0').replace(/[	%,s]/g, ''));
+            if (!isNaN(v)) dailyTotal[f] += v;
+          });
+        });
+
+        // 合并到 promotionSummary，不覆盖已有分天数据
+        let found = false;
+        for (let i = 0; i < existing.promotionSummary.length; i++) {
+          if (String(existing.promotionSummary[i]['日期'] || '').trim() === sheetDate) {
+            numericFields.forEach(f => {
+              if (!(f in existing.promotionSummary[i])) existing.promotionSummary[i][f] = dailyTotal[f];
+            });
+            found = true;
+          }
+        }
+        if (!found) existing.promotionSummary.push(dailyTotal);
+
+        sheet.fields.slice(1).forEach(f => {
+          if (!existing.availableFields.promotion.includes(f)) existing.availableFields.promotion.push(f);
+        });
+        processedTypes.add('商品推广_分小时汇总');
+      }
+
+    // ========== 原有: 分天Sheet（有商品ID） ==========
+    } else if (sheet.fields.includes('商品ID')) {
       if (!processedTypes.has('商品推广_产品')) {
         existing.promotionProducts = [];
       }
       const seenKeys = new Set<string>();
       sheet.data.forEach((item: any) => {
         if (!isValidDateRow(item)) return;
-        const key = `${item['日期'] || ''}-${item['商品ID'] || ''}-${item['推广名称'] || ''}`;
+        const key = [item['日期'] || '', item['商品ID'] || '', item['推广名称'] || ''].join('-');
         if (!seenKeys.has(key)) {
           existing.promotionProducts.push(item);
           seenKeys.add(key);
@@ -212,11 +299,13 @@ function processPromotionData(existing: StoreDataItem, sheets: Record<string, { 
       });
       sheet.fields.forEach(f => { if (!existing.availableFields.promotion.includes(f)) existing.availableFields.promotion.push(f); });
       processedTypes.add('商品推广_产品');
+
+    // ========== 原有: 汇总Sheet（无商品ID） ==========
     } else {
       const summaryMap = new Map<string, any>();
       existing.promotionSummary.forEach((r: any) => {
         const d = String(r['日期'] || '').trim();
-        if (/^\d{4}-\d{2}-\d{2}$/.test(d)) summaryMap.set(d, r);
+        if (dateRegex.test(d)) summaryMap.set(d, r);
       });
       sheet.data.forEach((item: any) => {
         if (!isValidDateRow(item)) return;
@@ -229,7 +318,6 @@ function processPromotionData(existing: StoreDataItem, sheets: Record<string, { 
   }
 }
 
-// 处理明星店铺数据
 function processStarStoreData(existing: StoreDataItem, sheets: Record<string, { fields: string[]; data: any[]; type: string }>): void {
   const isValidDateRow = (item: any) => /^\d{4}-\d{2}-\d{2}$/.test(String(item['日期'] || '').trim());
 
