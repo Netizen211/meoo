@@ -358,58 +358,45 @@ export default function DashboardPage() {
   }, [timeRange, quickRange, customStart, customEnd]);
 
   const kpiValues = useMemo(() => {
-    if (filteredOrders.length) {
-      const afterSales = currentDisplayData?.afterSaleRecords || [];
-      const financialRecords = currentDisplayData?.financialRecords || [];
-      const insuranceRecords = currentDisplayData?.shippingInsurance || [];
-      const promoRecords = filteredPromoSummary.length > 0 ? filteredPromoSummary : (filteredPromoProducts || []);
-      const starRecords = filteredStarSummary || [];
-      const liveRecords = filteredLiveSummary || [];
+    if (!filteredOrders.length) return null;
+    // ★ 从 filteredOrders 提取订单号集合，用此过滤售后/财务/保险（保证与筛选日期一致）
+    const orderNoSet = new Set(filteredOrders.map((o: any) => String(findField(o, '订单号') || '').trim()).filter(Boolean));
+    const { asStart, asEnd } = kpiDateRange;
+    const afterSales = (currentDisplayData?.afterSaleRecords || []).filter((r: any) => {
+      const rNo = String(r['订单编号'] || r['订单号'] || '').trim();
+      return rNo && orderNoSet.has(rNo);
+    });
+    const financialRecords = (currentDisplayData?.financialRecords || []).filter((r: any) => {
+      const rOrderNo = String(r['商户订单号'] || r['订单号'] || '').trim();
+      const rDate = String(r['发生时间'] || '').trim().split(' ')[0];
+      if (rOrderNo && orderNoSet.has(rOrderNo)) return true;
+      if (rDate && asStart && rDate >= asStart && (!asEnd || rDate <= asEnd)) return true;
+      return false;
+    });
+    const insuranceRecords = (currentDisplayData?.shippingInsurance || []).filter((r: any) => {
+      const rNo = String(r['订单编号'] || r['订单号'] || '').trim();
+      return rNo && orderNoSet.has(rNo);
+    });
+    const promoRecords = filteredPromoSummary.length > 0 ? filteredPromoSummary : (filteredPromoProducts || []);
+    const starRecords = filteredStarSummary || [];
+    const liveRecords = filteredLiveSummary || [];
 
-      return computeAllKpis({
-        orders: filteredOrders,
-        afterSales,
-        promoRecords,
-        starRecords,
-        liveRecords,
-        financialRecords,
-        insuranceRecords,
-        config: {
-          shippingFeePerOrder: shippingFeePerOrder || 4,
-          returnShippingFeePerOrder: 10,
-        },
-        approvalDateStart: kpiDateRange.asStart || undefined,
-        approvalDateEnd: kpiDateRange.asEnd || undefined,
-      });
-    }
-    if (dashData?.kpi) {
-      const sk = dashData.kpi;
-      const refundAmount = (serverAfterSale?.refundAmount && serverAfterSale.refundAmount > 0)
-        ? serverAfterSale.refundAmount : (sk.refund || 0);
-      return {
-        gmv: sk.gmv || 0, cnt: sk.orders || 0, avg: sk.avgOrder || 0, paid: sk.paid || 0,
-        merchantReceived: sk.revenue || 0, platformFee: sk.platformFee || 0,
-        skuQty: sk.skuQuantity || 0, postage: sk.postage || 0, discount: sk.discount || 0,
-        conversionRate: sk.conversionRate || 0, avgShipHours: sk.avgShipHours || 0,
-        buyers: sk.buyers || 0, productCount: sk.productCount || 0,
-        rfAmount: refundAmount, rfCnt: sk.refundOrders || 0, rfRate: sk.refundRate || 0,
-        asRate: sk.afterSaleRate || 0,
-        refundApprovalAmount: sk.refundApprovalAmount || 0,
-        refundApprovalOrders: sk.refundApprovalOrders || 0,
-        refundedShippingCost: 0, returnShippingCost: 0,
-        profit: sk.profit || 0, penalties: sk.penalties || 0, penaltyCount: 0,
-        insuranceFee: sk.insuranceFee || 0, subsidyFee: sk.subsidyFee || 0,
-        promoCost: sk.promoCost || 0, promoGmv: sk.promoGmv || 0, promoRoi: sk.promoROI || 0,
-        promoOrders: sk.promoOrders || 0, promoRatio: sk.promoRatio || 0,
-        shopRoi: (sk.promoCost || 0) > 0 && (sk.gmv || 0) > 0 ? (sk.gmv || 0) / (sk.promoCost || 1) : 0,
-        ctr: sk.ctr || 0, cvr: sk.cvr || 0, cpc: 0, cpa: 0,
-        totalImpressions: 0, totalClicks: 0, avgInquiryCost: 0, avgFavoriteCost: 0, avgFollowCost: 0,
-        organicOrders: sk.organicOrders ?? Math.max(0, (sk.orders || 0) - (sk.promoOrders || 0)),
-        organicGmv: sk.organicGmv ?? Math.max(0, (sk.gmv || 0) - (sk.promoGmv || 0)),
-      } as UnifiedKpis;
-    }
-    return null;
-  }, [dashData, serverAfterSale, filteredOrders, currentDisplayData,
+    return computeAllKpis({
+      orders: filteredOrders,
+      afterSales,
+      promoRecords,
+      starRecords,
+      liveRecords,
+      financialRecords,
+      insuranceRecords,
+      config: {
+        shippingFeePerOrder: shippingFeePerOrder || 4,
+        returnShippingFeePerOrder: 10,
+      },
+      approvalDateStart: asStart || undefined,
+      approvalDateEnd: asEnd || undefined,
+    });
+  }, [filteredOrders, currentDisplayData,
       filteredPromoSummary, filteredPromoProducts, filteredStarSummary, filteredLiveSummary,
       kpiDateRange, shippingFeePerOrder]);
 
