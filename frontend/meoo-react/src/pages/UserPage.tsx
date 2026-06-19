@@ -21,7 +21,7 @@ export default function UserPage() {
 
   const orders = useMemo(() => {
     if (!currentDisplayData?.orders?.length) return [];
-    return currentDisplayData.orders.filter((o: any) => String(findField(o, '订单状态', '状态') || '').trim() !== '已取消');
+    return currentDisplayData.orders.filter((o: any) => { const st = String(findField(o, '订单状态', '状态') || '').trim(); return !['已取消', '待付款', '代付款', '未付款', '已关闭'].includes(st); });
   }, [currentDisplayData]);
 
   const allDates = useMemo(() => getAllDateGroups(orders), [orders]);

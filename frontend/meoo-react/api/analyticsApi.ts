@@ -15,6 +15,9 @@ export interface DashboardKpi {
   products: number; buyers: number; productCount: number;
   promoCost: number; promoGmv: number; promoROI: number; promoOrders: number; promoRatio: number;
   ctr: number; cvr: number; insuranceFee: number; penalties: number;
+  skuQuantity?: number;           // ★ SKU数量（下单商品件数合计）
+  refundApprovalAmount?: number;  // ★ 同意退款时间维度：退款金额
+  refundApprovalOrders?: number;  // ★ 同意退款时间维度：退款订单数
   promoBreakdown?: {
     product: { cost: number; gmv: number; orders: number };
     star: { cost: number; gmv: number; orders: number };

@@ -20,13 +20,13 @@ export default function LogisticsPage() {
  const orders = currentDisplayData?.orders || [];
  const noData = !orders.length;
 
- const validOrders = useMemo(() => orders.filter((o: any) => ss(findField(o, '订单状态')) !== '已取消'), [orders]);
+ const validOrders = useMemo(() => orders.filter((o: any) => !['已取消', '待付款', '代付款', '未付款', '已关闭'].includes(ss(findField(o, '订单状态')))), [orders]);
  const allDates = useMemo(() => getAllDateGroups(validOrders), [validOrders]);
  const filteredOrders = useMemo(() => filterByTimeRange(validOrders, allDates, timeRange, customStart, customEnd, quickRange), [validOrders, allDates, timeRange, customStart, customEnd, quickRange]);
  const compareOrders = useMemo(() => compareEnabled ? getCompareOrders(validOrders, allDates, timeRange, compareStart, compareEnd, customStart, customEnd, quickRange) : [], [validOrders, allDates, timeRange, compareStart, compareEnd, customStart, customEnd, quickRange, compareEnabled]);
 
  const shippedOrders = useMemo(() => filteredOrders.filter((o: any) => ss(findField(o, '发货时间')) !== ''), [filteredOrders]);
- const pendingOrders = useMemo(() => filteredOrders.filter((o: any) => ss(findField(o, '发货时间')) === '' && ss(findField(o, '订单状态')) !== '已取消'), [filteredOrders]);
+ const pendingOrders = useMemo(() => filteredOrders.filter((o: any) => ss(findField(o, '发货时间')) === '' && !['已取消', '待付款', '代付款', '未付款', '已关闭'].includes(ss(findField(o, '订单状态')))), [filteredOrders]);
  const compareShipped = useMemo(() => compareOrders.filter((o: any) => ss(findField(o, '发货时间')) !== ''), [compareOrders]);
 
  const shipHours = useMemo(() => shippedOrders.map((o: any) => hoursDiff(ss(findField(o, '发货时间')), ss(findField(o, '支付时间')))).filter(h => h >= 0), [shippedOrders]);

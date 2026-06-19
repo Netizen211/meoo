@@ -37,6 +37,24 @@ export async function loadStoreConfigs(storeId: string): Promise<Record<string, 
   return configs;
 }
 
+// ★ 获取订单号（兼容归一化前后的字段名）
+function getOrderNo(record: any): string {
+  return safeStr(record['订单编号'] || record['订单号'] || '');
+}
+function getAfterSaleStatus(record: any): string {
+  return String(record['售后状态'] || record['退款状态'] || '').trim();
+}
+
+// ★ 有效订单过滤：排除已取消/待付款/代付款等非真实订单
+function filterValidOrders(orders: any[]): any[] {
+  return orders.filter(o => {
+    const st = String(o['订单状态'] || '').trim();
+    if (['已取消', '待付款', '代付款', '未付款', '已关闭'].includes(st)) return false;
+    const pt = o['支付时间'] || o['下单时间'];
+    return pt != null && String(pt).trim() !== '';
+  });
+}
+
 // ★ 全店聚合：加载用户所有店铺数据并合并
 export async function loadAllUserStoreData(userId: string): Promise<Record<string, any[]>> {
   const storeRows = await db('stores').where('user_id', userId).select('id');
@@ -108,13 +126,14 @@ function buildBuckets(prices: number[]): any[] {
 
 
 export function computeAllProductStats(
-  orders: any[], promoProducts: any[],
+  rawOrders: any[], promoProducts: any[],
   promotionHourly: any[],
   starStoreSummary: any[], liveStreamSummary: any[],
   afterSaleRecords: any[],
   productCosts: Record<string, number>,
   costConfigs: Record<string, any>
 ): Record<string, any> {
+  const orders = filterValidOrders(rawOrders);
   const stats: Record<string, any> = {};
   const productNames: Record<string, string> = {};
   const productCodes: Record<string, string> = {};
@@ -125,7 +144,7 @@ export function computeAllProductStats(
   // ★ 单次遍历同时构建 date-GMV 映射（原为独立遍历）
   const dgm: Record<string, { pid: string; gmv: number }[]> = {};
   // ★ 退款以售后表为准（表格口径）
-  const refundOrderSet = new Set(afterSaleRecords.filter(r => String(r['售后状态'] || '').trim() === '退款成功').map(r => String(r['订单编号'] || '').trim()).filter(Boolean));
+  const refundOrderSet = new Set(afterSaleRecords.filter(r => getAfterSaleStatus(r) === '退款成功').map(r => getOrderNo(r)).filter(Boolean));
 
   // ★ 分小时推广索引: promotionHourly → Set<date_hour_pid> (用于逐单判定是否推广中)
   const promotedSlots = new Set<string>();
@@ -329,13 +348,8 @@ export function computeAllProductStats(
 
 export function computeDashboardKPI(data: Record<string, any[]>): any {
   const rawOrders: any[] = data.orders || [];
-  // ★ 有效订单口径：排除已取消/待付款/代付款 + 必须有支付时间
-  const orders = rawOrders.filter(o => {
-    const st = String(o['订单状态'] || '').trim();
-    if (['已取消', '待付款', '代付款'].includes(st)) return false;
-    const pt = o['支付时间'] || o['下单时间'];
-    return pt != null && String(pt).trim() !== '';
-  });
+  // ★ 有效订单口径：排除已取消/待付款/代付款等非真实订单
+  const orders = filterValidOrders(rawOrders);
   const promo: any[] = data.promotionProducts || [];
   const starStore: any[] = data.starStoreSummary || [];
   const liveStream: any[] = data.liveStreamSummary || [];
@@ -355,11 +369,16 @@ export function computeDashboardKPI(data: Record<string, any[]>): any {
   // ★ 买家数：订单号后4位相同=同买家
   const buyerSet = new Set(orders.map(o => { const on = String(o['订单号'] || '').trim(); return on.slice(-4); }).filter(Boolean));
   // ★ 退款订单：售后表"退款成功"对应的订单（表格口径）
-  const refundedOrderNos = new Set(afterSale.filter(r => String(r['售后状态'] || '').trim() === '退款成功').map(r => String(r['订单编号'] || '').trim()).filter(Boolean));
+  const refundedOrderNos = new Set(afterSale.filter(r => getAfterSaleStatus(r) === '退款成功').map(r => getOrderNo(r)).filter(Boolean));
+  // ★ 售后率订单：(退款成功 + 售后处理中)的订单（用户指定口径）
+  const afterSaleFilteredSet = new Set(afterSale.filter(r => {
+    const st = getAfterSaleStatus(r);
+    return st === '退款成功' || st === '售后处理中' || st === '处理中';
+  }).map(r => getOrderNo(r)).filter(Boolean));
   const refundOrders = orders.filter(o => refundedOrderNos.has(String(o['订单号'] || '').trim()));
   const totalRefundAmount = refundOrders.reduce((s, o) => s + safeNum(o['商家实收金额(元)']), 0);
   const totalDiscount = sum(orders, '店铺优惠折扣(元)') + sum(orders, '平台优惠折扣(元)') + sum(orders, '多多支付立减金额(元)') + sum(orders, '拼多多优惠券(元)');
-  const platformFee = sum(orders, '平台技术服务费(元)');
+  const platformFee = sum(orders, '平台技术服务费(元)') || sum(orders, '平台服务费(元)') || sum(orders, '技术服务费(元)');
   const promoCost = sm(promo, ['成交花费(元)', '总花费(元)', '花费(元)']);
   // ★ 推广 GMV 优先用净交易额，兜底用交易额
   const promoGmv = sm(promo, ['净交易额(元)', '交易额(元)', '成交金额(元)']);
@@ -382,6 +401,12 @@ export function computeDashboardKPI(data: Record<string, any[]>): any {
   const subsidyFee = financial.filter(f =>
     String(f['业务描述'] || '').includes('百亿补贴') || String(f['备注'] || '').includes('百亿补贴')
   ).reduce((s, f) => s + Math.abs(finExpense(f)), 0);
+  // ★ SKU数量 = 所有商品数量(件)的合计
+  const skuQuantity = orders.reduce((s, o) => s + safeNum(o['商品数量(件)']), 0);
+  // ★ 同意退款时间维度退款 = 售后记录中退款成功的退款金额合计（按退款单本身金额）
+  const refundApprovedRecords = afterSale.filter(r => getAfterSaleStatus(r) === '退款成功');
+  const refundApprovalAmount = refundApprovedRecords.reduce((s, r) => s + safeNum(r['退款金额(元)'] || r['买家退款金额'] || r['退款金额']), 0);
+  const refundApprovalOrders = new Set(refundApprovedRecords.map(r => getOrderNo(r)).filter(Boolean)).size;
   const rfp = asRefund > 0 ? asRefund : totalRefund;
   const profit = totalRevenue - rfp - totalPromoCost - insFee - penalties - totalPostage - subsidyFee;
   const profitRate = totalRevenue > 0 ? (profit / totalRevenue) * 100 : 0;
@@ -397,7 +422,7 @@ export function computeDashboardKPI(data: Record<string, any[]>): any {
   const provMap: Record<string, number> = {};
   orders.forEach(o => { const p = String(o['省'] || '').trim(); if (p) provMap[p] = (provMap[p] || 0) + 1; });
   return {
-    kpi: { gmv: totalGmv, revenue: totalRevenue, paid: totalPaid, refund: totalRefundAmount, orders: orderCount, refundOrders: refundOrders.length, refundRate: orderCount > 0 ? (refundOrders.length / orderCount) * 100 : 0, afterSaleRate: orderCount > 0 ? (afterSale.length / orderCount) * 100 : 0, afterSaleRefundAmount: asRefund, avgOrder, discount: totalDiscount, platformFee, profit, profitRate, postage: totalPostage, conversionRate: conv, avgShipHours: avgShipH, organicOrders: orgOrd, organicGmv: orgGmv, products: new Set(orders.map(o => String(o['商品ID'] || o['商品id'] || '')).filter(Boolean)).size, promoCost: totalPromoCost, promoGmv: totalPromoGmv, promoROI: totalPromoCost > 0 ? totalPromoGmv / totalPromoCost : 0, promoOrders: totalPromoOrders, promoBreakdown: { product: { cost: promoCost, gmv: promoGmv, orders: promoOrders }, star: { cost: starCost, gmv: starGmv, orders: starOrders }, live: { cost: liveCost, gmv: liveGmv, orders: liveOrders } }, promoRatio: totalGmv > 0 ? (totalPromoCost / totalGmv) * 100 : 0, ctr: sum(promo, '点击量') / Math.max(1, sum(promo, '曝光量')) * 100, cvr: sum(promo, '成交笔数') / Math.max(1, sum(promo, '点击量')) * 100, insuranceFee: insFee, penalties, subsidyFee, buyers: buyerSet.size, productCount: new Set(orders.map(o => String(o['商品ID'] || o['商品id'] || '').trim()).filter(id => id && id !== '-')).size },
+    kpi: { gmv: totalGmv, revenue: totalRevenue, paid: totalPaid, refund: totalRefundAmount, orders: orderCount, refundOrders: refundOrders.length, refundRate: orderCount > 0 ? (refundOrders.length / orderCount) * 100 : 0, afterSaleRate: orderCount > 0 ? (afterSaleFilteredSet.size / orderCount) * 100 : 0, afterSaleRefundAmount: asRefund, avgOrder, discount: totalDiscount, platformFee: platformFee || (totalRevenue * 0.006), profit, profitRate, postage: totalPostage, conversionRate: conv, avgShipHours: avgShipH, organicOrders: orgOrd, organicGmv: orgGmv, products: new Set(orders.map(o => String(o['商品ID'] || o['商品id'] || '')).filter(Boolean)).size, promoCost: totalPromoCost, promoGmv: totalPromoGmv, promoROI: totalPromoCost > 0 ? totalPromoGmv / totalPromoCost : 0, promoOrders: totalPromoOrders, promoBreakdown: { product: { cost: promoCost, gmv: promoGmv, orders: promoOrders }, star: { cost: starCost, gmv: starGmv, orders: starOrders }, live: { cost: liveCost, gmv: liveGmv, orders: liveOrders } }, promoRatio: totalGmv > 0 ? (totalPromoCost / totalGmv) * 100 : 0, ctr: sum(promo, '点击量') / Math.max(1, sum(promo, '曝光量')) * 100, cvr: sum(promo, '成交笔数') / Math.max(1, sum(promo, '点击量')) * 100, insuranceFee: insFee, penalties, subsidyFee, buyers: buyerSet.size, productCount: new Set(orders.map(o => String(o['商品ID'] || o['商品id'] || '').trim()).filter(id => id && id !== '-')).size, skuQuantity, refundApprovalAmount, refundApprovalOrders },
     status: Object.entries(statusMap).map(([k, v]) => ({ name: k, value: v })),
     provinces: Object.entries(provMap).sort((a, b) => b[1] - a[1]).slice(0, 10).map(([k, v]) => ({ name: k, value: v })),
   };
@@ -504,10 +529,11 @@ function storeBenchmark(allStats: Record<string, any>): any {
 
 export function computeDeepAnalysis(
   productId: string, allStats: Record<string, any>,
-  orders: any[], promoProducts: any[], afterSaleRecords: any[],
+  rawOrders: any[], promoProducts: any[], afterSaleRecords: any[],
   productCosts: Record<string, number>,
   prevStats?: Record<string, any>
 ): any {
+  const orders = filterValidOrders(rawOrders);
   const stats = allStats[productId];
   if (!stats) return null;
   const prev = prevStats?.[productId] || null;
@@ -569,7 +595,9 @@ export function computeDeepAnalysis(
 
 export function computeProductsList(data: Record<string, any[]>, storeId: string): Promise<any[]> {
   return (async () => {
-    const orders: any[] = data.orders || [];
+    const rawOrders: any[] = data.orders || [];
+    // ★ 排除待付款等无效订单
+    const orders = filterValidOrders(rawOrders);
     const promo: any[] = data.promotionProducts || [];
     const costs: Record<string, number> = await loadProductCosts(storeId);
 
@@ -667,12 +695,17 @@ export function computePromotionStats(data: Record<string, any[]>): any {
 
 export function computeAfterSaleStats(data: Record<string, any[]>): any {
   const as: any[] = data.afterSaleRecords || [];
-  const orders: any[] = data.orders || [];
+  const orders: any[] = filterValidOrders(data.orders || []);
   // ★ 仅计退款成功的售后
   const successAS = as.filter(r => String(r['售后状态'] || '').trim() === '退款成功');
   const sum = (arr: any[], key: string) => arr.reduce((s, x) => s + safeNum(x[key]), 0);
   // ★ 有售后的唯一订单
-  const asOrderSet = new Set(successAS.map(r => String(r['订单编号'] || '').trim()).filter(Boolean));
+  // ★ 售后率 = (售后处理中 + 退款成功) / 总订单（用户指定口径）
+  const afterSaleOrders = as.filter(r => {
+    const st = getAfterSaleStatus(r);
+    return st === '退款成功' || st === '售后处理中' || st === '处理中';
+  });
+  const asOrderSet = new Set(afterSaleOrders.map(r => getOrderNo(r)).filter(Boolean));
   const totalOrders = new Set(orders.map(o => String(o['订单号'] || '').trim()).filter(Boolean)).size || orders.length;
 
   const reasons: Record<string, number> = {};
@@ -691,7 +724,8 @@ export function computeAfterSaleStats(data: Record<string, any[]>): any {
 
 // ===== 物流汇总 =====
 
-export function computeLogisticsSummary(orders: any[]): any {
+export function computeLogisticsSummary(rawOrders: any[]): any {
+  const orders = filterValidOrders(rawOrders);
   const shipHours: number[] = [];
   // ★ 有快递单号才算已发货
   const shippedOrders = orders.filter(o => safeStr(o['快递单号'] || '').trim());
@@ -776,10 +810,11 @@ export async function resolveStoreContext(storeId: string, userId: string): Prom
 }
 
 // ===== 新增: 每日趋势 =====
-export function computeDailyTrends(orders: any[], afterSaleRecords: any[]): any {
+export function computeDailyTrends(rawOrders: any[], afterSaleRecords: any[]): any {
+  const orders = filterValidOrders(rawOrders);
   const dailyMap: Record<string, { gmv: number; orders: number; revenue: number; refund: number; refundCount: number; uniqueOrders: Set<string> }> = {};
   // ★ 退款以售后表为准（表格口径）
-  const refundOrderSet = new Set((afterSaleRecords || []).filter(r => String(r['售后状态'] || '').trim() === '退款成功').map(r => String(r['订单编号'] || '').trim()).filter(Boolean));
+  const refundOrderSet = new Set((afterSaleRecords || []).filter(r => getAfterSaleStatus(r) === '退款成功').map(r => getOrderNo(r)).filter(Boolean));
   orders.forEach((o: any) => {
     const d = (o['支付时间'] || '').split(' ')[0];
     if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
@@ -797,7 +832,8 @@ export function computeDailyTrends(orders: any[], afterSaleRecords: any[]): any 
 }
 
 // ===== 新增: 地区分布 =====
-export function computeRegionDistribution(orders: any[]): any {
+export function computeRegionDistribution(rawOrders: any[]): any {
+  const orders = filterValidOrders(rawOrders);
   const provMap: Record<string, { orders: number; gmv: number; buyers: number }> = {};
   const buyerSet = new Map<string, Set<string>>();
   orders.forEach((o: any) => {
@@ -820,7 +856,8 @@ export function computeRegionDistribution(orders: any[]): any {
 }
 
 // ===== 新增: 财务汇总 =====
-export function computeFinancialSummary(financialRecords: any[], orders: any[]): any {
+export function computeFinancialSummary(financialRecords: any[], rawOrders: any[]): any {
+  const orders = filterValidOrders(rawOrders);
   const sum = (arr: any[], key: string) => arr.reduce((s: number, x: any) => s + safeNum(x[key]), 0);
   const safeIncome = (f: any) => safeNum(f['收入金额（+元）'] || f['收入金额(+元)'] || '0');
   const safeExpense = (f: any) => safeNum(f['支出金额（-元）'] || f['支出金额(-元)'] || '0');
@@ -838,7 +875,7 @@ export function computeFinancialSummary(financialRecords: any[], orders: any[]):
 
 // ===== 周期对比 (环比) — 增强版含成本/利润 =====
 export function computePeriodCompare(
-  orders: any[],
+  rawOrders: any[],
   promoProducts: any[],
   afterSaleRecords: any[],
   compareDays: number = 7,
@@ -846,6 +883,7 @@ export function computePeriodCompare(
   configs?: Record<string, any>,
   storeId?: string
 ): any {
+  const orders = filterValidOrders(rawOrders);
   if (!orders.length) return { current: null, previous: null, changes: {} };
   const now = new Date();
   const cutoff = new Date(now.getTime() - compareDays * 86400000);
@@ -929,7 +967,8 @@ export function computePromoByDate(promoProducts: any[], starStoreSummary: any[]
 }
 
 // ===== 新增: 物流时效分布 =====
-export function computeShipTimeDistribution(orders: any[]): any {
+export function computeShipTimeDistribution(rawOrders: any[]): any {
+  const orders = filterValidOrders(rawOrders);
   const buckets: Record<string, number> = { '<24h': 0, '24-48h': 0, '48-72h': 0, '>72h': 0, '未发货': 0 };
   let shipped = 0, totalHours = 0;
   orders.forEach((o: any) => {
@@ -959,13 +998,15 @@ function safeCF(configs: Record<string, any>, key: string, storeId: string | und
 }
 
 export function computeCostSummary(
-  orders: any[],
+  rawOrders: any[],
   productCosts: Record<string, number>,
   configs: Record<string, any>,
   financialRecords: any[] = [],
   afterSaleRecords: any[] = [],
   storeId?: string
 ): any {
+  // ★ 排除待付款等无效订单
+  const orders = filterValidOrders(rawOrders);
   // 配置读取（优先 storeId 后缀键）
   const pfo = safeCF(configs, 'dianfx_packaging_fee', storeId, 3);
   const sfo = safeCF(configs, 'dianfx_shipping_fee', storeId, 5);
@@ -1267,7 +1308,7 @@ function computeSinglePriceImpact(
     const orderCnt = orderSet.size;
     const refundAS = asr.filter((r: any) => safeStr(r['售后状态'] || '').trim() === '退款成功');
     const refundAmt = refundAS.reduce((s: number, r: any) => s + safeNum(r['退款金额(元)'] || r['买家退款金额']), 0);
-    const refundCnt = new Set(refundAS.map((r: any) => safeStr(r['订单编号'])).filter(Boolean)).size;
+    const refundCnt = new Set(refundAS.map((r: any) => getOrderNo(r)).filter(Boolean)).size;
     const promoCost = sumSM(prom, ['成交花费(元)', '总花费(元)', '花费(元)']);
     const promoTrans = sumSM(prom, ['交易额(元)', '成交金额(元)']);
     const promoClicks = sum(prom, '点击量');
@@ -1438,7 +1479,7 @@ function computeRefundAnalysisV2(afterSaleRecords: any[], orders: any[], product
   // 时间窗口分布
   const wins: Record<string, { count: number; amount: number }> = { '0-7天': { count: 0, amount: 0 }, '8-14天': { count: 0, amount: 0 }, '15-30天': { count: 0, amount: 0 }, '30天以上': { count: 0, amount: 0 } };
   as.forEach((r: any) => {
-    const order = orders.find((o: any) => safeStr(o['订单号']) === safeStr(r['订单编号']));
+    const order = orders.find((o: any) => safeStr(o['订单号']) === getOrderNo(r));
     if (!order) return;
     const payDate = new Date((order['支付时间'] || '').split(' ')[0]);
     const applyDate = new Date((r['申请时间'] || '').split(' ')[0]);
@@ -1478,7 +1519,7 @@ function computeSkuMatrixV2(orders: any[], productId: string): any[] {
 function computeDailyTrendForProduct(orders: any[], afterSaleRecords: any[], productId: string): any[] {
   const dayMap: Record<string, { gmv: number; revenue: number; sales: number; orders: number; refund: number }> = {};
   const pidOrders = orders.filter((o: any) => safeStr(o['商品ID'] || o['商品id'] || '') === productId);
-  const refundOrderNos = new Set(afterSaleRecords.filter((r: any) => safeStr(r['售后状态'] || '').trim() === '退款成功').map((r: any) => safeStr(r['订单编号'])));
+  const refundOrderNos = new Set(afterSaleRecords.filter((r: any) => getAfterSaleStatus(r) === '退款成功').map((r: any) => getOrderNo(r)));
   pidOrders.forEach((o: any) => {
     const d = (o['支付时间'] || '').split(' ')[0];
     if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
@@ -1594,8 +1635,8 @@ export async function computeProductRetrospective(
   compareWindow?: number,
 ): Promise<any> {
   const wDays = compareWindow || 7;
-  // 1. 时间过滤
-  const orders = filterOrdersByTime(data.orders || [], timeRange, customStart, customEnd);
+  // 1. 时间过滤 + 状态过滤（排除待付款等无效订单）
+  const orders = filterValidOrders(filterOrdersByTime(data.orders || [], timeRange, customStart, customEnd));
   const promoProducts = filterRecordsByDate(data.promotionProducts || [], '日期', timeRange, customStart, customEnd);
   const afterSaleRecords = filterRecordsByDate(data.afterSaleRecords || [], '申请时间', timeRange, customStart, customEnd);
   const shippingInsurance = filterRecordsByDate(data.shippingInsurance || [], '日期', timeRange, customStart, customEnd);

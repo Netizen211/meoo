@@ -208,9 +208,9 @@ export default function CostManagementPage() {
   const filteredOrders = useMemo(() => {
     const timeFiltered = filterByTimeRange(allOrders, allDates, timeRange, customStart, customEnd, quickRange, useNaturalDate);
     return timeFiltered.filter((o: any) => {
-      // 排除已取消订单
+      // 排除已取消/待付款等无效订单
       const orderStatus = String(findField(o, '订单状态') || '').trim();
-      if (orderStatus === '已取消') return false;
+      if (['已取消', '待付款', '代付款', '未付款', '已关闭'].includes(orderStatus)) return false;
       // 排除退款订单
       const afterSaleStatus = String(findField(o, '售后状态') || '').trim();
       if (afterSaleStatus.includes('退款')) return false;
@@ -1054,7 +1054,7 @@ export default function CostManagementPage() {
     const timeFiltered = filterByTimeRange(allOrders, allDates, tf.timeRange, tf.compareStart, tf.compareEnd, tf.quickRange, tf.useNaturalDate);
     return timeFiltered.filter((o: any) => {
       const orderStatus = String(findField(o, '订单状态') || '').trim();
-      if (orderStatus === '已取消') return false;
+      if (['已取消', '待付款', '代付款', '未付款', '已关闭'].includes(orderStatus)) return false;
       const afterSaleStatus = String(findField(o, '售后状态') || '').trim();
       if (afterSaleStatus.includes('退款')) return false;
       return true;
@@ -2704,10 +2704,10 @@ export default function CostManagementPage() {
   const promoOrderGap = useMemo(() => {
     if (!promotionProducts.length) return { hasData: false, totalOrders: 0, flashRefundOrders: 0, effectiveOrders: 0, promoClaimedOrders: 0, promoCost: 0, avgCpc: 0, anomalies: [] as string[] };
 
-    // 全店总订单（排除已取消）
+    // 全店总订单（排除已取消/待付款等无效订单）
     const totalOrders = allOrders.filter(o => {
       const status = String(findField(o, '订单状态', '订单交易状态') || '');
-      return !status.includes('已取消') && !status.includes('取消');
+      return !['已取消', '待付款', '代付款', '未付款', '已关闭'].includes(status) && !status.includes('取消');
     }).length;
 
     // 推广声称成交笔数 + 总花费

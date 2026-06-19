@@ -10,20 +10,17 @@
  *
  * 使用方式：在根组件中调用 useAutoReload() 即可。
  */
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 
-const CHECK_INTERVAL = 30_000; // 30秒检查一次
-const VERSION_CACHE_KEY = 'meoo_build_id';
+const CHECK_INTERVAL = 15_000; // 15秒检查一次（更快响应部署）
+const VERSION_CACHE_KEY = '__app_buildId'; // 与 index.html 内联脚本共享同一 key
 
 export function useAutoReload(metaPath = '/build-meta.json') {
-  const checkedRef = useRef(false);
-
   useEffect(() => {
     // ★ 只在生产环境生效
     if (process.env.NODE_ENV !== 'production') return;
 
     let timer: ReturnType<typeof setInterval>;
-    let aborted = false;
 
     const checkVersion = async () => {
       try {
@@ -34,21 +31,19 @@ export function useAutoReload(metaPath = '/build-meta.json') {
         const meta = await res.json();
         if (!meta.buildId) return;
 
-        const prev = sessionStorage.getItem(VERSION_CACHE_KEY);
+        const prev = localStorage.getItem(VERSION_CACHE_KEY);
 
-        if (!prev) {
-          // 首次加载：记录当前版本
-          sessionStorage.setItem(VERSION_CACHE_KEY, meta.buildId);
-          checkedRef.current = true;
+        if (prev && prev !== meta.buildId) {
+          // ★ 版本不一致 → 有新部署 → 自动刷新
+          localStorage.setItem(VERSION_CACHE_KEY, meta.buildId);
+          if ('caches' in window) { caches.keys().then(ks => ks.forEach(k => caches.delete(k))); }
+          if ('serviceWorker' in navigator) { navigator.serviceWorker.getRegistrations().then(rs => rs.forEach(r => r.unregister())); }
+          window.location.reload();
           return;
         }
 
-        if (prev !== meta.buildId) {
-          // ★ 版本不一致 → 有新部署 → 自动刷新
-          sessionStorage.setItem(VERSION_CACHE_KEY, meta.buildId);
-          // 短暂延迟让 toast 展示
-          window.location.reload();
-        }
+        // 无论是否首次，都更新 localStorage 中的版本号
+        localStorage.setItem(VERSION_CACHE_KEY, meta.buildId);
       } catch {
         // 静默失败（可能是 offline，不影响用户）
       }
@@ -68,7 +63,6 @@ export function useAutoReload(metaPath = '/build-meta.json') {
     document.addEventListener('visibilitychange', onVisibility);
 
     return () => {
-      aborted = true;
       clearTimeout(initial);
       clearInterval(timer);
       document.removeEventListener('visibilitychange', onVisibility);

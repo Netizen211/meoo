@@ -11,11 +11,11 @@ const KPI_GROUPS: { name: string; labels: string[] }[] = [
   },
   {
     name: '订单',
-    labels: ['有效订单量', '客单价', '买家数', '商品数', '自然单', '平均发货时长', '发货率'],
+    labels: ['有效订单量', '客单价', '买家数', '商品数', '自然单', '平均发货时长', '发货率', 'SKU数量'],
   },
   {
     name: '退款/售后',
-    labels: ['退款金额', '退款单数', '退款率', '售后率'],
+    labels: ['退款金额', '退款单数', '退款率', '售后率', '退款金额(按同意退款时间)', '退款单数(按同意退款时间)'],
   },
   {
     name: '利润',
@@ -31,7 +31,7 @@ const KPI_GROUPS: { name: string; labels: string[] }[] = [
   },
   {
     name: '费用',
-    labels: ['平台服务费', '快递成本', '运费险'],
+    labels: ['平台服务费', '快递成本', '运费险', '退款成功快递发货成本', '退货退回成本'],
   },
 ];
 
@@ -78,17 +78,27 @@ export default function DashboardKpiPanel({
   // 指标选择面板搜索
   const [kpiSearch, setKpiSearch] = useState('');
 
-  // 根据 KPI_LINES key 找到对应的卡片 label，用于 toggle
+  // 根据 KPI_LINES key 找到对应的卡片 label（42个全映射）
   const getCardLabelForKey = (key: string): string | undefined => {
     const map: Record<string, string> = {
-      'gmv': 'GMV（商品总价）', 'orderCount': '有效订单量', 'avgPrice': '客单价',
-      'paid': '用户实付', 'refundAmount': '退款金额', 'discount': '优惠总额',
-      'asRate': '售后率', 'rfRate': '退款率', 'promoCost': '推广花费',
-      'promoGmv': '推广GMV', 'promoRoi': '推广ROI', 'buyerCount': '买家数',
-      'productCount': '商品数', 'penaltyAmount': '罚款金额', 'profit': '利润金额',
-      'avgShipHours': '平均发货时长', 'ctr': '点击率', 'cvr': '转化率',
-      'cpc': '平均点击成本', 'cpa': '平均获客成本', 'promoRatio': '推广占比',
-      'shopRoi': '全店投产',
+      'gmv': 'GMV（商品总价）', 'merchantReceived': '商家实收', 'paid': '用户实付',
+      'organicGmv': '自然销售额', 'discount': '优惠总额',
+      'orderCount': '有效订单量', 'avgPrice': '客单价',
+      'buyerCount': '买家数', 'productCount': '商品数',
+      'organicOrders': '自然单', 'avgShipHours': '平均发货时长', 'shipRate': '发货率',
+      'skuQty': 'SKU数量',
+      'refundAmount': '退款金额', 'rfCount': '退款单数',
+      'rfRate': '退款率', 'asRate': '售后率',
+      'refundApprovalAmount': '退款金额(按同意退款时间)',
+      'refundApprovalOrders': '退款单数(按同意退款时间)',
+      'profit': '利润金额', 'penaltyAmount': '罚款金额', 'penaltyCount': '罚款次数',
+      'promoCost': '推广花费', 'promoGmv': '推广GMV', 'promoRoi': '推广ROI',
+      'promoOrders': '推广订单量', 'promoRatio': '推广占比', 'shopRoi': '全店投产',
+      'totalImpressions': '曝光量', 'totalClicks': '点击量',
+      'ctr': '点击率', 'cvr': '转化率', 'cpc': '平均点击成本', 'cpa': '平均获客成本',
+      'avgInquiryCost': '询单成本', 'avgFavoriteCost': '收藏成本', 'avgFollowCost': '关注成本',
+      'refundedShippingCost': '退款成功快递发货成本', 'returnShippingCost': '退货退回成本',
+      'platformFee': '平台服务费', 'postage': '快递成本', 'insurance': '运费险',
     };
     return map[key];
   };

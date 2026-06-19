@@ -7,6 +7,7 @@ import TimeFilter, { useTimeFilter, TimeRange, TimeGranularity, safeFloat, filte
 import { UnifiedFilterBar } from '../components/FilterToolbar';
 import { evaluateFormula, FormulaContext } from '../utils/formulaEngine';
 import { buildTrendData, buildCompareTrendData } from '../utils/trendData';
+import { computeAllKpis, UnifiedKpis } from '../utils/computeKpis';
 import DashboardKpiPanel from './dashboard/DashboardKpiPanel';
 import DashboardTrendPanel from './dashboard/DashboardTrendPanel';
 import DashboardStatusPanel from './dashboard/DashboardStatusPanel';
@@ -71,7 +72,8 @@ export default function DashboardPage() {
     return new Set([
       '商家实收', '客单价', '有效订单量', '退款金额',
       '退款单数', '转化率', '推广花费', 'GMV（商品总价）',
-      '推广ROI', '推广订单量', '平均获客成本', '利润金额'
+      '推广ROI', '推广订单量', '平均获客成本', '利润金额',
+      'SKU数量', '退款金额(按同意退款时间)', '退款单数(按同意退款时间)', '退款成功快递发货成本', '退货退回成本'
     ]);
   });
   const [kpiCardOrder, setKpiCardOrder] = useState<string[]>(() => {
@@ -118,7 +120,12 @@ export default function DashboardPage() {
 
   const orders = useMemo(() => {
     if (!currentDisplayData?.orders?.length) return [];
-    return currentDisplayData.orders.filter((o: any) => String(findField(o, '订单状态', '状态') || '').trim() !== '已取消');
+    return currentDisplayData.orders.filter((o: any) => {
+      const st = String(findField(o, '订单状态', '状态') || '').trim();
+      // ★ 排除未付款/已取消等无效订单
+      if (['已取消', '待付款', '代付款', '未付款', '已关闭'].includes(st)) return false;
+      return true;
+    });
   }, [currentDisplayData]);
 
   const noData = !orders.length && !((currentDisplayData?.promotionSummary?.length ?? 0) > 0) && !((currentDisplayData?.promotionProducts?.length ?? 0) > 0) && !((currentDisplayData?.starStoreSummary?.length ?? 0) > 0) && !((currentDisplayData?.liveStreamSummary?.length ?? 0) > 0);
@@ -200,45 +207,8 @@ export default function DashboardPage() {
   const categories = useMemo(() => Array.from(new Set(orders.map(o => String(findField(o, '商品一级类目', '一级类目', '类目') || '').trim()).filter(Boolean))), [orders]);
   const provinces = useMemo(() => Array.from(new Set(orders.map(o => String(findField(o, '省', '省份') || '').trim()).filter(Boolean))), [orders]);
 
-  // KPI 始终基于 filteredOrders 计算（保证与时间筛选联动），服务端数据仅作兜底
-  const kpi = useMemo(() => {
-    // 主力：从时间筛选后的订单直接计算
-    if (filteredOrders.length) {
-      const gmv = filteredOrders.reduce((s, o) => s + safeFloat(findField(o, '商品总价(元)', '商品总价')), 0);
-      const cnt = filteredOrders.length;
-      const paid = filteredOrders.reduce((s, o) => s + safeFloat(findField(o, '用户实付金额(元)', '用户实付金额', '用户实付', '实付金额')), 0);
-      const avg = cnt > 0 ? paid / cnt : 0;
-      const asCnt = filteredOrders.filter(o => { const st = String(findField(o, '售后状态') || '').trim(); return st && st !== '无售后或售后取消' && st !== '无'; }).length;
-      const rfCnt = filteredOrders.filter(o => String(findField(o, '售后状态') || '').includes('退款')).length;
-      const rfAmount = filteredOrders.reduce((s, o) => s + safeFloat(findField(o, '退款金额(元)', '退款金额', '退款(元)')), 0);
-      const asRate = cnt > 0 ? (asCnt / cnt) * 100 : 0;
-      const rfRate = cnt > 0 ? (rfCnt / cnt) * 100 : 0;
-      const postage = filteredOrders.reduce((s, o) => s + safeFloat(findField(o, '邮费(元)', '邮费', '快递费(元)', '快递费')), 0);
-      const discount = filteredOrders.reduce((s, o) => s + safeFloat(findField(o, '店铺优惠折扣(元)', '店铺优惠折扣', '店铺优惠')) + safeFloat(findField(o, '平台优惠折扣(元)', '平台优惠折扣', '平台优惠')) + safeFloat(findField(o, '多多支付立减金额(元)', '多多支付立减金额', '支付立减')) + safeFloat(findField(o, '拼多多优惠券(元)', '拼多多优惠券', '优惠券')), 0);
-      const shipped = filteredOrders.filter(o => { const v = findField(o, '发货时间'); return v != null && String(v).trim() !== ''; }).length;
-      const conversionRate = cnt > 0 ? (shipped / cnt) * 100 : 0;
-      const avgShipHours = shipped > 0 ? filteredOrders.filter(o => { const v = findField(o, '发货时间'); return v != null && String(v).trim() !== ''; }).reduce((s, o) => {
-        const payT = new Date(String(findField(o, '支付时间') || ''));
-        const shipT = new Date(String(findField(o, '发货时间') || ''));
-        return s + (shipT.getTime() - payT.getTime()) / 3600000;
-      }, 0) / shipped : 0;
-      return { gmv, cnt, avg, paid, asRate, rfRate, rfAmount, postage, discount, conversionRate, avgShipHours, rfCnt };
-    }
-    // 兜底：订单为空时尝试服务端数据
-    if (dashData?.kpi) {
-      const sk = dashData.kpi;
-      const refundAmount = (serverAfterSale?.refundAmount && serverAfterSale.refundAmount > 0)
-        ? serverAfterSale.refundAmount
-        : sk.refund;
-      return {
-        gmv: sk.gmv, cnt: sk.orders, avg: sk.avgOrder, paid: sk.paid,
-        asRate: sk.afterSaleRate, rfRate: sk.refundRate, rfAmount: refundAmount,
-        postage: sk.postage ?? 0, discount: sk.discount,
-        conversionRate: sk.conversionRate ?? 0, avgShipHours: sk.avgShipHours ?? 0, rfCnt: sk.refundOrders ?? 0,
-      };
-    }
-    return null;
-  }, [dashData, serverAfterSale, filteredOrders]);
+  // ── 统一 KPI 计算容器（移到 filteredPromo* 变量之后） ──
+  // 见下方 kpiDateRange / kpiValues 定义
 
   const compareKpi = useMemo(() => {
     if (!compareOrders.length) return null;
@@ -361,141 +331,87 @@ export default function DashboardPage() {
     return filterPromoByTimeRange(records, allDates, timeRange, undefined, customStart, customEnd, quickRange);
   }, [currentDisplayData, allDates, timeRange, customStart, customEnd, quickRange]);
 
-  const promoKpi = useMemo(() => {
-    // 主力：始终从时间筛选后的推广数据计算
-    const promoSummaryOrProducts = filteredPromoSummary.length > 0
-      ? filteredPromoSummary
-      : filteredPromoProducts;
-    const allPromoRecords = [
-      ...promoSummaryOrProducts,
-      ...filteredStarSummary,
-      ...filteredLiveSummary,
-    ];
-    if (allPromoRecords.length) {
-      let totalCost = 0, promoGMV = 0, promoOrders = 0, totalImpressions = 0, totalClicks = 0;
-      let inquiryCost = 0, inquiryCount = 0, favoriteCost = 0, favoriteCount = 0, followCost = 0, followCount = 0;
-      promoSummaryOrProducts.forEach((r: any) => {
-        totalCost += safeFloat(findField(r, '总花费(元)', '花费(元)', '成交花费(元)'));
-        promoGMV += safeFloat(findField(r, '交易额(元)', '成交金额(元)'));
-        promoOrders += parseInt(findField(r, '成交笔数') || '0') || 0;
-        totalImpressions += parseInt(findField(r, '曝光量') || '0') || 0;
-        totalClicks += parseInt(findField(r, '点击量') || '0') || 0;
-        inquiryCost += safeFloat(findField(r, '询单花费(元)'));
-        inquiryCount += parseInt(findField(r, '询单量') || '0') || 0;
-        favoriteCost += safeFloat(findField(r, '收藏花费(元)'));
-        favoriteCount += parseInt(findField(r, '收藏量') || '0') || 0;
-        followCost += safeFloat(findField(r, '关注花费(元)'));
-        followCount += parseInt(findField(r, '关注量') || '0') || 0;
-      });
-      filteredStarSummary.forEach((r: any) => {
-        totalCost += safeFloat(findField(r, '花费(元)', '总花费(元)'));
-        promoGMV += safeFloat(findField(r, '交易额(元)', '成交金额(元)'));
-        promoOrders += parseInt(findField(r, '成交笔数', '订单数') || '0') || 0;
-        totalImpressions += parseInt(findField(r, '曝光量', '展现量') || '0') || 0;
-        totalClicks += parseInt(findField(r, '点击量') || '0') || 0;
-        favoriteCount += parseInt(findField(r, '收藏量') || '0') || 0;
-        followCount += parseInt(findField(r, '店铺关注量', '关注量') || '0') || 0;
-      });
-      filteredLiveSummary.forEach((r: any) => {
-        totalCost += safeFloat(findField(r, '总花费(元)', '花费(元)'));
-        promoGMV += safeFloat(findField(r, '交易额(元)', '成交金额(元)'));
-        promoOrders += parseInt(findField(r, '成交笔数', '订单数') || '0') || 0;
-        totalImpressions += parseInt(findField(r, '曝光量', '展现量') || '0') || 0;
-        followCount += parseInt(findField(r, '关注量') || '0') || 0;
-        favoriteCount += parseInt(findField(r, '收藏量') || '0') || 0;
-      });
-      const roi = totalCost > 0 ? promoGMV / totalCost : 0;
-      const ctr = totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0;
-      const cvr = totalClicks > 0 ? (promoOrders / totalClicks) * 100 : 0;
-      const cpc = totalClicks > 0 ? totalCost / totalClicks : 0;
-      const cpa = promoOrders > 0 ? totalCost / promoOrders : 0;
-      const avgInquiryCost = inquiryCount > 0 ? inquiryCost / inquiryCount : 0;
-      const avgFavoriteCost = favoriteCount > 0 ? favoriteCost / favoriteCount : 0;
-      const avgFollowCost = followCount > 0 ? followCost / followCount : 0;
-      return {
-        totalCost, promoGMV, promoOrders, roi, ctr, cvr, cpc, cpa,
-        totalImpressions, totalClicks,
-        inquiryCost, inquiryCount, avgInquiryCost,
-        favoriteCost, favoriteCount, avgFavoriteCost,
-        followCost, followCount, avgFollowCost
-      };
-    }
-    // 兜底：推广数据为空时尝试服务端数据
-    if (serverPromotion?.summary?.cost > 0) {
-      const s = serverPromotion.summary;
-      return {
-        totalCost: s.cost, promoGMV: s.gmv, promoOrders: s.orders,
-        roi: s.roi, ctr: s.ctr, cvr: s.cvr,
-        cpc: s.clicks > 0 ? s.cost / s.clicks : 0,
-        cpa: s.orders > 0 ? s.cost / s.orders : 0,
-        totalImpressions: s.impressions, totalClicks: s.clicks,
-        inquiryCost: 0, inquiryCount: 0, avgInquiryCost: 0,
-        favoriteCost: 0, favoriteCount: 0, avgFavoriteCost: 0,
-        followCost: 0, followCount: 0, avgFollowCost: 0,
-      };
-    }
-    return null;
-  }, [serverPromotion, filteredPromoSummary, filteredPromoProducts, filteredStarSummary, filteredLiveSummary]);
-
-  // 罚款汇总（从财务货款明细中提取 004xxxx 罚款记录）
-  const penaltySummary = useMemo(() => {
-    const financialRecords = currentDisplayData?.financialRecords || [];
-    let penaltyAmount = 0;
-    let penaltyCount = 0;
-    financialRecords.forEach((r: any) => {
-      const desc = String(findField(r, '业务描述', '描述') || '').trim();
-      if (desc.startsWith('004')) {
-        const amount = Math.abs(safeFloat(findField(r, '支出金额（-元）', '支出金额(元)', '支出金额', '发生金额')));
-        penaltyAmount += amount;
-        penaltyCount++;
+  // ── 统一 KPI 计算容器 ────────────────────────────────
+  const todayStr = () => new Date().toISOString().split('T')[0];
+  const kpiDateRange = useMemo(() => {
+    let asStart = '', asEnd = '';
+    if (timeRange === 'custom') {
+      if (quickRange) {
+        const now = new Date();
+        if (quickRange === 'last7') { asEnd = todayStr(); const d = new Date(now); d.setDate(d.getDate()-6); asStart = d.toISOString().split('T')[0]; }
+        else if (quickRange === 'last30') { asEnd = todayStr(); const d = new Date(now); d.setDate(d.getDate()-29); asStart = d.toISOString().split('T')[0]; }
+        else if (quickRange === 'thisMonth') { asStart = now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01'; asEnd = todayStr(); }
+        else if (quickRange === 'lastMonth') { const d = new Date(now); d.setMonth(d.getMonth()-1); asStart = d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-01'; asEnd = new Date(d.getFullYear(), d.getMonth()+1, 0).toISOString().split('T')[0]; }
+        else if (quickRange === 'thisYear') { asStart = now.getFullYear()+'-01-01'; asEnd = todayStr(); }
+      } else if (customStart) {
+        asStart = customStart; asEnd = customEnd || customStart;
       }
-    });
-    return { penaltyAmount, penaltyCount };
-  }, [currentDisplayData]);
-
-  // 运费险汇总
-  const insuranceSummary = useMemo(() => {
-    const insurance = currentDisplayData?.shippingInsurance || [];
-    let totalFee = 0;
-    insurance.forEach((r: any) => {
-      totalFee += safeFloat(findField(r, '服务费用（元）', '服务费用(元)', '保费', '保费(元)', 'insuaceFee'));
-    });
-    return totalFee;
-  }, [currentDisplayData]);
-
-  // 自然单 / 自然销售额 + 利润（始终基于 filteredOrders 计算，服务端仅兜底）
-  const organicAndProfit = useMemo(() => {
-    // 主力：从筛选后订单直接计算
-    if (filteredOrders.length) {
-      const totalGmv = kpi?.gmv ?? 0;
-      const totalOrders = kpi?.cnt ?? 0;
-      const promoOrders = promoKpi?.promoOrders ?? 0;
-      const promoGmv = promoKpi?.promoGMV ?? 0;
-      const organicOrders = Math.max(0, totalOrders - promoOrders);
-      const organicGmv = Math.max(0, totalGmv - promoGmv);
-      const totalMerchantReceived = filteredOrders.reduce((s, o) =>
-        s + safeFloat(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额')), 0);
-      const totalPlatformFee = filteredOrders.reduce((s, o) =>
-        s + safeFloat(findField(o, '平台技术服务费(元)', '技术服务费(元)', '平台技术服务费', '技术服务费')), 0);
-      const totalRefund = filteredOrders.reduce((s, o) =>
-        s + safeFloat(findField(o, '退款金额(元)', '退款金额', '退款(元)')), 0);
-      const promoCost = promoKpi?.totalCost ?? 0;
-      const profit = totalMerchantReceived - totalRefund - promoCost - penaltySummary.penaltyAmount - insuranceSummary - totalPlatformFee;
-      return { organicOrders, organicGmv, profit, totalMerchantReceived, totalPlatformFee };
+    } else if (timeRange !== 'all') {
+      const days = parseInt(timeRange);
+      if (!isNaN(days) && days > 0) {
+        asEnd = todayStr();
+        const d = new Date(); d.setDate(d.getDate() - (days - 1));
+        asStart = d.toISOString().split('T')[0];
+      }
     }
-    // 兜底：订单为空时尝试服务端数据
+    return { asStart, asEnd };
+  }, [timeRange, quickRange, customStart, customEnd]);
+
+  const kpiValues = useMemo(() => {
+    if (filteredOrders.length) {
+      const afterSales = currentDisplayData?.afterSaleRecords || [];
+      const financialRecords = currentDisplayData?.financialRecords || [];
+      const insuranceRecords = currentDisplayData?.shippingInsurance || [];
+      const promoRecords = filteredPromoSummary.length > 0 ? filteredPromoSummary : (filteredPromoProducts || []);
+      const starRecords = filteredStarSummary || [];
+      const liveRecords = filteredLiveSummary || [];
+
+      return computeAllKpis({
+        orders: filteredOrders,
+        afterSales,
+        promoRecords,
+        starRecords,
+        liveRecords,
+        financialRecords,
+        insuranceRecords,
+        config: {
+          shippingFeePerOrder: shippingFeePerOrder || 4,
+          returnShippingFeePerOrder: 10,
+        },
+        approvalDateStart: kpiDateRange.asStart || undefined,
+        approvalDateEnd: kpiDateRange.asEnd || undefined,
+      });
+    }
     if (dashData?.kpi) {
       const sk = dashData.kpi;
+      const refundAmount = (serverAfterSale?.refundAmount && serverAfterSale.refundAmount > 0)
+        ? serverAfterSale.refundAmount : (sk.refund || 0);
       return {
-        organicOrders: sk.organicOrders ?? Math.max(0, sk.orders - (sk.promoOrders ?? 0)),
-        organicGmv: sk.organicGmv ?? Math.max(0, sk.gmv - (sk.promoGmv ?? 0)),
-        profit: sk.profit,
-        totalMerchantReceived: sk.revenue,
-        totalPlatformFee: sk.platformFee,
-      };
+        gmv: sk.gmv || 0, cnt: sk.orders || 0, avg: sk.avgOrder || 0, paid: sk.paid || 0,
+        merchantReceived: sk.revenue || 0, platformFee: sk.platformFee || 0,
+        skuQty: sk.skuQuantity || 0, postage: sk.postage || 0, discount: sk.discount || 0,
+        conversionRate: sk.conversionRate || 0, avgShipHours: sk.avgShipHours || 0,
+        buyers: sk.buyers || 0, productCount: sk.productCount || 0,
+        rfAmount: refundAmount, rfCnt: sk.refundOrders || 0, rfRate: sk.refundRate || 0,
+        asRate: sk.afterSaleRate || 0,
+        refundApprovalAmount: sk.refundApprovalAmount || 0,
+        refundApprovalOrders: sk.refundApprovalOrders || 0,
+        refundedShippingCost: 0, returnShippingCost: 0,
+        profit: sk.profit || 0, penalties: sk.penalties || 0, penaltyCount: 0,
+        insuranceFee: sk.insuranceFee || 0, subsidyFee: sk.subsidyFee || 0,
+        promoCost: sk.promoCost || 0, promoGmv: sk.promoGmv || 0, promoRoi: sk.promoROI || 0,
+        promoOrders: sk.promoOrders || 0, promoRatio: sk.promoRatio || 0,
+        shopRoi: (sk.promoCost || 0) > 0 && (sk.gmv || 0) > 0 ? (sk.gmv || 0) / (sk.promoCost || 1) : 0,
+        ctr: sk.ctr || 0, cvr: sk.cvr || 0, cpc: 0, cpa: 0,
+        totalImpressions: 0, totalClicks: 0, avgInquiryCost: 0, avgFavoriteCost: 0, avgFollowCost: 0,
+        organicOrders: sk.organicOrders ?? Math.max(0, (sk.orders || 0) - (sk.promoOrders || 0)),
+        organicGmv: sk.organicGmv ?? Math.max(0, (sk.gmv || 0) - (sk.promoGmv || 0)),
+      } as UnifiedKpis;
     }
-    return { organicOrders: 0, organicGmv: 0, profit: 0, totalMerchantReceived: 0, totalPlatformFee: 0 };
-  }, [dashData, kpi, promoKpi, filteredOrders, penaltySummary, insuranceSummary]);
+    return null;
+  }, [dashData, serverAfterSale, filteredOrders, currentDisplayData,
+      filteredPromoSummary, filteredPromoProducts, filteredStarSummary, filteredLiveSummary,
+      kpiDateRange, shippingFeePerOrder]);
 
   const promoTrendData = useMemo(() => {
     const promoSummaryFallback = filteredPromoSummary.length > 0 ? filteredPromoSummary : filteredPromoProducts;
@@ -538,7 +454,16 @@ export default function DashboardPage() {
   }, [filteredPromoSummary, filteredPromoProducts, filteredStarSummary, filteredLiveSummary]);
 
   // 趋势图数据（按 granularity 聚合：日/周/月）
-  const dailyKpiData = useMemo(() => buildTrendData(filteredOrders, filteredPromoSummary.length > 0 ? filteredPromoSummary : filteredPromoProducts, granularity, filteredStarSummary, filteredLiveSummary), [filteredOrders, filteredPromoSummary, filteredPromoProducts, filteredStarSummary, filteredLiveSummary, granularity]);
+  const dailyKpiData = useMemo(() => buildTrendData(
+    filteredOrders,
+    filteredPromoSummary.length > 0 ? filteredPromoSummary : filteredPromoProducts,
+    granularity,
+    filteredStarSummary,
+    filteredLiveSummary,
+    currentDisplayData?.afterSaleRecords,
+    shippingFeePerOrder || 4,
+    10,
+  ), [filteredOrders, filteredPromoSummary, filteredPromoProducts, filteredStarSummary, filteredLiveSummary, granularity, currentDisplayData?.afterSaleRecords, shippingFeePerOrder]);
 
   const compareDailyKpiData = useMemo(() => {
     if (!compareEnabled || !compareOrders.length) return [];
@@ -561,44 +486,51 @@ export default function DashboardPage() {
       .slice(0, 5);
   }, [filteredPromoProducts]);
 
+  // ── 所有 KPI 统一从 kpiValues 读取 ──────────────────
   const allKpiCards = [
-    { label: 'GMV（商品总价）', value: kpi?.gmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: compareEnabled ? changePct(kpi?.gmv || 0, compareKpi?.gmv || 0) : null, source: '订单·商品总价(元) SUM' },
-    { label: '有效订单量', value: kpi?.cnt, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, change: compareEnabled ? changePct(kpi?.cnt || 0, compareKpi?.cnt || 0) : null, source: '订单·COUNT 排除已取消' },
-    { label: '商家实收', value: organicAndProfit.totalMerchantReceived, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: null, source: '订单·商家实收金额(元) SUM' },
-    { label: '用户实付', value: kpi?.paid, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: null, source: '订单·用户实付金额(元) SUM' },
-    { label: '客单价', value: kpi?.avg, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: TrendingUp, change: compareEnabled ? changePct(kpi?.avg || 0, compareKpi?.avg || 0) : null, source: '用户实付 ÷ 订单数' },
-    { label: '利润金额', value: organicAndProfit.profit, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: null, source: '实收−退款−推广−运费险−罚款' },
-    { label: '退款金额', value: kpi?.rfAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: RotateCcw, change: null, source: '订单·退款金额(元) SUM' },
-    { label: '退款单数', value: kpi?.rfCnt, fmt: (v: number) => v.toFixed(0), icon: RotateCcw, change: null, source: '订单·售后状态含退款 COUNT' },
-    { label: '退款率', value: kpi?.rfRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: RotateCcw, change: null, source: '订单·售后状态含退款 / 订单数' },
-    { label: '售后率', value: kpi?.asRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: AlertTriangle, change: null, source: '售后记录 ÷ 订单数' },
-    { label: '自然单', value: organicAndProfit.organicOrders, fmt: (v: number) => v.toFixed(0), icon: TrendingUp, change: null, source: '总订单 − 推广订单' },
-    { label: '自然销售额', value: organicAndProfit.organicGmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, change: null, source: '总GMV − 推广GMV' },
-    { label: '买家数', value: (dashData?.kpi?.buyers != null) ? dashData!.kpi!.buyers : (new Set(filteredOrders.map(o => { const no = String(findField(o, '订单号') || '').trim(); return no;}).filter(Boolean)).size || (filteredOrders.length > 0 ? 1 : 0)), fmt: (v: number) => v.toFixed(0), icon: Users, change: null, source: '订单·订单号 DISTINCT COUNT' },
-    { label: '商品数', value: (dashData?.kpi?.productCount != null) ? dashData!.kpi!.productCount : new Set(filteredOrders.map(o => String(findField(o, '商品id', '商品ID') || '').trim()).filter(id => id && id !== '-' && id !== '')).size, fmt: (v: number) => v.toFixed(0), icon: Package, change: null, source: '订单·商品ID DISTINCT COUNT' },
-    { label: '罚款金额', value: (dashData?.kpi?.penalties != null) ? dashData!.kpi!.penalties : penaltySummary.penaltyAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: AlertTriangle, change: null, source: '货款明细·004开头账务 SUM' },
-    { label: '罚款次数', value: penaltySummary.penaltyCount, fmt: (v: number) => v.toFixed(0), icon: AlertTriangle, change: null, source: '货款明细·004开头 COUNT' },
-    { label: '优惠总额', value: kpi?.discount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, change: null, source: '订单·店铺+平台+立减+优惠券 SUM' },
-    { label: '平均发货时长', value: kpi?.avgShipHours, fmt: (v: number) => `${v.toFixed(1)}h`, icon: Clock, change: null, source: '订单·发货时间−支付时间 AVG' },
-    { label: '发货率', value: kpi?.conversionRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Truck, change: null, source: '已发货 ÷ 总订单' },
-    { label: '平台服务费', value: organicAndProfit.totalPlatformFee, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, change: null, source: '订单·平台技术服务费 SUM' },
-    { label: '快递成本', value: kpi?.postage, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Truck, change: null, source: '订单·邮费(元) SUM' },
-    { label: '运费险', value: insuranceSummary, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Shield, change: null, source: '运费险·服务费用 SUM' },
-    { label: '推广花费', value: promoKpi?.totalCost, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: BarChart3, change: null, source: '推广·成交花费(元) SUM' },
-    { label: '推广GMV', value: promoKpi?.promoGMV, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, change: null, source: '推广·交易额(元) SUM' },
-    { label: '推广ROI', value: promoKpi?.roi, fmt: (v: number) => v.toFixed(2), icon: Target, change: null, source: '推广GMV ÷ 推广花费' },
-    { label: '推广订单量', value: promoKpi?.promoOrders, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, change: null, source: '推广·成交笔数 SUM' },
-    { label: '点击率', value: promoKpi?.ctr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Target, change: null, source: '推广·点击量÷曝光量' },
-    { label: '转化率', value: promoKpi?.cvr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Percent, change: null, source: '推广·成交笔数÷点击量' },
-    { label: '平均点击成本', value: promoKpi?.cpc, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, change: null, source: '推广花费 ÷ 点击量' },
-    { label: '平均获客成本', value: promoKpi?.cpa, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Users, change: null, source: '推广花费 ÷ 成交笔数' },
-    { label: '曝光量', value: promoKpi?.totalImpressions, fmt: (v: number) => v.toFixed(0), icon: Eye, change: null, source: '推广·曝光量 SUM' },
-    { label: '点击量', value: promoKpi?.totalClicks, fmt: (v: number) => v.toFixed(0), icon: MousePointerClick, change: null, source: '推广·点击量 SUM' },
-    { label: '推广占比', value: (kpi?.gmv || 0) > 0 && (promoKpi?.totalCost || 0) > 0 ? ((promoKpi!.totalCost / kpi!.gmv) * 100) : 0, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Target, change: null, source: '推广花费 ÷ 总GMV' },
-    { label: '全店投产', value: (promoKpi?.totalCost || 0) > 0 && (kpi?.gmv || 0) > 0 ? (kpi!.gmv / promoKpi!.totalCost) : 0, fmt: (v: number) => v.toFixed(2), icon: TrendingUp, change: null, source: '总GMV ÷ 推广花费' },
-    { label: '询单成本', value: promoKpi?.avgInquiryCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: MessageCircle, change: null, source: '推广·询单花费÷询单量' },
-    { label: '收藏成本', value: promoKpi?.avgFavoriteCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Heart, change: null, source: '推广·收藏花费÷收藏量' },
-    { label: '关注成本', value: promoKpi?.avgFollowCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: UserPlus, change: null, source: '推广·关注花费÷关注量' },
+    { label: 'GMV（商品总价）', value: kpiValues?.gmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: compareEnabled ? changePct(kpiValues?.gmv || 0, compareKpi?.gmv || 0) : null, source: '订单·商品总价(元) SUM' },
+    { label: '有效订单量', value: kpiValues?.cnt, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, change: compareEnabled ? changePct(kpiValues?.cnt || 0, compareKpi?.cnt || 0) : null, source: '订单·COUNT 排除已取消' },
+    { label: '商家实收', value: kpiValues?.merchantReceived, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: null, source: '订单·商家实收金额(元) SUM' },
+    { label: '用户实付', value: kpiValues?.paid, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: null, source: '订单·用户实付金额(元) SUM' },
+    { label: '客单价', value: kpiValues?.avg, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: TrendingUp, change: compareEnabled ? changePct(kpiValues?.avg || 0, compareKpi?.avg || 0) : null, source: '用户实付 ÷ 订单数' },
+    { label: '利润金额', value: kpiValues?.profit, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: null, source: '实收−退款−推广−运费险−罚款' },
+    { label: '退款金额(按同意退款时间)', value: kpiValues?.refundApprovalAmount ?? 0, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: RotateCcw, change: null, source: '售后记录·同意退款时间金额 SUM' },
+    { label: '退款金额', value: kpiValues?.rfAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: RotateCcw, change: null, source: '订单·退款金额(元) SUM' },
+    { label: '退款单数', value: kpiValues?.rfCnt, fmt: (v: number) => v.toFixed(0), icon: RotateCcw, change: null, source: '订单·售后状态含退款 COUNT' },
+
+    { label: '退款单数(按同意退款时间)', value: kpiValues?.refundApprovalOrders ?? 0, fmt: (v: number) => v.toFixed(0), icon: RotateCcw, change: null, source: '售后记录·同意退款时间 COUNT' },
+    { label: '退款成功快递发货成本', value: kpiValues?.refundedShippingCost ?? 0, fmt: (v: number) => '¥' + v.toFixed(0), icon: Truck, change: null, source: '退款成功订单数 × 每单快递费' },
+    { label: '退货退回成本', value: kpiValues?.returnShippingCost ?? 0, fmt: (v: number) => '¥' + v.toFixed(0), icon: RotateCcw, change: null, source: '退货退款单数 × 每单退货费(¥10)' },
+    { label: '退款率', value: kpiValues?.rfRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: RotateCcw, change: null, source: '订单·售后状态含退款 / 订单数' },
+    { label: '售后率', value: kpiValues?.asRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: AlertTriangle, change: null, source: '售后记录 ÷ 订单数' },
+    { label: '自然单', value: kpiValues?.organicOrders, fmt: (v: number) => v.toFixed(0), icon: TrendingUp, change: null, source: '总订单 − 推广订单' },
+    { label: '自然销售额', value: kpiValues?.organicGmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, change: null, source: '总GMV − 推广GMV' },
+    { label: '买家数', value: kpiValues?.buyers ?? 0, fmt: (v: number) => v.toFixed(0), icon: Users, change: null, source: '订单·订单号 DISTINCT COUNT' },
+    { label: '商品数', value: kpiValues?.productCount ?? 0, fmt: (v: number) => v.toFixed(0), icon: Package, change: null, source: '订单·商品ID DISTINCT COUNT' },
+    { label: 'SKU数量', value: kpiValues?.skuQty ?? 0, fmt: (v: number) => v.toFixed(0), icon: Package, change: null, source: '订单·商品数量(件) SUM' },
+    { label: '罚款金额', value: kpiValues?.penalties ?? 0, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: AlertTriangle, change: null, source: '货款明细·004开头账务 SUM' },
+    { label: '罚款次数', value: kpiValues?.penaltyCount ?? 0, fmt: (v: number) => v.toFixed(0), icon: AlertTriangle, change: null, source: '货款明细·004开头 COUNT' },
+    { label: '优惠总额', value: kpiValues?.discount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, change: null, source: '订单·店铺+平台+立减+优惠券 SUM' },
+    { label: '平均发货时长', value: kpiValues?.avgShipHours, fmt: (v: number) => `${v.toFixed(1)}h`, icon: Clock, change: null, source: '订单·发货时间−支付时间 AVG' },
+    { label: '发货率', value: kpiValues?.conversionRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Truck, change: null, source: '已发货 ÷ 总订单' },
+    { label: '平台服务费', value: kpiValues?.platformFee, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, change: null, source: '订单·平台技术服务费 SUM' },
+    { label: '快递成本', value: kpiValues?.postage, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Truck, change: null, source: '订单·邮费(元) SUM' },
+    { label: '运费险', value: kpiValues?.insuranceFee, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Shield, change: null, source: '运费险·服务费用 SUM' },
+    { label: '推广花费', value: kpiValues?.promoCost, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: BarChart3, change: null, source: '推广·成交花费(元) SUM' },
+    { label: '推广GMV', value: kpiValues?.promoGmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, change: null, source: '推广·交易额(元) SUM' },
+    { label: '推广ROI', value: kpiValues?.promoRoi, fmt: (v: number) => v.toFixed(2), icon: Target, change: null, source: '推广GMV ÷ 推广花费' },
+    { label: '推广订单量', value: kpiValues?.promoOrders, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, change: null, source: '推广·成交笔数 SUM' },
+    { label: '点击率', value: kpiValues?.ctr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Target, change: null, source: '推广·点击量÷曝光量' },
+    { label: '转化率', value: kpiValues?.cvr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Percent, change: null, source: '推广·成交笔数÷点击量' },
+    { label: '平均点击成本', value: kpiValues?.cpc, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, change: null, source: '推广花费 ÷ 点击量' },
+    { label: '平均获客成本', value: kpiValues?.cpa, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Users, change: null, source: '推广花费 ÷ 成交笔数' },
+    { label: '曝光量', value: kpiValues?.totalImpressions, fmt: (v: number) => v.toFixed(0), icon: Eye, change: null, source: '推广·曝光量 SUM' },
+    { label: '点击量', value: kpiValues?.totalClicks, fmt: (v: number) => v.toFixed(0), icon: MousePointerClick, change: null, source: '推广·点击量 SUM' },
+    { label: '推广占比', value: kpiValues?.promoRatio ?? 0, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Target, change: null, source: '推广花费 ÷ 总GMV' },
+    { label: '全店投产', value: kpiValues?.shopRoi ?? 0, fmt: (v: number) => v.toFixed(2), icon: TrendingUp, change: null, source: '总GMV ÷ 推广花费' },
+    { label: '询单成本', value: kpiValues?.avgInquiryCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: MessageCircle, change: null, source: '推广·询单花费÷询单量' },
+    { label: '收藏成本', value: kpiValues?.avgFavoriteCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Heart, change: null, source: '推广·收藏花费÷收藏量' },
+    { label: '关注成本', value: kpiValues?.avgFollowCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: UserPlus, change: null, source: '推广·关注花费÷关注量' },
   ];
   const kpiCards = useMemo(() => {
     const filtered = allKpiCards.filter(c => visibleKpis.has(c.label));
@@ -629,17 +561,28 @@ export default function DashboardPage() {
   const unpinnedColumns = columns.filter(c => !pinnedCols.has(c.key) && !hiddenCols.has(c.key));
 
   const handleKpiClick = (label: string) => {
-    // 趋势图切换
+    // 趋势图切换 — 全部42个指标与 KPI_LINES 一一对应
     setKpiActiveFilter(null);
     const kpiKeyMap: Record<string, string> = {
-      'GMV（商品总价）': 'gmv', '有效订单量': 'orderCount', '自然单': 'orderCount', '自然销售额': 'gmv',
-      '客单价': 'avgPrice',
-      '用户实付': 'paid', '退款金额': 'refundAmount',
-      '优惠总额': 'discount', '售后率': 'asRate', '退款率': 'rfRate',
+      'GMV（商品总价）': 'gmv', '商家实收': 'merchantReceived', '用户实付': 'paid',
+      '自然销售额': 'organicGmv', '优惠总额': 'discount',
+      '有效订单量': 'orderCount', '客单价': 'avgPrice',
+      '买家数': 'buyerCount', '商品数': 'productCount',
+      '自然单': 'organicOrders', '平均发货时长': 'avgShipHours', '发货率': 'shipRate',
+      'SKU数量': 'skuQty',
+      '退款金额': 'refundAmount', '退款单数': 'rfCount',
+      '退款率': 'rfRate', '售后率': 'asRate',
+      '退款金额(按同意退款时间)': 'refundApprovalAmount',
+      '退款单数(按同意退款时间)': 'refundApprovalOrders',
+      '利润金额': 'profit', '罚款金额': 'penaltyAmount', '罚款次数': 'penaltyCount',
       '推广花费': 'promoCost', '推广GMV': 'promoGmv', '推广ROI': 'promoRoi',
-      '买家数': 'buyerCount', '商品数': 'productCount', '罚款金额': 'penaltyAmount', '利润金额': 'profit',
-      '平均发货时长': 'avgShipHours', '点击率': 'ctr', '转化率': 'cvr',
-      '平均点击成本': 'cpc', '平均获客成本': 'cpa', '推广占比': 'promoRatio', '全店投产': 'shopRoi',
+      '推广订单量': 'promoOrders', '推广占比': 'promoRatio', '全店投产': 'shopRoi',
+      '曝光量': 'totalImpressions', '点击量': 'totalClicks',
+      '点击率': 'ctr', '转化率': 'cvr',
+      '平均点击成本': 'cpc', '平均获客成本': 'cpa',
+      '询单成本': 'avgInquiryCost', '收藏成本': 'avgFavoriteCost', '关注成本': 'avgFollowCost',
+      '退款成功快递发货成本': 'refundedShippingCost', '退货退回成本': 'returnShippingCost',
+      '平台服务费': 'platformFee', '快递成本': 'postage', '运费险': 'insurance',
     };
     const key = kpiKeyMap[label];
     if (key) {
@@ -701,7 +644,7 @@ export default function DashboardPage() {
       case 'trend':
         return <DashboardTrendPanel key="trend" revenueTrend={revenueTrend} noData={noData} rangeLabel={rangeLabel} />;
       case 'status':
-        return <DashboardStatusPanel key="status" statusDist={statusDist} noData={noData} totalOrders={kpi?.cnt} />;
+        return <DashboardStatusPanel key="status" statusDist={statusDist} noData={noData} totalOrders={kpiValues?.cnt} />;
       case 'table':
         return <React.Fragment key="table">
           {kpiActiveFilter && (

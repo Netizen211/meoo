@@ -143,7 +143,7 @@ export default function RiskPage() {
   // ══════════════════════════════════════════════
   const orders = useMemo(() => {
     if (!currentDisplayData?.orders?.length) return [];
-    return currentDisplayData.orders.filter((o: any) => ss(findField(o, '订单状态')) !== '已取消');
+    return currentDisplayData.orders.filter((o: any) => !['已取消', '待付款', '代付款', '未付款', '已关闭'].includes(ss(findField(o, '订单状态'))));
   }, [currentDisplayData]);
 
   const noData = !orders.length;

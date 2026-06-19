@@ -178,6 +178,26 @@
     // 第四重：兜底标记
     localStorage.setItem('__app_version', VER);
     localStorage.setItem('__app_last_loaded', Date.now().toString());
+
+    // ★ 第五重：运行时轮询（已打开页面每隔30秒检测部署更新）
+    var POLL_CHECK_INTERVAL = 30000;
+    setInterval(function() {
+      try {
+        var pollXhr = new XMLHttpRequest();
+        pollXhr.open('GET', '/build-meta.json?_=' + Date.now(), false);
+        pollXhr.send();
+        if (pollXhr.status === 200) {
+          var pollMeta = JSON.parse(pollXhr.responseText);
+          if (pollMeta.buildId && localStorage.getItem('__app_buildId') &&
+              localStorage.getItem('__app_buildId') !== pollMeta.buildId) {
+            localStorage.setItem('__app_buildId', pollMeta.buildId);
+            if ('caches' in window) { caches.keys().then(function(ks){ ks.forEach(function(k){ caches.delete(k); }); }); }
+            if ('serviceWorker' in navigator) { navigator.serviceWorker.getRegistrations().then(function(rs){ rs.forEach(function(r){ r.unregister(); }); }); }
+            window.location.reload(true);
+          }
+        }
+      } catch(e) {}
+    }, POLL_CHECK_INTERVAL);
   })();
   </script>
   <script>window.__BUILD_ID="65628189";console.log("BUILD:"+window.__BUILD_ID);</script></body>
