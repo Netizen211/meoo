@@ -7,8 +7,8 @@
  * - 折线图默认隐藏，点击卡片切换趋势线
  * - 纯灰卡片，无任何装饰条
  */
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ArrowUp, ArrowDown, TrendingUp, X, Search, Package, DollarSign, ShoppingCart, Percent, AlertTriangle, Zap, Clock, Activity, Target, BarChart3, RotateCcw, Eye, Shield, Tag, Layers } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { ArrowUp, ArrowDown, TrendingUp, X, Search, Package, DollarSign, ShoppingCart, Percent, AlertTriangle, Zap, Clock, Activity, Target, BarChart3, RotateCcw, Eye, Shield, Tag, Layers, Plus, Trash2, Edit3, Check } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, rectSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -115,11 +115,12 @@ export const ALL_PRODUCT_KPIS: ProductKpiItem[] = [
 ];
 
 /**
- * ── 10大场景分组（同一KPI可归属多个分组） ──
+ * ── 10大场景分组（每组精准10个KPI，全选即填满10格） ──
  *
- * 按商家实际使用场景交叉分类，方便快速定位所需指标：
+ * 同一KPI可归属多个分组，点"全选"替换当前选中为该组10个指标，
+ * 保留逐项勾选的自定义能力。
  *
- *  ① 快速看板  → 一眼看清整体生意（核心指标集合）
+ *  ① 快速看板  → 一眼看清整体生意
  *  ② 营收分析  → 销售额/收入/订单
  *  ③ 利润分析  → 各维度利润/利润率
  *  ④ 成本拆解  → 成本构成细项
@@ -134,58 +135,50 @@ export const KPI_GROUPS: { name: string; labels: string[] }[] = [
   {
     name: '① 快速看板',
     labels: [
-      '商品数', '总GMV', '总实收', '利润总额', '总订单量', '总销量',
-      '动销率', '退款率', '推广ROI', '总成本', '净收入', '毛利率',
-      '推广费比', '客单价', '净利率',
+      '商品数', '总GMV', '总实收', '利润总额', '总订单量',
+      '总销量', '动销率', '退款率', '推广ROI', '毛利率',
     ],
   },
   {
     name: '② 营收分析',
     labels: [
-      '总GMV', '总实收', '总销量', '总订单量', '客单价', '净收入',
-      '单均GMV', '单均实收', '单均订单量', '退款金额', '折扣总额',
-      '退款损失率', '折扣率', '推广成交', '推广订单数', '推广订单占比',
+      '总GMV', '总实收', '总销量', '总订单量', '客单价',
+      '净收入', '单均GMV', '退款金额', '推广成交', '折扣总额',
     ],
   },
   {
     name: '③ 利润分析',
     labels: [
-      '利润总额', '利润率', '毛利率', '净利率', '毛利润', '税前利润',
-      '税后净利润', '毛利润率', '单商品利润', '单均利润', '单品利润',
-      '净收入', '总实收', '成本率', '单品成本',
+      '利润总额', '利润率', '毛利率', '净利率', '毛利润',
+      '税前利润', '税后净利润', '单商品利润', '单均利润', '单品利润',
     ],
   },
   {
     name: '④ 成本拆解',
     labels: [
-      '总成本', '成本率', '单品成本', '物流成本', '平台佣金', '包装费',
-      '运费', '产品进价', '折扣/折让', '税金', '自定义扣除',
-      '推广花费', '单品推广费', '单品利润',
+      '总成本', '成本率', '单品成本', '物流成本', '平台佣金',
+      '包装费', '运费', '产品进价', '税金', '自定义扣除',
     ],
   },
   {
     name: '⑤ 推广效果',
     labels: [
       '推广花费', '推广ROI', '推广费比', '推广成交', '推广点击',
-      '推广成交率', '推广订单数', '推广展示量', 'CPC', '推广订单占比',
-      'CTR', 'CVR', 'CPM', '最高ROI', '最低ROI', '单品推广费',
-      '单品推广成交', '单品推广点击', '时均推广订单', '高推广品',
+      '推广成交率', 'CPC', '推广订单数', 'CTR', 'CVR',
     ],
   },
   {
     name: '⑥ 商品结构',
     labels: [
       '商品数', '动销商品', '零销品', '动销率', '新品数',
-      '商品生命周期', '平均活跃天数', '平均售价', '日均销量',
-      '单均订单量', '库存预估', '库存深度(天)', '平均周转',
-      '低库存品',
+      '商品生命周期', '平均活跃天数', '平均售价', '日均销量', '平均周转',
     ],
   },
   {
     name: '⑦ 库存周转',
     labels: [
-      '平均周转', '库存预估', '库存深度(天)', '低库存品', '日均销量',
-      '商品生命周期', '平均活跃天数', '零销品', '库存预估',
+      '库存预估', '库存深度(天)', '低库存品', '平均周转', '零销品',
+      '日均销量', '平均活跃天数', '商品生命周期', '商品数', '动销商品',
     ],
   },
   {
@@ -193,23 +186,20 @@ export const KPI_GROUPS: { name: string; labels: string[] }[] = [
     labels: [
       '退款率', '售后率', '退款金额', '退款订单数', '售后订单数',
       '高退款品', '高售后品', '单品退款', '售后金额', '品质退款率',
-      '退款损失率',
     ],
   },
   {
     name: '⑨ 定价折扣',
     labels: [
       '平均售价', '客单价', '平均折扣率', '折扣率', '折扣总额',
-      '单品成本', '单品利润', '毛利率', '成本率', '单均GMV',
-      '单均实收', '毛利润率',
+      '单品成本', '单品利润', '毛利率', '成本率', '毛利润率',
     ],
   },
   {
     name: '⑩ 风控预警',
     labels: [
       '零销品', '低库存品', '高退款品', '高售后品', '高推广品',
-      '退款率', '售后率', '品质退款率', '退款损失率', '成本率',
-      '最低ROI', '推广费比', '利润总额', '净收入',
+      '退款率', '售后率', '品质退款率', '成本率', '最低ROI',
     ],
   },
 ];
@@ -294,11 +284,30 @@ export const KPI_DATAKEY_MAP = {
   'CPM': null,
   '时均推广订单': null,
 };
-
 const LINE_COLORS = [
   '#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
   '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1',
 ];
+
+// ── 自定义分组支持 ──────────────────────────────────────────────
+export interface CustomKpiGroup {
+  id: string;
+  name: string;
+  labels: string[];
+}
+
+const CUSTOM_GROUPS_KEY = 'product_kpi_custom_groups';
+
+function loadCustomGroups(): CustomKpiGroup[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_GROUPS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+function saveCustomGroups(groups: CustomKpiGroup[]) {
+  localStorage.setItem(CUSTOM_GROUPS_KEY, JSON.stringify(groups));
+}
 
 // ─── 可拖拽 KPI 卡片（与数据中心完全一致，纯灰无装饰） ───
 function SortableKpiCard({ card, value, change, noData, onCardClick }) {
@@ -346,6 +355,78 @@ export default function ProductKpiPanel({
 }) {
   const [kpiSearch, setKpiSearch] = useState('');
   const selectorRef = useRef(null);
+
+  // ── 自定义分组 ──
+  const [customGroups, setCustomGroups] = useState<CustomKpiGroup[]>(() => loadCustomGroups());
+  const [creatingGroup, setCreatingGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null);
+  const [editingName, setEditingName] = useState('');
+  const [addToGroupId, setAddToGroupId] = useState<string | null>(null);
+  const [addSearch, setAddSearch] = useState('');
+  const newGroupInputRef = useRef<HTMLInputElement>(null);
+  const editInputRef = useRef<HTMLInputElement>(null);
+
+  // 同步保存自定义分组到 localStorage
+  const syncCustomGroups = useCallback((groups: CustomKpiGroup[]) => {
+    setCustomGroups(groups);
+    saveCustomGroups(groups);
+  }, []);
+
+  // 创建分组
+  const handleCreateGroup = () => {
+    const name = newGroupName.trim();
+    if (!name) return;
+    const newGroup: CustomKpiGroup = {
+      id: 'cg_' + Date.now(),
+      name,
+      labels: [],
+    };
+    syncCustomGroups([...customGroups, newGroup]);
+    setNewGroupName('');
+    setCreatingGroup(false);
+  };
+
+  // 删除分组
+  const handleDeleteGroup = (id: string) => {
+    syncCustomGroups(customGroups.filter(g => g.id !== id));
+  };
+
+  // 重命名分组
+  const handleRenameGroup = (id: string, name: string) => {
+    syncCustomGroups(customGroups.map(g => g.id === id ? { ...g, name } : g));
+    setEditingGroupId(null);
+  };
+
+  // 向分组添加KPI
+  const handleAddKpiToGroup = (groupId: string, label: string) => {
+    syncCustomGroups(customGroups.map(g => {
+      if (g.id !== groupId) return g;
+      if (g.labels.includes(label)) return g;
+      if (g.labels.length >= 10) return g; // 最多10个
+      return { ...g, labels: [...g.labels, label] };
+    }));
+  };
+
+  // 从分组移除KPI
+  const handleRemoveKpiFromGroup = (groupId: string, label: string) => {
+    syncCustomGroups(customGroups.map(g => {
+      if (g.id !== groupId) return g;
+      return { ...g, labels: g.labels.filter(l => l !== label) };
+    }));
+  };
+
+  useEffect(() => {
+    if (creatingGroup && newGroupInputRef.current) {
+      newGroupInputRef.current.focus();
+    }
+  }, [creatingGroup]);
+
+  useEffect(() => {
+    if (editingGroupId && editInputRef.current) {
+      editInputRef.current.focus();
+    }
+  }, [editingGroupId]);
 
   // label → {value, fmt} 映射（选择器显示数值用）
   const kpiValueMap = useMemo(() => {
@@ -450,7 +531,7 @@ export default function ProductKpiPanel({
                     </div>
                   );
                 })()
-              ) : (
+              ) : (<>
                 <div className="grid grid-cols-5 gap-1.5">
                   {KPI_GROUPS.map(group => {
                     const groupCards = allKpiCards.filter(k => group.labels.includes(k.label));
@@ -466,8 +547,16 @@ export default function ProductKpiPanel({
                             onClick={() => {
                               const newSet = new Set(visibleKpis);
                               if (allChecked) {
+                                // 取消全选：去掉该组所有指标
                                 groupCards.forEach(k => newSet.delete(k.label));
                               } else {
+                                // 全选：替换为这组精准10个（一键填满格子）
+                                const groupLabelSet = new Set(groupCards.map(k => k.label));
+                                // 先收集再移除（避免遍历时修改Set）
+                                const toRemove: string[] = [];
+                                newSet.forEach(l => { if (!groupLabelSet.has(l)) toRemove.push(l); });
+                                toRemove.forEach(l => newSet.delete(l));
+                                // 全选该组指标
                                 groupCards.forEach(k => newSet.add(k.label));
                               }
                               setVisibleKpis(newSet);
@@ -505,7 +594,146 @@ export default function ProductKpiPanel({
                     );
                   })}
                 </div>
-              )}
+                {/* ── 自定义分组 ── */}
+                {customGroups.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-dashed border-pdd-border/30">
+                    <div className="flex items-center gap-1 mb-1.5 px-0.5">
+                      <Tag size={11} className="text-pdd-text-secondary/40" />
+                      <span className="text-[10px] font-medium text-pdd-text-secondary/50">自定义分组</span>
+                    </div>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {customGroups.map(cg => {
+                        const cgCards = allKpiCards.filter(k => cg.labels.includes(k.label));
+                        const cgChecked = cgCards.filter(k => visibleKpis.has(k.label)).length;
+                        const cgAllChecked = cgChecked === cgCards.length && cgCards.length > 0;
+                        const cgNoneChecked = cgChecked === 0;
+                        return (
+                          <div key={cg.id} className="border border-solid border-pdd-border/40 rounded-md px-2 pt-1.5 pb-1 relative group/cg">
+                            <div className="flex items-center justify-between pb-1 mb-1 border-b border-dashed border-pdd-border/30">
+                              {editingGroupId === cg.id ? (
+                                <input
+                                  ref={editInputRef}
+                                  className="flex-1 text-[11px] font-semibold bg-transparent outline-none border-b border-pdd-primary/50 text-pdd-text px-0.5 py-0"
+                                  value={editingName}
+                                  onChange={e => setEditingName(e.target.value)}
+                                  onBlur={() => handleRenameGroup(cg.id, editingName.trim() || cg.name)}
+                                  onKeyDown={e => { if (e.key === 'Enter') handleRenameGroup(cg.id, editingName.trim() || cg.name); if (e.key === 'Escape') setEditingGroupId(null); }}
+                                />
+                              ) : (
+                                <span className="text-[11px] font-semibold text-pdd-text-secondary/70 cursor-pointer hover:text-pdd-primary transition-colors"
+                                  onClick={() => { setEditingGroupId(cg.id); setEditingName(cg.name); }}
+                                >{cg.name}</span>
+                              )}
+                              <div className="flex items-center gap-0.5">
+                                {/* 添加KPI按钮 */}
+                                {addToGroupId === cg.id ? (
+                                  <div className="relative">
+                                    <input
+                                      className="w-20 text-[9px] bg-pdd-gray-100/50 border border-pdd-border/50 rounded px-1 py-0.5 outline-none"
+                                      placeholder="搜索…"
+                                      value={addSearch}
+                                      onChange={e => setAddSearch(e.target.value)}
+                                      onBlur={() => { setTimeout(() => setAddToGroupId(null), 200); }}
+                                      onKeyDown={e => { if (e.key === 'Escape') setAddToGroupId(null); }}
+                                      autoFocus
+                                    />
+                                    {addSearch.trim() && (
+                                      <div className="absolute top-full left-0 mt-0.5 bg-pdd-card border border-pdd-border rounded shadow-lg z-50 max-h-32 overflow-y-auto w-40">
+                                        {allKpiCards
+                                          .filter(k => k.label.includes(addSearch.trim()) && !cg.labels.includes(k.label))
+                                          .slice(0, 10)
+                                          .map(k => (
+                                            <button key={k.label}
+                                              className="w-full text-left px-1.5 py-0.5 text-[10px] hover:bg-pdd-primary/10 transition-colors"
+                                              onMouseDown={() => { handleAddKpiToGroup(cg.id, k.label); setAddSearch(''); }}
+                                            >{k.label}</button>
+                                          ))
+                                        }
+                                      </div>
+                                    )}
+                                  </div>
+                                ) : (
+                                  <button onClick={() => { setAddToGroupId(cg.id); setAddSearch(''); }}
+                                    className="text-pdd-text-secondary/30 hover:text-pdd-primary transition-colors p-0.5"
+                                    title="添加指标"
+                                  ><Plus size={11} /></button>
+                                )}
+                                {/* 全选按钮 */}
+                                <button
+                                  onClick={() => {
+                                    const newSet = new Set(visibleKpis);
+                                    if (cgAllChecked) {
+                                      cgCards.forEach(k => newSet.delete(k.label));
+                                    } else {
+                                      const groupLabelSet = new Set(cgCards.map(k => k.label));
+                                      const toRemove: string[] = [];
+                                      newSet.forEach(l => { if (!groupLabelSet.has(l)) toRemove.push(l); });
+                                      toRemove.forEach(l => newSet.delete(l));
+                                      cgCards.forEach(k => newSet.add(k.label));
+                                    }
+                                    setVisibleKpis(newSet);
+                                  }}
+                                  className={`text-[9px] px-1 py-0.5 rounded transition-colors ${cgAllChecked ? 'text-pdd-primary/60 bg-pdd-primary/5' : cgNoneChecked ? 'text-pdd-text-secondary/20 hover:text-pdd-text-secondary/50' : 'text-pdd-warning/60'}`}
+                                >{cgAllChecked ? '取消' : cgNoneChecked ? '全选' : `${cgChecked}/${cgCards.length}`}</button>
+                                {/* 删除分组 */}
+                                <button onClick={() => handleDeleteGroup(cg.id)}
+                                  className="text-pdd-text-secondary/20 hover:text-pdd-danger transition-colors p-0.5 opacity-0 group-hover/cg:opacity-100"
+                                  title="删除分组"
+                                ><Trash2 size={10} /></button>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2">
+                              {cgCards.map(k => (
+                                <div key={k.label} className="border border-dashed border-pdd-border/25 -mr-px -mb-px relative group">
+                                  <button onClick={() => toggleKpi(k.label)}
+                                    className={`w-full inline-flex items-center gap-1 px-1.5 py-1 text-[11px] leading-tight transition-all ${visibleKpis.has(k.label) ? 'bg-pdd-primary/10 text-pdd-primary' : 'text-pdd-text-secondary/70 hover:bg-pdd-gray-100/50'}`}
+                                  >
+                                    {visibleKpis.has(k.label) && <span className="w-1.5 h-1.5 rounded-full bg-pdd-primary shrink-0" />}
+                                    <span className="truncate">{k.label}</span>
+                                    {(() => {
+                                      const vm = kpiValueMap.get(k.label);
+                                      if (!vm) return null;
+                                      return <span className="ml-auto text-[10px] tabular-nums text-pdd-text-secondary/50 font-medium">{vm.fmt(vm.value)}</span>;
+                                    })()}
+                                    <span
+                                      onClick={(e) => { e.stopPropagation(); handleRemoveKpiFromGroup(cg.id, k.label); }}
+                                      className="opacity-0 group-hover:opacity-100 text-pdd-text-secondary/20 hover:text-pdd-danger transition-all ml-0.5"
+                                      title="移出分组"
+                                    ><X size={8} /></span>
+                                  </button>
+                                </div>
+                              ))}
+                              {cgCards.length === 0 && (
+                                <div className="col-span-2 text-[9px] text-pdd-text-secondary/30 text-center py-2">点击 + 添加指标</div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {/* 新建分组按钮 */}
+                <div className="mt-2 flex items-center justify-center">
+                  {creatingGroup ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        ref={newGroupInputRef}
+                        className="w-28 text-[11px] bg-pdd-gray-100/50 border border-pdd-border/50 rounded px-1.5 py-0.5 outline-none text-pdd-text"
+                        placeholder="分组名称…"
+                        value={newGroupName}
+                        onChange={e => setNewGroupName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleCreateGroup(); if (e.key === 'Escape') setCreatingGroup(false); }}
+                        onBlur={() => { if (newGroupName.trim()) handleCreateGroup(); else setCreatingGroup(false); }}
+                      />
+                    </div>
+                  ) : (
+                    <button onClick={() => setCreatingGroup(true)}
+                      className="flex items-center gap-1 text-[10px] text-pdd-text-secondary/40 hover:text-pdd-primary transition-colors px-2 py-0.5 rounded border border-dashed border-pdd-border/30 hover:border-pdd-primary/30"
+                    ><Plus size={11} />新建分组</button>
+                  )}
+                </div>
+              </>)}
             </div>
           </div>
         )}
