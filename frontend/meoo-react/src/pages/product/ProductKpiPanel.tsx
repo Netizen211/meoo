@@ -8,7 +8,7 @@
  * - 纯灰卡片，无任何装饰条
  */
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ArrowUp, ArrowDown, TrendingUp, X, Search, Package, DollarSign, ShoppingCart, Percent, AlertTriangle, Zap, Clock, Activity, Target, BarChart3, RotateCcw, Eye } from 'lucide-react';
+import { ArrowUp, ArrowDown, TrendingUp, X, Search, Package, DollarSign, ShoppingCart, Percent, AlertTriangle, Zap, Clock, Activity, Target, BarChart3, RotateCcw, Eye, Shield, Tag, Layers } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, rectSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -114,13 +114,104 @@ export const ALL_PRODUCT_KPIS: ProductKpiItem[] = [
   { label: '时均推广订单', key: 'hourlyPromotedOrders', group: '推广', icon: Clock, fmt: (v) => (v || 0).toFixed(1) },
 ];
 
-export const KPI_GROUPS = [
-  { name: '商品概况', labels: ['商品数', '动销率', '零销品', '低库存品', '平均周转', '动销商品', '新品数', '平均活跃天数', '平均售价', '日均销量', '商品生命周期', '库存预估', '库存深度(天)'] },
-  { name: '收入', labels: ['总GMV', '总实收', '总销量', '客单价', '总订单量', '单均GMV', '单均实收', '单均订单量', '平均折扣率', '退款金额', '净收入', '折扣总额', '退款损失率', '折扣率'] },
-  { name: '利润', labels: ['利润总额', '利润率', '单商品利润', '单均利润', '毛利率', '毛利润', '税前利润', '税后净利润', '毛利润率', '净利率'] },
-  { name: '成本', labels: ['总成本', '单品成本', '单品利润', '成本率', '物流成本', '平台佣金', '包装费', '运费', '产品进价', '折扣/折让', '税金', '自定义扣除'] },
-  { name: '退款/售后', labels: ['退款率', '售后率', '高退款品', '退款订单数', '售后订单数', '高售后品', '单品退款', '售后金额', '品质退款率'] },
-  { name: '推广', labels: ['推广花费', '推广ROI', '高推广品', '推广费比', '推广成交', '推广点击', '单品推广费', '推广成交率', '最高ROI', '最低ROI', '推广订单数', '推广展示量', 'CPC', '推广订单占比', 'CTR', 'CVR', '单品推广成交', '单品推广点击', 'CPM', '时均推广订单'] },
+/**
+ * ── 10大场景分组（同一KPI可归属多个分组） ──
+ *
+ * 按商家实际使用场景交叉分类，方便快速定位所需指标：
+ *
+ *  ① 快速看板  → 一眼看清整体生意（核心指标集合）
+ *  ② 营收分析  → 销售额/收入/订单
+ *  ③ 利润分析  → 各维度利润/利润率
+ *  ④ 成本拆解  → 成本构成细项
+ *  ⑤ 推广效果  → 广告投放全链路
+ *  ⑥ 商品结构  → 商品组合/生命周期
+ *  ⑦ 库存周转  → 库存效率/风险
+ *  ⑧ 售后服务  → 退款/售后质量
+ *  ⑨ 定价折扣  → 定价策略/折扣
+ *  ⑩ 风控预警  → 问题指标监控
+ */
+export const KPI_GROUPS: { name: string; labels: string[] }[] = [
+  {
+    name: '① 快速看板',
+    labels: [
+      '商品数', '总GMV', '总实收', '利润总额', '总订单量', '总销量',
+      '动销率', '退款率', '推广ROI', '总成本', '净收入', '毛利率',
+      '推广费比', '客单价', '净利率',
+    ],
+  },
+  {
+    name: '② 营收分析',
+    labels: [
+      '总GMV', '总实收', '总销量', '总订单量', '客单价', '净收入',
+      '单均GMV', '单均实收', '单均订单量', '退款金额', '折扣总额',
+      '退款损失率', '折扣率', '推广成交', '推广订单数', '推广订单占比',
+    ],
+  },
+  {
+    name: '③ 利润分析',
+    labels: [
+      '利润总额', '利润率', '毛利率', '净利率', '毛利润', '税前利润',
+      '税后净利润', '毛利润率', '单商品利润', '单均利润', '单品利润',
+      '净收入', '总实收', '成本率', '单品成本',
+    ],
+  },
+  {
+    name: '④ 成本拆解',
+    labels: [
+      '总成本', '成本率', '单品成本', '物流成本', '平台佣金', '包装费',
+      '运费', '产品进价', '折扣/折让', '税金', '自定义扣除',
+      '推广花费', '单品推广费', '单品利润',
+    ],
+  },
+  {
+    name: '⑤ 推广效果',
+    labels: [
+      '推广花费', '推广ROI', '推广费比', '推广成交', '推广点击',
+      '推广成交率', '推广订单数', '推广展示量', 'CPC', '推广订单占比',
+      'CTR', 'CVR', 'CPM', '最高ROI', '最低ROI', '单品推广费',
+      '单品推广成交', '单品推广点击', '时均推广订单', '高推广品',
+    ],
+  },
+  {
+    name: '⑥ 商品结构',
+    labels: [
+      '商品数', '动销商品', '零销品', '动销率', '新品数',
+      '商品生命周期', '平均活跃天数', '平均售价', '日均销量',
+      '单均订单量', '库存预估', '库存深度(天)', '平均周转',
+      '低库存品',
+    ],
+  },
+  {
+    name: '⑦ 库存周转',
+    labels: [
+      '平均周转', '库存预估', '库存深度(天)', '低库存品', '日均销量',
+      '商品生命周期', '平均活跃天数', '零销品', '库存预估',
+    ],
+  },
+  {
+    name: '⑧ 售后服务',
+    labels: [
+      '退款率', '售后率', '退款金额', '退款订单数', '售后订单数',
+      '高退款品', '高售后品', '单品退款', '售后金额', '品质退款率',
+      '退款损失率',
+    ],
+  },
+  {
+    name: '⑨ 定价折扣',
+    labels: [
+      '平均售价', '客单价', '平均折扣率', '折扣率', '折扣总额',
+      '单品成本', '单品利润', '毛利率', '成本率', '单均GMV',
+      '单均实收', '毛利润率',
+    ],
+  },
+  {
+    name: '⑩ 风控预警',
+    labels: [
+      '零销品', '低库存品', '高退款品', '高售后品', '高推广品',
+      '退款率', '售后率', '品质退款率', '退款损失率', '成本率',
+      '最低ROI', '推广费比', '利润总额', '净收入',
+    ],
+  },
 ];
 
 export const KPI_DATAKEY_MAP = {
