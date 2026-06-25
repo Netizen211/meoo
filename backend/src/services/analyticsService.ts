@@ -46,12 +46,17 @@ function getAfterSaleStatus(record: any): string {
 }
 
 // ★ 有效订单过滤：排除已取消/待付款/代付款等非真实订单
+// ★ 同时排除测试/异常订单：商家实收金额 ≤ 0 或 用户实付金额 ≤ 0
 function filterValidOrders(orders: any[]): any[] {
   return orders.filter(o => {
     const st = String(o['订单状态'] || '').trim();
     if (['已取消', '待付款', '代付款', '未付款', '已关闭'].includes(st)) return false;
     const pt = o['支付时间'] || o['下单时间'];
-    return pt != null && String(pt).trim() !== '';
+    if (pt == null || String(pt).trim() === '') return false;
+    // ★ 过滤测试数据：商家实收金额必须 > 0，防止测试订单（金额≈0.01）污染指标
+    const mr = safeNum(o['商家实收金额(元)'] || o['商家实收金额'] || o['实收金额'] || '');
+    if (mr <= 0) return false;
+    return true;
   });
 }
 
@@ -140,7 +145,14 @@ export function computeAllProductStats(
   const orderDetails: Record<string, any> = {};
   const dailySalesMap: Record<string, Record<string, any>> = {};
   const skuSalesMap: Record<string, Record<string, number>> = {};
-  const orderRefundMap = new Map<string, number>();
+  // ★ 退款金额 Map — 使用售后表的实际退款金额（而非订单的商家实收金额）
+  const refundAmountMap = new Map<string, number>();
+  afterSaleRecords.forEach((r: any) => {
+    if (getAfterSaleStatus(r) !== '退款成功') return;
+    const on = getOrderNo(r);
+    if (!on) return;
+    refundAmountMap.set(on, (refundAmountMap.get(on) || 0) + safeNum(r['退款金额(元)'] || r['买家退款金额'] || r['退款金额']));
+  });
   // ★ 单次遍历同时构建 date-GMV 映射（原为独立遍历）
   const dgm: Record<string, { pid: string; gmv: number }[]> = {};
   // ★ 退款以售后表为准（表格口径）
@@ -188,9 +200,9 @@ export function computeAllProductStats(
     const qty = safeNum(o['商品数量(件)']);
     s.gmv += gmv; s.sales += qty;
     s.revenue += revenue; s.discount += disc;
-    // ★ 退款检测：优先退款金额字段，兜底售后状态
+    // ★ 退款检测：使用售后表实际退款金额（修复BUG：之前误用订单商家实收金额）
     const on = safeStr(o['订单号']);
-    if (refundOrderSet.has(on)) { s.refundCount += 1; s.refund += safeNum(o['商家实收金额(元)']); }
+    if (refundOrderSet.has(on)) { s.refundCount += 1; s.refund += (refundAmountMap.get(on) || 0); }
     const dk = (o['支付时间'] || '').split(' ')[0];
     if (dk && /^\d{4}-\d{2}-\d{2}$/.test(dk)) {
       if (!dailySalesMap[pid]) dailySalesMap[pid] = {};
@@ -220,15 +232,22 @@ export function computeAllProductStats(
     stats[pid].hourlyConfirmed = (hourlyPromotedOrders[pid] || 0) > 0;
   });
 
-  // Pass 2: 售后数据
+  // Pass 2: 售后数据（按订单号排重 + 仅计数有效售后状态）
+  const processedAS = new Set<string>(); // dedup key: pid::orderNo
   afterSaleRecords.forEach((r: any) => {
     const pid = safeStr(r['商品ID'] || r['商品id'] || '');
     if (!pid) return;
+    const on = getOrderNo(r);
+    const dedupKey = pid + '::' + on;
+    if (processedAS.has(dedupKey)) return;
+    processedAS.add(dedupKey);
     if (!stats[pid]) stats[pid] = emptyStat(pid, String(r['sku信息'] || '').split(',')[0] || pid, '');
     const s = stats[pid];
-    // ★ 仅计数售后记录，退款金额已在 Pass 1 中按售后状态统一计算
-    s.afterSaleCount += 1;
-    const st = safeStr(r['售后状态'] || '未知');
+    // ★ 仅计数有效售后状态（与 Dashboard 口径一致：退款成功/售后处理中/处理中）
+    const st = getAfterSaleStatus(r);
+    if (st === '退款成功' || st === '售后处理中' || st === '处理中') {
+      s.afterSaleCount += 1;
+    }
     s.afterSaleBreakdown[st] = (s.afterSaleBreakdown[st] || 0) + 1;
   });
 
@@ -297,6 +316,19 @@ export function computeAllProductStats(
   const ifo = safeNum(costConfigs['dianfx_insurance_fee'] || 2);
   const dcr = safeNum(costConfigs['dianfx_default_cost_ratio'] || 30);
 
+  // ★ 平台技术服务费：按订单级字段分摊到各商品
+  const totalPlatformFeeFromOrders = orders.reduce((s, o) => {
+    return s + (safeNum(o['平台技术服务费(元)']) || safeNum(o['平台服务费(元)']) || safeNum(o['技术服务费(元)']) || 0);
+  }, 0);
+  // 按商品收入占比分摊平台费
+  const totalRevenueAll = Object.values(stats).reduce((s: number, st: any) => s + st.revenue, 0);
+  const platformFeeAlloc: Record<string, number> = {};
+  if (totalPlatformFeeFromOrders > 0 && totalRevenueAll > 0) {
+    Object.keys(stats).forEach(pid => {
+      platformFeeAlloc[pid] = totalPlatformFeeFromOrders * (stats[pid].revenue / totalRevenueAll);
+    });
+  }
+
   // Pass 4: 最终计算
   Object.keys(stats).forEach(pid => {
     const s = stats[pid];
@@ -313,7 +345,9 @@ export function computeAllProductStats(
     // ★ 包装/运费/险按件数乘（非订单数）
     const pf = pfo * s.sales, sf = sfo * s.sales, insf = ifo * s.sales;
     const gp = s.revenue - s.promoCost - pf - sf - insf;
-    const ptp = s.revenue - pc - s.promoCost - pf - sf - insf;
+    // ★ 修复：利润 = 收入 - 退款金额 - 产品成本 - 推广费 - 包装 - 快递 - 运费险 - 平台费
+    const platAlloc = platformFeeAlloc[pid] || 0;
+    const ptp = s.revenue - s.refund - pc - s.promoCost - pf - sf - insf - platAlloc;
     s.roi = s.promoCost > 0 ? s.promoTransaction / s.promoCost : 0;
     s.refundRate = s.orders > 0 ? (s.refundCount / s.orders) * 100 : 0;
     s.avgOrderValue = s.orders > 0 ? s.gmv / s.orders : 0;
@@ -322,10 +356,11 @@ export function computeAllProductStats(
     s.cvr = s.promoClicks > 0 ? (s.promoOrders / s.promoClicks) * 100 : 0;
     s.discountRatio = s.gmv > 0 ? (s.discount / s.gmv) * 100 : 0;
     s.promoCostRatio = s.gmv > 0 ? (s.promoCost / s.gmv) * 100 : 0;
-    s.profitRate = s.revenue > 0 ? (s.netProfit / s.revenue) * 100 : 0;
-    s.totalCost = pc + pf + sf + insf + s.promoCost;
     s.netProfit = ptp; s.grossProfit = gp; s.preTaxProfit = ptp; s.netProfitAfterTax = ptp;
-    s.costBreakdown = { productCost: pc, packagingFee: pf, shippingFee: sf, promoCost: s.promoCost, discount: s.discount, platformFee: 0, insuranceFee: insf, penaltyFee: 0, marketingFee: 0, taxes: 0, customDeductions: 0 };
+    s.totalCost = pc + pf + sf + insf + s.promoCost + platAlloc;
+    // ★ 修复：profitRate 必须在 netProfit 赋值之后计算（之前顺序错误导致永远为 0）
+    s.profitRate = s.revenue > 0 ? (s.netProfit / s.revenue) * 100 : 0;
+    s.costBreakdown = { productCost: pc, packagingFee: pf, shippingFee: sf, promoCost: s.promoCost, discount: s.discount, platformFee: platAlloc, insuranceFee: insf, penaltyFee: 0, marketingFee: 0, taxes: 0, customDeductions: 0 };
     s.costSource = { productCost: cst, taxes: 'default', customDeductions: 'none' };
     s.profitConfidence = cst === 'real' ? (s.hasPromoData ? 'high' : 'medium') : 'low';
     const dm = dailySalesMap[pid];
@@ -337,7 +372,8 @@ export function computeAllProductStats(
       const first = new Date(s.firstOrderDate), last = new Date(s.lastOrderDate);
       s.activeDays = Math.max(1, Math.ceil((last.getTime() - first.getTime()) / 86400000) + 1);
       s.avgDailySales = s.activeDays > 0 ? s.sales / s.activeDays : 0;
-      s.turnoverDays = s.avgDailySales > 0 ? s.sales / s.avgDailySales : 0;
+      // ★ 修复：周转天数 = 30 / 日均销量（之前公式 sales/avgDailySales=activeDays, 恒等于活跃天数）
+      s.turnoverDays = s.avgDailySales > 0 ? Math.round(30 / s.avgDailySales) : 999;
       s.sellThroughRate = s.activeDays > 0 ? (s.sales / s.activeDays) * 100 : 0;
     }
     if (det && det.prices.length > 0) s.priceDistribution = buildBuckets(det.prices);
@@ -346,7 +382,7 @@ export function computeAllProductStats(
 }
 
 
-export function computeDashboardKPI(data: Record<string, any[]>): any {
+export function computeDashboardKPI(data: Record<string, any[]>, configs?: Record<string, any>): any {
   const rawOrders: any[] = data.orders || [];
   // ★ 有效订单口径：排除已取消/待付款/代付款等非真实订单
   const orders = filterValidOrders(rawOrders);
@@ -356,6 +392,14 @@ export function computeDashboardKPI(data: Record<string, any[]>): any {
   const afterSale: any[] = data.afterSaleRecords || [];
   const insurance: any[] = data.shippingInsurance || [];
   const financial: any[] = data.financialRecords || [];
+  const safeCF = (cfg: any, key: string, defaultVal: number): number => {
+    if (!cfg) return defaultVal;
+    const v = cfg[key];
+    if (v === undefined || v === null || v === '') return defaultVal;
+    const n = parseFloat(String(v));
+    return isNaN(n) ? defaultVal : n;
+  };
+  const insFeePerOrder = safeCF(configs, 'dianfx_insurance_fee', 0);
   const sum = (arr: any[], key: string) => arr.reduce((s, x) => s + safeNum(x[key]), 0);
   const sm = (arr: any[], keys: string[]) => arr.reduce((s, x) => { for (const k of keys) { const v = safeNum(x[k]); if (v !== 0 || x[k] !== undefined) return s + v; } return s; }, 0);
   const totalGmv = sum(orders, '商品总价(元)');
@@ -376,7 +420,14 @@ export function computeDashboardKPI(data: Record<string, any[]>): any {
     return st === '退款成功' || st === '售后处理中' || st === '处理中';
   }).map(r => getOrderNo(r)).filter(Boolean));
   const refundOrders = orders.filter(o => refundedOrderNos.has(String(o['订单号'] || '').trim()));
-  const totalRefundAmount = refundOrders.reduce((s, o) => s + safeNum(o['商家实收金额(元)']), 0);
+  // ★ 修复BUG：退款金额使用售后表实际金额，而非订单商家实收金额
+  const refundAmountMapLocal = new Map<string, number>();
+  afterSale.filter(r => getAfterSaleStatus(r) === '退款成功').forEach((r: any) => {
+    const on = getOrderNo(r);
+    if (!on) return;
+    refundAmountMapLocal.set(on, (refundAmountMapLocal.get(on) || 0) + safeNum(r['退款金额(元)'] || r['买家退款金额'] || r['退款金额']));
+  });
+  const totalRefundAmount = refundOrders.reduce((s, o) => s + (refundAmountMapLocal.get(String(o['订单号'] || '').trim()) || 0), 0);
   const totalDiscount = sum(orders, '店铺优惠折扣(元)') + sum(orders, '平台优惠折扣(元)') + sum(orders, '多多支付立减金额(元)') + sum(orders, '拼多多优惠券(元)');
   const platformFee = sum(orders, '平台技术服务费(元)') || sum(orders, '平台服务费(元)') || sum(orders, '技术服务费(元)');
   const promoCost = sm(promo, ['成交花费(元)', '总花费(元)', '花费(元)']);
@@ -394,7 +445,19 @@ export function computeDashboardKPI(data: Record<string, any[]>): any {
   const totalPromoOrders = promoOrders + starOrders + liveOrders;
   // ★ 退款金额 = 退款成功订单的商家实收合计（表格口径）
   const asRefund = totalRefundAmount;
-  const insFee = sm(insurance, ['服务费用（元）', '服务费用(元)', '保费（元）', '保费(元)']);
+  const insFee = insFeePerOrder > 0
+    ? orderCount * insFeePerOrder
+    : (() => {
+        const seen = new Set<string>();
+        let total = 0;
+        insurance.forEach(r => {
+          const rNo = String(r['订单编号'] || r['订单号'] || '').trim();
+          if (!rNo || seen.has(rNo)) return;
+          seen.add(rNo);
+          total += safeNum(r['服务费用（元）'] || r['服务费用(元)'] || r['保费（元）'] || r['保费(元)'] || 0);
+        });
+        return total;
+      })();
   const finExpense = (f: any) => safeNum(f['支出金额（-元）'] || f['支出金额(-元)'] || f['支出金额(元)'] || '0');
   const penalties = financial.filter(f => String(f['业务描述'] || '').startsWith('004')).reduce((s, f) => s + Math.abs(finExpense(f)), 0);
   // ★ 百亿补贴费用：货款明细中 0030003 或包含"百亿补贴"的服务费
@@ -815,6 +878,14 @@ export function computeDailyTrends(rawOrders: any[], afterSaleRecords: any[]): a
   const dailyMap: Record<string, { gmv: number; orders: number; revenue: number; refund: number; refundCount: number; uniqueOrders: Set<string> }> = {};
   // ★ 退款以售后表为准（表格口径）
   const refundOrderSet = new Set((afterSaleRecords || []).filter(r => getAfterSaleStatus(r) === '退款成功').map(r => getOrderNo(r)).filter(Boolean));
+  // ★ 退款金额 Map — 使用售后表的实际退款金额，而非订单的商家实收金额
+  const refundAmountMap = new Map<string, number>();
+  (afterSaleRecords || []).forEach((r: any) => {
+    if (getAfterSaleStatus(r) !== '退款成功') return;
+    const on = getOrderNo(r);
+    if (!on) return;
+    refundAmountMap.set(on, (refundAmountMap.get(on) || 0) + safeNum(r['退款金额(元)'] || r['买家退款金额'] || r['退款金额']));
+  });
   orders.forEach((o: any) => {
     const d = (o['支付时间'] || '').split(' ')[0];
     if (!d || !/^\d{4}-\d{2}-\d{2}$/.test(d)) return;
@@ -823,9 +894,10 @@ export function computeDailyTrends(rawOrders: any[], afterSaleRecords: any[]): a
     dailyMap[d].revenue += safeNum(o['商家实收金额(元)']);
     dailyMap[d].orders += 1;
     dailyMap[d].uniqueOrders.add(safeStr(o['订单号']));
-    if (refundOrderSet.has(String(o['订单号'] || '').trim())) {
+    const on = String(o['订单号'] || '').trim();
+    if (refundOrderSet.has(on)) {
       dailyMap[d].refundCount += 1;
-      dailyMap[d].refund += safeNum(o['商家实收金额(元)']);
+      dailyMap[d].refund += (refundAmountMap.get(on) || 0);
     }
   });
   return Object.entries(dailyMap).map(([date, v]) => ({ date, ...v, orders: v.uniqueOrders.size })).sort((a: any, b: any) => a.date.localeCompare(b.date));

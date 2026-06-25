@@ -68,12 +68,15 @@ export default function DashboardPage() {
       const saved = localStorage.getItem('dianfx_visible_kpis');
       if (saved) { const arr = JSON.parse(saved); if (Array.isArray(arr) && arr.length > 0) return new Set(arr); }
     } catch {}
-    // 默认 12 个核心指标，其他在"指标"面板里选
+    // 默认 28 个核心指标，其他在"指标"面板里选
     return new Set([
       '商家实收', '客单价', '有效订单量', '退款金额',
       '退款单数', '转化率', '推广花费', 'GMV（商品总价）',
-      '推广ROI', '推广订单量', '平均获客成本', '利润金额',
-      'SKU数量', '退款金额(按同意退款时间)', '退款单数(按同意退款时间)', '退款成功快递发货成本', '退货退回成本'
+      '推广ROI', '推广订单量', '平均订单花费', '利润金额',
+      'SKU数量', '退款金额(按同意退款时间)', '退款单数(按同意退款时间)', '退款成功快递发货成本', '退货退回成本',
+      '净GMV(GMV-退款)', '单均GMV', '单均实收', '净利润率', '毛利率',
+      '推广费用率', '推广订单占比', '退款侵蚀率', '毛利润', '总运营成本',
+      '点击转化率', '千次曝光成本', '人均订单数', '每单件数'
     ]);
   });
   const [kpiCardOrder, setKpiCardOrder] = useState<string[]>(() => {
@@ -84,9 +87,17 @@ export default function DashboardPage() {
     // 首次访问：与默认 visibleKpis 顺序一致
     return ['商家实收', '客单价', '有效订单量', '退款金额',
       '退款单数', '转化率', '推广花费', 'GMV（商品总价）',
-      '推广ROI', '推广订单量', '平均获客成本', '利润金额'];
+      '推广ROI', '推广订单量', '平均订单花费', '利润金额',
+      '净GMV(GMV-退款)', '单均GMV', '单均实收', '净利润率', '毛利率',
+      '推广费用率', '推广订单占比', '退款侵蚀率', '毛利润', '总运营成本',
+      '点击转化率', '千次曝光成本', '人均订单数', '每单件数'];
   });
   const [showKpiSelector, setShowKpiSelector] = useState(false);
+  // KPI 卡片格式化函数（不四舍五入，有小数点保留2位）
+  const _money = (v: number) => `¥${v.toFixed(2)}`;
+  const _pct = (v: number) => `${v.toFixed(2)}%`;
+  const _int = (v: number) => `${Math.trunc(v)}`;
+  const _ratio = (v: number) => v.toFixed(2);
 
   // 保存 KPI 卡片顺序到 localStorage
   useEffect(() => {
@@ -381,10 +392,12 @@ export default function DashboardPage() {
     const starRecords = filteredStarSummary || [];
     const liveRecords = filteredLiveSummary || [];
 
-    return computeAllKpis({
+    console.error('[KPI] filteredPromoProducts count:', filteredPromoProducts.length, 'first row keys:', filteredPromoProducts.length > 0 ? Object.keys(filteredPromoProducts[0]).slice(0, 10) : 'none');
+    const result = computeAllKpis({
       orders: filteredOrders,
       afterSales,
       promoRecords,
+      promoDetailRecords: filteredPromoProducts.length > 0 ? filteredPromoProducts : undefined,
       starRecords,
       liveRecords,
       financialRecords,
@@ -392,13 +405,17 @@ export default function DashboardPage() {
       config: {
         shippingFeePerOrder: shippingFeePerOrder || 4,
         returnShippingFeePerOrder: 10,
+        insuranceFeePerOrder: insuranceFeePerOrder || undefined,
       },
       approvalDateStart: asStart || undefined,
       approvalDateEnd: asEnd || undefined,
+      allAfterSaleRecords: currentDisplayData?.afterSaleRecords || undefined,
     });
+    console.error('[KPI] result inquiryCost:', result.inquiryCost, 'favoriteCost:', result.favoriteCost, 'followCost:', result.followCost);
+    return result;
   }, [filteredOrders, currentDisplayData,
       filteredPromoSummary, filteredPromoProducts, filteredStarSummary, filteredLiveSummary,
-      kpiDateRange, shippingFeePerOrder]);
+      kpiDateRange, shippingFeePerOrder, insuranceFeePerOrder]);
 
   const promoTrendData = useMemo(() => {
     const promoSummaryFallback = filteredPromoSummary.length > 0 ? filteredPromoSummary : filteredPromoProducts;
@@ -450,12 +467,15 @@ export default function DashboardPage() {
     currentDisplayData?.afterSaleRecords,
     shippingFeePerOrder || 4,
     10,
-  ), [filteredOrders, filteredPromoSummary, filteredPromoProducts, filteredStarSummary, filteredLiveSummary, granularity, currentDisplayData?.afterSaleRecords, shippingFeePerOrder]);
+    insuranceFeePerOrder || undefined,
+    currentDisplayData?.financialRecords,
+    filteredPromoProducts.length > 0 ? filteredPromoProducts : undefined,
+  ), [filteredOrders, filteredPromoSummary, filteredPromoProducts, filteredStarSummary, filteredLiveSummary, granularity, currentDisplayData?.afterSaleRecords, currentDisplayData?.financialRecords, shippingFeePerOrder, insuranceFeePerOrder]);
 
   const compareDailyKpiData = useMemo(() => {
     if (!compareEnabled || !compareOrders.length) return [];
-    return buildCompareTrendData(compareOrders, granularity);
-  }, [compareOrders, compareEnabled, granularity]);
+    return buildCompareTrendData(compareOrders, granularity, currentDisplayData?.afterSaleRecords);
+  }, [compareOrders, compareEnabled, granularity, currentDisplayData?.afterSaleRecords]);
 
   const topPromoProducts = useMemo(() => {
     if (!filteredPromoProducts.length) return [];
@@ -474,52 +494,107 @@ export default function DashboardPage() {
   }, [filteredPromoProducts]);
 
   // ── 所有 KPI 统一从 kpiValues 读取 ──────────────────
-  const allKpiCards = [
-    { label: 'GMV（商品总价）', value: kpiValues?.gmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: compareEnabled ? changePct(kpiValues?.gmv || 0, compareKpi?.gmv || 0) : null, source: '订单·商品总价(元) SUM' },
+      const allKpiCards = [
+{ label: '平均退款额', value: kpiValues && kpiValues.rfCnt > 0 && kpiValues.rfAmount != null ? kpiValues.rfAmount / kpiValues.rfCnt : undefined, fmt: _money, icon: RotateCcw, change: null, source: '退款金额/退款单数' },
+    { label: '总询单成本', value: kpiValues?.inquiryCost ?? 0, fmt: _money, icon: MessageCircle, change: null, source: '推广明细-询单花费 SUM' },
+    { label: '总收藏成本', value: kpiValues?.favoriteCost ?? 0, fmt: _money, icon: Heart, change: null, source: '推广明细-收藏花费 SUM' },
+    { label: '总关注成本', value: kpiValues?.followCost ?? 0, fmt: _money, icon: UserPlus, change: null, source: '推广明细-关注花费 SUM' },
+    { label: '毛利率', value: kpiValues && kpiValues.merchantReceived > 0 && kpiValues.platformFee != null && kpiValues.postage != null && kpiValues.insuranceFee != null ? (kpiValues.merchantReceived - kpiValues.platformFee - kpiValues.postage - kpiValues.insuranceFee) / kpiValues.merchantReceived * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '(商家实收-平台费-快递-运费险)/商家实收' },
+    { label: '净利润率', value: kpiValues && kpiValues.merchantReceived > 0 && kpiValues.profit != null ? kpiValues.profit / kpiValues.merchantReceived * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '利润金额/商家实收' },
+    { label: '单均利润', value: kpiValues && kpiValues.cnt > 0 && kpiValues.profit != null ? kpiValues.profit / kpiValues.cnt : undefined, fmt: _money, icon: TrendingUp, change: null, source: '利润金额/有效订单量' },
+    { label: '推广费用率', value: kpiValues && kpiValues.gmv > 0 && kpiValues.promoCost != null ? kpiValues.promoCost / kpiValues.gmv * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '推广花费/GMV' },
+    { label: 'GMV（商品总价）', value: kpiValues?.gmv, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, change: compareEnabled ? changePct(kpiValues?.gmv || 0, compareKpi?.gmv || 0) : null, source: '订单·商品总价(元) SUM' },
     { label: '有效订单量', value: kpiValues?.cnt, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, change: compareEnabled ? changePct(kpiValues?.cnt || 0, compareKpi?.cnt || 0) : null, source: '订单·COUNT 排除已取消' },
-    { label: '商家实收', value: kpiValues?.merchantReceived, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: null, source: '订单·商家实收金额(元) SUM' },
-    { label: '用户实付', value: kpiValues?.paid, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: null, source: '订单·用户实付金额(元) SUM' },
+    { label: '商家实收', value: kpiValues?.merchantReceived, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, change: null, source: '订单·商家实收金额(元) SUM' },
+    { label: '用户实付', value: kpiValues?.paid, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, change: null, source: '订单·用户实付金额(元) SUM' },
     { label: '客单价', value: kpiValues?.avg, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: TrendingUp, change: compareEnabled ? changePct(kpiValues?.avg || 0, compareKpi?.avg || 0) : null, source: '用户实付 ÷ 订单数' },
-    { label: '利润金额', value: kpiValues?.profit, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, change: null, source: '实收−退款−推广−运费险−罚款' },
-    { label: '退款金额(按同意退款时间)', value: kpiValues?.refundApprovalAmount ?? 0, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: RotateCcw, change: null, source: '售后记录·同意退款时间金额 SUM' },
-    { label: '退款金额', value: kpiValues?.rfAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: RotateCcw, change: null, source: '订单·退款金额(元) SUM' },
+    { label: '利润金额', value: kpiValues?.profit, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, change: null, source: '实收−退款−推广−运费险−罚款' },
+    { label: '退款金额(按同意退款时间)', value: kpiValues?.refundApprovalAmount ?? 0, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: RotateCcw, change: null, source: '售后记录·同意退款时间金额 SUM' },
+    { label: '退款金额', value: kpiValues?.rfAmount, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: RotateCcw, change: null, source: '订单·退款金额(元) SUM' },
     { label: '退款单数', value: kpiValues?.rfCnt, fmt: (v: number) => v.toFixed(0), icon: RotateCcw, change: null, source: '订单·售后状态含退款 COUNT' },
 
     { label: '退款单数(按同意退款时间)', value: kpiValues?.refundApprovalOrders ?? 0, fmt: (v: number) => v.toFixed(0), icon: RotateCcw, change: null, source: '售后记录·同意退款时间 COUNT' },
-    { label: '退款成功快递发货成本', value: kpiValues?.refundedShippingCost ?? 0, fmt: (v: number) => '¥' + v.toFixed(0), icon: Truck, change: null, source: '退款成功订单数 × 每单快递费' },
-    { label: '退货退回成本', value: kpiValues?.returnShippingCost ?? 0, fmt: (v: number) => '¥' + v.toFixed(0), icon: RotateCcw, change: null, source: '退货退款单数 × 每单退货费(¥10)' },
-    { label: '退款率', value: kpiValues?.rfRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: RotateCcw, change: null, source: '订单·售后状态含退款 / 订单数' },
-    { label: '售后率', value: kpiValues?.asRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: AlertTriangle, change: null, source: '售后记录 ÷ 订单数' },
+    { label: '退款成功快递发货成本', value: kpiValues?.refundedShippingCost ?? 0, fmt: (v: number) => '¥' + v.toFixed(2), icon: Truck, change: null, source: '退款成功订单数 × 每单快递费' },
+    { label: '退货退回成本', value: kpiValues?.returnShippingCost ?? 0, fmt: (v: number) => '¥' + v.toFixed(2), icon: RotateCcw, change: null, source: '退货退款单数 × 每单退货费(¥10)' },
+    { label: '退款率', value: kpiValues?.rfRate, fmt: (v: number) => `${v.toFixed(2)}%`, icon: RotateCcw, change: null, source: '订单·售后状态含退款 / 订单数' },
+    { label: '售后率', value: kpiValues?.asRate, fmt: (v: number) => `${v.toFixed(2)}%`, icon: AlertTriangle, change: null, source: '售后记录 ÷ 订单数' },
     { label: '自然单', value: kpiValues?.organicOrders, fmt: (v: number) => v.toFixed(0), icon: TrendingUp, change: null, source: '总订单 − 推广订单' },
-    { label: '自然销售额', value: kpiValues?.organicGmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, change: null, source: '总GMV − 推广GMV' },
+    { label: '自然销售额', value: kpiValues?.organicGmv, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: TrendingUp, change: null, source: '总GMV − 推广GMV' },
     { label: '买家数', value: kpiValues?.buyers ?? 0, fmt: (v: number) => v.toFixed(0), icon: Users, change: null, source: '订单·订单号 DISTINCT COUNT' },
     { label: '商品数', value: kpiValues?.productCount ?? 0, fmt: (v: number) => v.toFixed(0), icon: Package, change: null, source: '订单·商品ID DISTINCT COUNT' },
     { label: 'SKU数量', value: kpiValues?.skuQty ?? 0, fmt: (v: number) => v.toFixed(0), icon: Package, change: null, source: '订单·商品数量(件) SUM' },
-    { label: '罚款金额', value: kpiValues?.penalties ?? 0, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: AlertTriangle, change: null, source: '货款明细·004开头账务 SUM' },
+    { label: '罚款金额', value: kpiValues?.penalties ?? 0, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: AlertTriangle, change: null, source: '货款明细·004开头账务 SUM' },
     { label: '罚款次数', value: kpiValues?.penaltyCount ?? 0, fmt: (v: number) => v.toFixed(0), icon: AlertTriangle, change: null, source: '货款明细·004开头 COUNT' },
-    { label: '优惠总额', value: kpiValues?.discount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, change: null, source: '订单·店铺+平台+立减+优惠券 SUM' },
-    { label: '平均发货时长', value: kpiValues?.avgShipHours, fmt: (v: number) => `${v.toFixed(1)}h`, icon: Clock, change: null, source: '订单·发货时间−支付时间 AVG' },
-    { label: '发货率', value: kpiValues?.conversionRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Truck, change: null, source: '已发货 ÷ 总订单' },
-    { label: '平台服务费', value: kpiValues?.platformFee, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Percent, change: null, source: '订单·平台技术服务费 SUM' },
-    { label: '快递成本', value: kpiValues?.postage, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Truck, change: null, source: '订单·邮费(元) SUM' },
-    { label: '运费险', value: kpiValues?.insuranceFee, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: Shield, change: null, source: '运费险·服务费用 SUM' },
-    { label: '推广花费', value: kpiValues?.promoCost, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: BarChart3, change: null, source: '推广·成交花费(元) SUM' },
-    { label: '推广GMV', value: kpiValues?.promoGmv, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: TrendingUp, change: null, source: '推广·交易额(元) SUM' },
+    { label: '优惠总额', value: kpiValues?.discount, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Percent, change: null, source: '订单·店铺+平台+立减+优惠券 SUM' },
+    { label: '平均发货时长', value: kpiValues?.avgShipHours, fmt: (v: number) => `${v.toFixed(2)}h`, icon: Clock, change: null, source: '订单·发货时间−支付时间 AVG' },
+    { label: '发货率', value: kpiValues?.conversionRate, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Truck, change: null, source: '已发货 ÷ 总订单' },
+    { label: '平台服务费', value: kpiValues?.platformFee, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Percent, change: null, source: '订单·平台技术服务费 SUM' },
+    { label: '快递成本', value: kpiValues?.postage, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Truck, change: null, source: '订单·邮费(元) SUM' },
+    { label: '运费险', value: kpiValues?.insuranceFee, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Shield, change: null, source: '运费险·服务费用 SUM' },
+    { label: '推广花费', value: kpiValues?.promoCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: BarChart3, change: null, source: '推广·成交花费(元) SUM' },
+    { label: '推广GMV', value: kpiValues?.promoGmv, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: TrendingUp, change: null, source: '推广·交易额(元) SUM' },
     { label: '推广ROI', value: kpiValues?.promoRoi, fmt: (v: number) => v.toFixed(2), icon: Target, change: null, source: '推广GMV ÷ 推广花费' },
     { label: '推广订单量', value: kpiValues?.promoOrders, fmt: (v: number) => v.toFixed(0), icon: ShoppingCart, change: null, source: '推广·成交笔数 SUM' },
     { label: '点击率', value: kpiValues?.ctr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Target, change: null, source: '推广·点击量÷曝光量' },
     { label: '转化率', value: kpiValues?.cvr, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Percent, change: null, source: '推广·成交笔数÷点击量' },
     { label: '平均点击成本', value: kpiValues?.cpc, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, change: null, source: '推广花费 ÷ 点击量' },
-    { label: '平均获客成本', value: kpiValues?.cpa, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Users, change: null, source: '推广花费 ÷ 成交笔数' },
+    { label: '平均订单花费', value: kpiValues?.cpa, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Users, change: null, source: '推广花费 ÷ 成交笔数' },
     { label: '曝光量', value: kpiValues?.totalImpressions, fmt: (v: number) => v.toFixed(0), icon: Eye, change: null, source: '推广·曝光量 SUM' },
     { label: '点击量', value: kpiValues?.totalClicks, fmt: (v: number) => v.toFixed(0), icon: MousePointerClick, change: null, source: '推广·点击量 SUM' },
-    { label: '推广占比', value: kpiValues?.promoRatio ?? 0, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Target, change: null, source: '推广花费 ÷ 总GMV' },
+    { label: '推广占比', value: kpiValues?.promoRatio ?? 0, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Target, change: null, source: '推广花费 ÷ 总GMV' },
     { label: '全店投产', value: kpiValues?.shopRoi ?? 0, fmt: (v: number) => v.toFixed(2), icon: TrendingUp, change: null, source: '总GMV ÷ 推广花费' },
-    { label: '询单成本', value: kpiValues?.avgInquiryCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: MessageCircle, change: null, source: '推广·询单花费÷询单量' },
-    { label: '收藏成本', value: kpiValues?.avgFavoriteCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Heart, change: null, source: '推广·收藏花费÷收藏量' },
-    { label: '关注成本', value: kpiValues?.avgFollowCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: UserPlus, change: null, source: '推广·关注花费÷关注量' },
+    { label: '平均询单成本', value: kpiValues?.avgInquiryCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: MessageCircle, change: null, source: '推广·询单花费÷询单量' },
+    { label: '平均收藏成本', value: kpiValues?.avgFavoriteCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: Heart, change: null, source: '推广·收藏花费÷收藏量' },
+    { label: '平均关注成本', value: kpiValues?.avgFollowCost, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: UserPlus, change: null, source: '推广·关注花费÷关注量' },
+
+    { label: '净GMV(GMV-退款)', value: kpiValues && kpiValues.gmv != null && kpiValues.rfAmount != null ? Math.max(0, kpiValues.gmv - kpiValues.rfAmount) : undefined, fmt: _money, icon: DollarSign, change: null, source: 'GMV-退款金额(商家实收维度)' },
+    { label: '净实收(实收-退款)', value: kpiValues && kpiValues.merchantReceived != null && kpiValues.rfAmount != null ? Math.max(0, kpiValues.merchantReceived - kpiValues.rfAmount) : undefined, fmt: _money, icon: DollarSign, change: null, source: '商家实收-退款金额(商家实收维度)' },
+    { label: '单均GMV', value: kpiValues && kpiValues.cnt > 0 && kpiValues.gmv != null ? kpiValues.gmv / kpiValues.cnt : undefined, fmt: _money, icon: TrendingUp, change: null, source: 'GMV/有效订单量' },
+    { label: '单均实收', value: kpiValues && kpiValues.cnt > 0 && kpiValues.merchantReceived != null ? kpiValues.merchantReceived / kpiValues.cnt : undefined, fmt: _money, icon: DollarSign, change: null, source: '商家实收/有效订单量' },
+    { label: '实收/GMV比', value: kpiValues && kpiValues.gmv > 0 && kpiValues.merchantReceived != null ? kpiValues.merchantReceived / kpiValues.gmv * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '商家实收/GMV' },
+    { label: '实付/GMV比', value: kpiValues && kpiValues.gmv > 0 && kpiValues.paid != null ? kpiValues.paid / kpiValues.gmv * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '用户实付/GMV' },
+    { label: '自然占比', value: kpiValues && kpiValues.gmv > 0 && kpiValues.organicGmv != null ? kpiValues.organicGmv / kpiValues.gmv * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '自然销售额/GMV' },
+    { label: '折扣率', value: kpiValues && kpiValues.gmv > 0 && kpiValues.discount != null ? kpiValues.discount / kpiValues.gmv * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '优惠总额/GMV' },
+    { label: '单均优惠', value: kpiValues && kpiValues.cnt > 0 && kpiValues.discount != null ? kpiValues.discount / kpiValues.cnt : undefined, fmt: _money, icon: Percent, change: null, source: '优惠总额/有效订单量' },
+    { label: '人均订单数', value: kpiValues && kpiValues.buyers > 0 && kpiValues.cnt != null ? kpiValues.cnt / kpiValues.buyers : undefined, fmt: _ratio, icon: Users, change: null, source: '有效订单量/买家数' },
+    { label: '每单件数', value: kpiValues && kpiValues.cnt > 0 && kpiValues.skuQty != null ? kpiValues.skuQty / kpiValues.cnt : undefined, fmt: _ratio, icon: Package, change: null, source: 'SKU数量/有效订单量' },
+{ label: '退款侵蚀率', value: kpiValues && kpiValues.merchantReceived > 0 && kpiValues.rfAmount != null ? kpiValues.rfAmount / kpiValues.merchantReceived * 100 : undefined, fmt: _pct, icon: RotateCcw, change: null, source: '退款金额/商家实收' },
+    { label: '同意退款率', value: kpiValues && kpiValues.cnt > 0 && kpiValues.refundApprovalOrders != null ? kpiValues.refundApprovalOrders / kpiValues.cnt * 100 : undefined, fmt: _pct, icon: RotateCcw, change: null, source: '退款单数(按同意退款时间)/有效订单量' },
+    { label: '退款后实收', value: kpiValues && kpiValues.merchantReceived != null && kpiValues.rfAmount != null ? kpiValues.merchantReceived - kpiValues.rfAmount : undefined, fmt: _money, icon: DollarSign, change: null, source: '商家实收-退款金额(商家实收维度)' },
+    { label: '退款成本合计', value: (kpiValues?.refundedShippingCost ?? 0) + (kpiValues?.returnShippingCost ?? 0), fmt: _money, icon: Truck, change: null, source: '退款成功快递发货成本+退货退回成本' },
+{ label: '毛利润', value: kpiValues && kpiValues.merchantReceived != null && kpiValues.platformFee != null && kpiValues.postage != null && kpiValues.insuranceFee != null ? kpiValues.merchantReceived - kpiValues.platformFee - kpiValues.postage - kpiValues.insuranceFee : undefined, fmt: _money, icon: DollarSign, change: null, source: '商家实收-平台服务费-快递成本-运费险' },
+    { label: '人均利润', value: kpiValues && kpiValues.buyers > 0 && kpiValues.profit != null ? kpiValues.profit / kpiValues.buyers : undefined, fmt: _money, icon: Users, change: null, source: '利润金额/买家数' },
+    { label: '单商品利润', value: kpiValues && kpiValues.productCount > 0 && kpiValues.profit != null ? kpiValues.profit / kpiValues.productCount : undefined, fmt: _money, icon: Package, change: null, source: '利润金额/商品数' },
+    { label: '单SKU利润', value: kpiValues && kpiValues.skuQty > 0 && kpiValues.profit != null ? kpiValues.profit / kpiValues.skuQty : undefined, fmt: _money, icon: Package, change: null, source: '利润金额/SKU数量' },
+    { label: '调整后利润(去罚款)', value: kpiValues && kpiValues.profit != null ? kpiValues.profit + (kpiValues.penalties ?? 0) : undefined, fmt: _money, icon: DollarSign, change: null, source: '利润金额+罚款金额' },
+    { label: '平台费率', value: kpiValues && kpiValues.merchantReceived > 0 && kpiValues.platformFee != null ? kpiValues.platformFee / kpiValues.merchantReceived * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '平台服务费/商家实收' },
+    { label: '快递费率', value: kpiValues && kpiValues.merchantReceived > 0 && kpiValues.postage != null ? kpiValues.postage / kpiValues.merchantReceived * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '快递成本/商家实收' },
+    { label: '运费险率', value: kpiValues && kpiValues.merchantReceived > 0 && kpiValues.insuranceFee != null ? kpiValues.insuranceFee / kpiValues.merchantReceived * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '运费险/商家实收' },
+    { label: '总成本率', value: kpiValues && kpiValues.merchantReceived > 0 ? ((kpiValues.platformFee ?? 0) + (kpiValues.postage ?? 0) + (kpiValues.insuranceFee ?? 0) + (kpiValues.promoCost ?? 0)) / kpiValues.merchantReceived * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '(平台费+快递+运费险+推广)/商家实收' },
+    { label: '总运营成本', value: (kpiValues?.platformFee ?? 0) + (kpiValues?.postage ?? 0) + (kpiValues?.insuranceFee ?? 0) + (kpiValues?.promoCost ?? 0), fmt: _money, icon: DollarSign, change: null, source: '平台服务费+快递成本+运费险+推广花费' },
+    { label: '单均运营成本', value: kpiValues && kpiValues.cnt > 0 ? ((kpiValues?.platformFee ?? 0) + (kpiValues?.postage ?? 0) + (kpiValues?.insuranceFee ?? 0) + (kpiValues?.promoCost ?? 0)) / kpiValues.cnt : undefined, fmt: _money, icon: TrendingUp, change: null, source: '总运营成本/有效订单量' },
+    { label: '退款单均成本', value: kpiValues && kpiValues.rfCnt > 0 ? ((kpiValues?.refundedShippingCost ?? 0) + (kpiValues?.returnShippingCost ?? 0)) / kpiValues.rfCnt : undefined, fmt: _money, icon: RotateCcw, change: null, source: '退款成本合计/退款单数' },
+    { label: '推广订单占比', value: kpiValues && kpiValues.cnt > 0 && kpiValues.promoOrders != null ? kpiValues.promoOrders / kpiValues.cnt * 100 : undefined, fmt: _pct, icon: Target, change: null, source: '推广订单量/有效订单量' },
+    { label: '推广GMV占比', value: kpiValues && kpiValues.gmv > 0 && kpiValues.promoGmv != null ? kpiValues.promoGmv / kpiValues.gmv * 100 : undefined, fmt: _pct, icon: Target, change: null, source: '推广GMV/GMV' },
+    { label: '单均推广费', value: kpiValues && kpiValues.cnt > 0 && kpiValues.promoCost != null ? kpiValues.promoCost / kpiValues.cnt : undefined, fmt: _money, icon: BarChart3, change: null, source: '推广花费/有效订单量' },
+    { label: '单品均推广费', value: kpiValues && kpiValues.productCount > 0 && kpiValues.promoCost != null ? kpiValues.promoCost / kpiValues.productCount : undefined, fmt: _money, icon: Package, change: null, source: '推广花费/商品数' },
+    { label: '自然单占比', value: kpiValues && kpiValues.cnt > 0 && kpiValues.organicOrders != null ? kpiValues.organicOrders / kpiValues.cnt * 100 : undefined, fmt: _pct, icon: TrendingUp, change: null, source: '自然单/有效订单量' },
+    { label: '推广收入比', value: kpiValues && kpiValues.merchantReceived > 0 && kpiValues.promoCost != null ? kpiValues.promoCost / kpiValues.merchantReceived * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '推广花费/商家实收' },
+    { label: '点击转化率', value: kpiValues && kpiValues.totalClicks > 0 && kpiValues.promoOrders != null ? kpiValues.promoOrders / kpiValues.totalClicks * 100 : undefined, fmt: _pct, icon: Target, change: null, source: '推广订单量/点击量' },
+    { label: '千次曝光成本', value: kpiValues && kpiValues.totalImpressions > 0 && kpiValues.promoCost != null ? kpiValues.promoCost / kpiValues.totalImpressions * 1000 : undefined, fmt: _money, icon: DollarSign, change: null, source: '推广花费/曝光量*1000' },
+    { label: '每点击GMV', value: kpiValues && kpiValues.totalClicks > 0 && kpiValues.promoGmv != null ? kpiValues.promoGmv / kpiValues.totalClicks : undefined, fmt: _money, icon: TrendingUp, change: null, source: '推广GMV/点击量' },
+    { label: '每点击收入', value: kpiValues && kpiValues.totalClicks > 0 && kpiValues.merchantReceived != null ? kpiValues.merchantReceived / kpiValues.totalClicks : undefined, fmt: _money, icon: DollarSign, change: null, source: '商家实收/点击量' },
+    { label: '总互动成本', value: (kpiValues?.inquiryCost ?? 0) + (kpiValues?.favoriteCost ?? 0) + (kpiValues?.followCost ?? 0), fmt: _money, icon: MessageCircle, change: null, source: '询单+收藏+关注花费 SUM' },
+    { label: '互动成本率', value: kpiValues && kpiValues.promoCost > 0 ? ((kpiValues?.inquiryCost ?? 0) + (kpiValues?.favoriteCost ?? 0) + (kpiValues?.followCost ?? 0)) / kpiValues.promoCost * 100 : undefined, fmt: _pct, icon: Percent, change: null, source: '总互动成本/推广花费' },
+    { label: '单次互动成本', value: kpiValues && ((kpiValues?.inquiryCount ?? 0) + (kpiValues?.favoriteCount ?? 0) + (kpiValues?.followCount ?? 0)) > 0 ? ((kpiValues?.inquiryCost ?? 0) + (kpiValues?.favoriteCost ?? 0) + (kpiValues?.followCost ?? 0)) / ((kpiValues?.inquiryCount ?? 0) + (kpiValues?.favoriteCount ?? 0) + (kpiValues?.followCount ?? 0)) : undefined, fmt: _money, icon: MessageCircle, change: null, source: '总互动成本/(询单+收藏+关注)次数' },
+    { label: '单商品收入', value: kpiValues && kpiValues.productCount > 0 && kpiValues.merchantReceived != null ? kpiValues.merchantReceived / kpiValues.productCount : undefined, fmt: _money, icon: DollarSign, change: null, source: '商家实收/商品数' },
+    { label: '单商品订单', value: kpiValues && kpiValues.productCount > 0 && kpiValues.cnt != null ? kpiValues.cnt / kpiValues.productCount : undefined, fmt: _ratio, icon: ShoppingCart, change: null, source: '有效订单量/商品数' },
+    { label: '人均消费', value: kpiValues && kpiValues.buyers > 0 && kpiValues.paid != null ? kpiValues.paid / kpiValues.buyers : undefined, fmt: _money, icon: Users, change: null, source: '用户实付/买家数' },
+{ label: '人均SKU数', value: kpiValues && kpiValues.buyers > 0 && kpiValues.skuQty != null ? kpiValues.skuQty / kpiValues.buyers : undefined, fmt: _ratio, icon: Package, change: null, source: 'SKU数量/买家数' },
+    { label: '百亿补贴', value: kpiValues?.subsidyFee ?? 0, fmt: _money, icon: DollarSign, change: null, source: '货款明细-百亿补贴支出 SUM' },
+    { label: '罚款占利润比', value: kpiValues && kpiValues.profit != null && kpiValues.profit !== 0 ? (kpiValues.penalties ?? 0) / Math.abs(kpiValues.profit) * 100 : undefined, fmt: _pct, icon: AlertTriangle, change: null, source: '罚款金额/|利润金额|' },
   ];
-  const kpiCards = useMemo(() => {
+	  const kpiCards = useMemo(() => {
     const filtered = allKpiCards.filter(c => visibleKpis.has(c.label));
     if (kpiCardOrder.length === 0) return filtered;
     // 根据保存的顺序排序
@@ -550,27 +625,105 @@ export default function DashboardPage() {
   const handleKpiClick = (label: string) => {
     // 趋势图切换 — 全部42个指标与 KPI_LINES 一一对应
     setKpiActiveFilter(null);
-    const kpiKeyMap: Record<string, string> = {
-      'GMV（商品总价）': 'gmv', '商家实收': 'merchantReceived', '用户实付': 'paid',
-      '自然销售额': 'organicGmv', '优惠总额': 'discount',
-      '有效订单量': 'orderCount', '客单价': 'avgPrice',
-      '买家数': 'buyerCount', '商品数': 'productCount',
-      '自然单': 'organicOrders', '平均发货时长': 'avgShipHours', '发货率': 'shipRate',
+            const kpiKeyMap: Record<string, string> = {
+      'GMV（商品总价）': 'gmv',
+      '商家实收': 'merchantReceived',
+      '用户实付': 'paid',
+      '自然销售额': 'organicGmv',
+      '优惠总额': 'discount',
+      '有效订单量': 'orderCount',
+      '客单价': 'avgPrice',
+      '买家数': 'buyerCount',
+      '商品数': 'productCount',
+      '自然单': 'organicOrders',
+      '平均发货时长': 'avgShipHours',
+      '发货率': 'shipRate',
       'SKU数量': 'skuQty',
-      '退款金额': 'refundAmount', '退款单数': 'rfCount',
-      '退款率': 'rfRate', '售后率': 'asRate',
+      '退款金额': 'refundAmount',
+      '退款单数': 'rfCount',
+      '退款率': 'rfRate',
+      '售后率': 'asRate',
       '退款金额(按同意退款时间)': 'refundApprovalAmount',
       '退款单数(按同意退款时间)': 'refundApprovalOrders',
-      '利润金额': 'profit', '罚款金额': 'penaltyAmount', '罚款次数': 'penaltyCount',
-      '推广花费': 'promoCost', '推广GMV': 'promoGmv', '推广ROI': 'promoRoi',
-      '推广订单量': 'promoOrders', '推广占比': 'promoRatio', '全店投产': 'shopRoi',
-      '曝光量': 'totalImpressions', '点击量': 'totalClicks',
-      '点击率': 'ctr', '转化率': 'cvr',
-      '平均点击成本': 'cpc', '平均获客成本': 'cpa',
-      '询单成本': 'avgInquiryCost', '收藏成本': 'avgFavoriteCost', '关注成本': 'avgFollowCost',
-      '退款成功快递发货成本': 'refundedShippingCost', '退货退回成本': 'returnShippingCost',
-      '平台服务费': 'platformFee', '快递成本': 'postage', '运费险': 'insurance',
+      '利润金额': 'profit',
+      '罚款金额': 'penaltyAmount',
+      '罚款次数': 'penaltyCount',
+      '推广花费': 'promoCost',
+      '推广GMV': 'promoGmv',
+      '推广ROI': 'promoRoi',
+      '推广订单量': 'promoOrders',
+      '推广占比': 'promoRatio',
+      '全店投产': 'shopRoi',
+      '曝光量': 'totalImpressions',
+      '点击量': 'totalClicks',
+      '点击率': 'ctr',
+      '转化率': 'cvr',
+      '平均点击成本': 'cpc',
+      '平均订单花费': 'cpa',
+      '平均询单成本': 'avgInquiryCost',
+      '平均收藏成本': 'avgFavoriteCost',
+      '平均关注成本': 'avgFollowCost',
+      '总询单成本': 'inquiryCost',
+      '总收藏成本': 'favoriteCost',
+      '总关注成本': 'followCost',
+      '退款成功快递发货成本': 'refundedShippingCost',
+      '退货退回成本': 'returnShippingCost',
+      '平台服务费': 'platformFee',
+      '快递成本': 'postage',
+      '运费险': 'insurance',
+      '毛利率': 'grossProfitRate',
+      '净利润率': 'netProfitRate',
+      '单均利润': 'profitPerOrder',
+      '平均退款额': 'avgRefundAmount',
+      '推广费用率': 'promoCostRate',
+      '净GMV(GMV-退款)': 'netGmv',
+      '净实收(实收-退款)': 'netRevenue',
+      '单均GMV': 'gmvPerOrder',
+      '单均实收': 'mrPerOrder',
+      '实收/GMV比': 'merchantTakeRate',
+      '实付/GMV比': 'paidTakeRate',
+      '自然占比': 'organicRatio',
+      '折扣率': 'discRate',
+      '单均优惠': 'discPerOrder',
+      '人均订单数': 'ordersPerBuyer',
+      '每单件数': 'itemsPerOrder',
+      '退款侵蚀率': 'refundErosionRate',
+      '同意退款率': 'refundApprovalRate',
+      '退款后实收': 'mrAfterRefund',
+      '毛利润': 'grossProfit',
+      '推广订单占比': 'promoOrderRatio',
+      '推广GMV占比': 'promoGmvRatio',
+      '单均推广费': 'promoCostPerOrder',
+      '千次曝光成本': 'cpm',
+      '点击转化率': 'promoCvr',
+      '总互动成本': 'totalInteractionCost',
+      '互动成本率': 'interactionCostRate',
+      '单次互动成本': 'avgInteractionCost',
+      '平台费率': 'platformFeeRate',
+      '快递费率': 'postageRate',
+      '运费险率': 'insuranceRate',
+      '总成本率': 'totalCostRate',
+      '人均SKU数': 'skuPerBuyer',
+      '人均利润': 'profitPerBuyer',
+      '人均消费': 'spendingPerBuyer',
+      '单SKU利润': 'profitPerSku',
+      '单品均推广费': 'promoCostPerProduct',
+      '单商品利润': 'profitPerProduct',
+      '单商品收入': 'revenuePerProduct',
+      '单商品订单': 'ordersPerProduct',
+      '单均运营成本': 'opCostPerOrder',
+      '总运营成本': 'totalOpCost',
+      '推广收入比': 'promoToRevenue',
+      '每点击GMV': 'gmvPerClick',
+      '每点击收入': 'revenuePerClick',
+      '百亿补贴': 'subsidyFee',
+      '罚款占利润比': 'penaltyProfitRatio',
+      '自然单占比': 'organicOrderRatio',
+      '调整后利润(去罚款)': 'adjustedProfit',
+      '退款单均成本': 'refundCostPerOrder',
+      '退款成本合计': 'totalRefundCost',
     };
+
     const key = kpiKeyMap[label];
     if (key) {
       setSelectedTrendKpis(prev => {
@@ -1081,7 +1234,7 @@ export default function DashboardPage() {
                         className="flex-1 text-[11px] px-1.5 py-1 rounded border border-pdd-border bg-pdd-bg text-pdd-text outline-none focus:border-pdd-primary-light" />
                       <input type="number" placeholder="金额" step="0.01" value={c.amount || ''} onChange={e => updateCustomCost(i, 'amount', e.target.value)}
                         className="w-20 text-[11px] px-1.5 py-1 rounded border border-pdd-border bg-pdd-bg text-pdd-text text-right outline-none focus:border-pdd-primary-light" />
-                      <span className="text-[10px] text-pdd-text-secondary w-14 text-right">-¥{(c.amount || 0).toFixed(0)}</span>
+                      <span className="text-[10px] text-pdd-text-secondary w-14 text-right">-¥{(c.amount || 0).toFixed(2)}</span>
                     </div>
                   ))}
                 </div>

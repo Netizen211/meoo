@@ -117,7 +117,7 @@ export default function CostPage() {
       else if (rate <= 0.3) counts[3]++;
       else counts[4]++;
     });
-    return ranges.map((r, i) => ({ range: r, count: counts[i], rate: filteredOrders.length > 0 ? (counts[i] / filteredOrders.length * 100).toFixed(1) : 0 }));
+    return ranges.map((r, i) => ({ range: r, count: counts[i], rate: filteredOrders.length > 0 ? (counts[i] / filteredOrders.length * 100).toFixed(2) : 0 }));
   }, [filteredOrders]);
 
   const costStructure = useMemo(() => {
@@ -186,7 +186,7 @@ export default function CostPage() {
   }, [dailyData, searchQuery, sortField, sortDesc]);
 
   const noData = !filteredOrders.length;
-  const fmt = (v: number) => v >= 10000 ? `¥${(v / 10000).toFixed(1)}万` : `¥${v.toFixed(0)}`;
+  const fmt = (v: number) => v >= 10000 ? `¥${(v / 10000).toFixed(2)}万` : `¥${v.toFixed(2)}`;
   const rangeLabel = timeRange === '7' ? '近7天' : timeRange === '30' ? '近30天' : '近90天';
 
   const exportCSV = () => {
@@ -197,7 +197,7 @@ export default function CostPage() {
       (d.shopDisc + d.platDisc + d.duoDuo).toFixed(2),
       d.postage.toFixed(2),
       d.merchant.toFixed(2),
-      (d.product > 0 ? (d.merchant / d.product) * 100 : 0).toFixed(1) + '%',
+      (d.product > 0 ? (d.merchant / d.product) * 100 : 0).toFixed(2) + '%',
       d.count,
     ]);
     const csv = ['﻿' + headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -230,11 +230,11 @@ export default function CostPage() {
         <span className="text-[11px] text-[var(--pdd-text-secondary)]">{label}</span>
         <div className="flex items-center gap-1">
           <span className="text-sm font-bold text-pdd-text">
-            {noData ? '--' : value != null ? (isRate ? `${value.toFixed(1)}%` : fmt(value)) : '--'}
+            {noData ? '--' : value != null ? (isRate ? `${value.toFixed(2)}%` : fmt(value)) : '--'}
           </span>
           {change != null && Math.abs(change) > 0.01 && (
             <span className={`text-[11px] ${change > 0 ? 'text-pdd-success' : 'text-pdd-danger'}`}>
-              {change > 0 ? <ArrowUp size={10} /> : <ArrowDown size={10} />}{Math.abs(change).toFixed(1)}%
+              {change > 0 ? <ArrowUp size={10} /> : <ArrowDown size={10} />}{Math.abs(change).toFixed(2)}%
             </span>
           )}
         </div>
@@ -261,7 +261,7 @@ export default function CostPage() {
               <ComposedChart data={dailyData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
                 <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-                <YAxis tick={{ fontSize: 10 }} tickFormatter={v => v >= 10000 ? `${(v / 10000).toFixed(0)}万` : v} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={v => v >= 10000 ? `${(v / 10000).toFixed(2)}万` : v} />
                 <Tooltip formatter={(v: number) => fmt(v)} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 <Area type="monotone" dataKey="product" stackId="1" stroke="var(--pdd-text)" fill="#F0F2F5" name="商品总价" />
@@ -277,7 +277,7 @@ export default function CostPage() {
             <ResponsiveContainer width="100%" height={220}>
               <PieChart>
                 <Pie data={costStructure} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75} innerRadius={45}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(2)}%`}>
                   {costStructure.map((d, i) => <Cell key={i} fill={d.color} />)}
                 </Pie>
                 <Tooltip formatter={(v: number) => fmt(v)} />
@@ -322,8 +322,8 @@ export default function CostPage() {
             <LineChart data={dailyData}>
               <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} />
-              <YAxis tick={{ fontSize: 10 }} tickFormatter={v => v >= 10000 ? `${(v / 10000).toFixed(0)}万` : v} />
-              <Tooltip formatter={(v: number) => `¥${v.toFixed(0)}`} />
+              <YAxis tick={{ fontSize: 10 }} tickFormatter={v => v >= 10000 ? `${(v / 10000).toFixed(2)}万` : v} />
+              <Tooltip formatter={(v: number) => `¥${v.toFixed(2)}`} />
               <Legend wrapperStyle={{ fontSize: 11 }} />
               <Line type="monotone" dataKey="shopDisc" stroke="var(--pdd-danger)" strokeWidth={2} name="店铺优惠" dot={false} />
               <Line type="monotone" dataKey="platDisc" stroke="var(--pdd-primary)" strokeWidth={2} name="平台优惠" dot={false} />
@@ -355,7 +355,7 @@ export default function CostPage() {
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
                 <Pie data={discPie} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={70} innerRadius={35}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(2)}%`}>
                   {discPie.map((_, i) => <Cell key={i} fill={COLORS[i]} />)}
                 </Pie>
                 <Tooltip formatter={(v: number) => fmt(v)} />
@@ -406,9 +406,9 @@ export default function CostPage() {
                   <span className="font-mono text-[var(--pdd-text-secondary)] shrink-0">{a.orderNo.slice(-8)}</span>
                   <span className="flex-1 truncate text-pdd-text">{a.product}</span>
                   <span className="shrink-0 font-semibold" style={{ color: group.color }}>
-                    {group.title.includes('优惠') ? `${a.discRate.toFixed(0)}%` : group.title.includes('邮费') ? `¥${a.postage.toFixed(0)}` : `¥${a.merchant.toFixed(0)}`}
+                    {group.title.includes('优惠') ? `${a.discRate.toFixed(2)}%` : group.title.includes('邮费') ? `¥${a.postage.toFixed(2)}` : `¥${a.merchant.toFixed(2)}`}
                   </span>
-                  <span className="text-[var(--pdd-text-secondary)] text-[10px] shrink-0">实收 ¥{a.merchant.toFixed(0)}</span>
+                  <span className="text-[var(--pdd-text-secondary)] text-[10px] shrink-0">实收 ¥{a.merchant.toFixed(2)}</span>
                 </div>
               ))}
               {group.data.length > 15 && (
@@ -480,7 +480,7 @@ export default function CostPage() {
                     <td className="py-1.5 px-2 text-right font-mono font-semibold text-pdd-text">{fmt(d.merchant)}</td>
                     <td className="py-1.5 px-2 text-right font-mono">
                       <span className={`${recvRate >= 80 ? 'text-pdd-success' : recvRate >= 50 ? 'text-pdd-warning' : 'text-pdd-danger'}`}>
-                        {recvRate.toFixed(1)}%
+                        {recvRate.toFixed(2)}%
                       </span>
                     </td>
                     <td className="py-1.5 px-2 text-right text-[var(--pdd-text-secondary)]">{d.count}</td>
@@ -566,13 +566,13 @@ export default function CostPage() {
                   <div className="border-t border-pdd-border pt-2 flex items-center justify-between">
                     <span className="text-xs text-[var(--pdd-text-secondary)]">优惠率</span>
                     <span className={`text-xs font-bold ${anomalyDetail.discRate > 30 ? 'text-pdd-danger' : 'text-pdd-warning'}`}>
-                      {anomalyDetail.discRate.toFixed(1)}%
+                      {anomalyDetail.discRate.toFixed(2)}%
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-[var(--pdd-text-secondary)]">实收率</span>
                     <span className={`text-xs font-bold ${anomalyDetail.recvRate >= 80 ? 'text-pdd-success' : anomalyDetail.recvRate >= 50 ? 'text-pdd-warning' : 'text-pdd-danger'}`}>
-                      {anomalyDetail.recvRate.toFixed(1)}%
+                      {anomalyDetail.recvRate.toFixed(2)}%
                     </span>
                   </div>
                   <div className="flex items-center justify-between">

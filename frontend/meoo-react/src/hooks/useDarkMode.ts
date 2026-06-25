@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 type ThemeMode = 'light' | 'dark';
 
@@ -42,6 +42,7 @@ function applyThemeMode(mode: ThemeMode) {
 export function useDarkMode() {
   const [mode, setMode] = useState<ThemeMode>(getInitialMode);
   const [ready, setReady] = useState(false);
+  const isFirstRender = useRef(true);
 
   useEffect(() => {
     applyThemeMode(mode);

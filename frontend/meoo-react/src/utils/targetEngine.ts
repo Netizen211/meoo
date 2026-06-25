@@ -165,12 +165,12 @@ export interface FlatTargetEntry { value: number; fmt: string; }
 export function flattenTargetSet(result: TargetEngineResult, rowMode: "单品" | "总额"): Record<string, FlatTargetEntry> {
   const ts = result.targetSet;
   const keys = rowMode === "单品"
-    ? ["skuPrice", "skuCount", "skuCost", "promoAvg", "roi", "refundRate", "profitRate", "skuProfit"]
-    : ["revenue", "orders", "totalCost", "promo", "roi", "refundRate", "otherCost", "profit"];
+    ? ["skuPrice", "skuCount", "skuCost", "promoAvg", "roi", "refundRate", "profitRate", "skuProfit", "sales", "marginRate", "avgOrderValue", "afterSaleRate", "discountRatio"]
+    : ["revenue", "orders", "totalCost", "promo", "roi", "refundRate", "otherCost", "profit", "gmv", "sales", "avgOrderValue", "afterSaleRate", "promoTransaction", "grossProfit", "discountRatio", "activeDays"];
   const out: Record<string, FlatTargetEntry> = {};
   for (const k of keys) {
-    const col = (ts as any)[k] as TargetColumnResult;
-    out[k] = { value: col.value, fmt: col.fmt };
+    const col = (ts as any)[k] as TargetColumnResult | undefined;
+    out[k] = col ? { value: col.value, fmt: col.fmt } : { value: 0, fmt: '--' };
   }
   return out;
 }

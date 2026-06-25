@@ -3,6 +3,7 @@ import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { requireAuth } from '../middleware/auth';
+import { verifyApiToken } from './auth';
 import * as dataService from '../services/dataService';
 import { normalizeFieldName, normalizeRecordKeys, normalizeRecordsArray } from '../services/fieldNormalizer';
 import { DATA_CATEGORIES } from '../shared-types';
@@ -392,6 +393,269 @@ router.get('/product-image/:productId', async (req: Request, res: Response) => {
     if (files.length === 0) { res.status(404).json({ success: false, error: '图片不存在' }); return; }
     res.sendFile(path.join(UPLOAD_DIR, files[0]));
   } catch { res.status(404).json({ success: false, error: '图片不存在' }); }
+});
+
+// ★ API Token 或 JWT 认证中间件（用于浏览器插件等外部调用）
+async function optionalAuth(req: Request, res: Response, next: Function) {
+  try {
+    // 先尝试 JWT
+    const authHeader = req.headers.authorization;
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      const token = authHeader.slice(7);
+      // 尝试作为 API Token 验证
+      const user = await verifyApiToken(token);
+      if (user) {
+        (req as any).user = { userId: user.userId, username: user.username, role: 'normal' };
+        next();
+        return;
+      }
+      // 尝试作为 JWT 验证（通过 requireAuth）
+      const jwtAuth = requireAuth as (req: Request, res: Response, next: Function) => void;
+      jwtAuth(req, res, (err?: any) => {
+        if (err) {
+          res.status(401).json({ success: false, error: '认证失败' });
+          return;
+        }
+        next();
+      });
+      return;
+    }
+    res.status(401).json({ success: false, error: '缺少认证信息' });
+  } catch {
+    res.status(401).json({ success: false, error: '认证失败' });
+  }
+}
+
+// ★ 批量从 URL 导入产品图片（用于浏览器插件）
+router.post('/product-images/import-from-urls', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const { items } = req.body;
+    // items: Array<{ productId: string; imageUrl: string; goodsName?: string }>
+    if (!Array.isArray(items) || items.length === 0) {
+      res.status(400).json({ success: false, error: '请提供 items 数组' });
+      return;
+    }
+
+    // 限流：每用户每60秒最多请求1次
+    const userId = req.user!.userId;
+    const rateKey = `import_from_urls_${userId}`;
+    const cached = cache.get(rateKey);
+    if (cached) {
+      res.status(429).json({ success: false, error: '请求过于频繁，请60秒后再试' });
+      return;
+    }
+    cache.set(rateKey, true, 60);
+
+    const results: Array<{ productId: string; success: boolean; error?: string }> = [];
+    const MAX_ITEMS = 200;
+    const batch = items.slice(0, MAX_ITEMS);
+
+    // 并发下载，限制 5 并发
+    const CONCURRENCY = 5;
+    for (let i = 0; i < batch.length; i += CONCURRENCY) {
+      const chunk = batch.slice(i, i + CONCURRENCY);
+      await Promise.all(chunk.map(async (item: { productId: string; imageUrl: string; goodsName?: string }) => {
+        const { productId, imageUrl } = item;
+        try {
+          if (!productId || !imageUrl) {
+            results.push({ productId, success: false, error: '缺少 productId 或 imageUrl' });
+            return;
+          }
+
+          // 下载图片
+          const response = await fetch(imageUrl, {
+            signal: AbortSignal.timeout(30000),
+          });
+          if (!response.ok) {
+            results.push({ productId, success: false, error: `下载失败 HTTP ${response.status}` });
+            return;
+          }
+
+          const contentType = response.headers.get('content-type') || 'image/jpeg';
+          const ext = contentType.includes('png') ? '.png' : contentType.includes('webp') ? '.webp' : '.jpeg';
+          const buffer = Buffer.from(await response.arrayBuffer());
+
+          // 保存到磁盘: userId_productId.ext
+          const filename = `${userId}_${productId}${ext}`;
+          const filePath = path.join(UPLOAD_DIR, filename);
+          fs.writeFileSync(filePath, buffer);
+
+          results.push({ productId, success: true });
+        } catch (err: any) {
+          results.push({ productId, success: false, error: err.message || '下载失败' });
+        }
+      }));
+    }
+
+    const successCount = results.filter(r => r.success).length;
+    res.json({
+      success: true,
+      data: {
+        results,
+        total: results.length,
+        successCount,
+        failCount: results.length - successCount,
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || '批量导入失败' });
+  }
+});
+
+// ★ 获取产品图片映射列表（返回所有已上传图片的 productId 列表）
+router.get('/product-images/list', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.startsWith(`${userId}_`));
+    const mappings = files.map(f => {
+      const parts = f.replace(/\.\w+$/, '').split('_');
+      const productId = parts.slice(1).join('_');
+      return {
+        productId,
+        url: `/api/v1/data/product-image/${productId}`,
+        filename: f,
+      };
+    });
+    res.json({ success: true, data: mappings });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || '查询失败' });
+  }
+});
+
+// ★ 获取单个产品图片信息（右键悬浮使用）
+router.get('/product-images/:productId', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const productId = req.params.productId;
+    const files = fs.readdirSync(UPLOAD_DIR).filter(f => f.startsWith(`${userId}_`) && f.includes(`_${productId}.`));
+    if (files.length === 0) {
+      res.json({ success: true, data: null });
+      return;
+    }
+    res.json({
+      success: true,
+      data: {
+        productId,
+        url: `/api/v1/data/product-image/${productId}`,
+        filename: files[0],
+      }
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || '查询失败' });
+  }
+});
+
+// ★ 获取单个产品的财务数据（利润计算器使用）
+router.get('/product-finance/:productId', optionalAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const productId = req.params.productId;
+
+    const { db } = require('../db');
+    // 查出用户的所有店铺
+    const stores = await db('stores').where('user_id', userId).select('id');
+    if (stores.length === 0) {
+      res.json({ success: true, data: null });
+      return;
+    }
+
+    const storeIds = stores.map((s: any) => s.id);
+
+    // 从 store_data 中查找包含该商品ID的分类数据
+    let financeData: any = {
+      avgPrice: 0,
+      cost: 0,
+      commissionRate: 0,
+      adCostPerOrder: 0,
+      refundRate: 0,
+      shippingCost: 0,
+      totalOrders: 0,
+      totalRevenue: 0,
+    };
+
+    for (const storeId of storeIds) {
+      const rows = await db('store_data').where('store_id', storeId).whereIn('category', ['orders', 'afterSaleRecords', 'shippingInsurance', 'promotionData', 'financeData']);
+      for (const row of rows) {
+        try {
+          const payload = JSON.parse(row.payload_json);
+          if (!Array.isArray(payload)) continue;
+
+          if (row.category === 'orders') {
+            // 查找包含该商品ID的订单
+            const productOrders = payload.filter((o: any) => {
+              const idFields = [o.商品ID, o.goodsId, o.productId, o.商品id, o['商品编号']];
+              return idFields.some((f: any) => String(f || '') === productId);
+            });
+            if (productOrders.length > 0) {
+              const prices = productOrders.map((o: any) => parseFloat(o.实付金额 || o.price || o.售价 || o.单价 || 0));
+              const validPrices = prices.filter((p: any) => p > 0);
+              if (validPrices.length > 0) {
+                financeData.avgPrice = validPrices.reduce((a: number, b: number) => a + b, 0) / validPrices.length;
+              }
+              financeData.totalOrders = productOrders.length;
+              financeData.totalRevenue = productOrders.reduce((sum: number, o: any) => sum + parseFloat(o.实付金额 || o.price || o.售价 || 0), 0);
+            }
+          } else if (row.category === 'afterSaleRecords') {
+            // 退款率
+            const productRefunds = payload.filter((r: any) => {
+              const idFields = [r.商品ID, r.goodsId, r.productId, r.商品id];
+              return idFields.some((f: any) => String(f || '') === productId);
+            });
+            if (productRefunds.length > 0) {
+              const total = productRefunds.length;
+              const refunded = productRefunds.filter((r: any) => {
+                const status = String(r.售后状态 || r.status || '');
+                return status.includes('退款') || status.includes('退货') || status.includes('成功') || status.includes('关闭');
+              }).length;
+              financeData.refundRate = total > 0 ? Math.round((refunded / total) * 100) : 0;
+            }
+          } else if (row.category === 'shippingInsurance') {
+            // 运费
+            const productShipping = payload.filter((s: any) => {
+              const idFields = [s.商品ID, s.goodsId, s.productId, s.商品id];
+              return idFields.some((f: any) => String(f || '') === productId);
+            });
+            if (productShipping.length > 0) {
+              const fees = productShipping.map((s: any) => parseFloat(s.运费 || s.fee || s.运费险 || 0));
+              const validFees = fees.filter((f: any) => f > 0);
+              if (validFees.length > 0) {
+                financeData.shippingCost = validFees.reduce((a: number, b: number) => a + b, 0) / validFees.length;
+              }
+            }
+          } else if (row.category === 'promotionData') {
+            // 推广费/单
+            const totalAdSpend = payload.reduce((sum: number, p: any) => sum + parseFloat(p.花费 || p.spend || p.推广费 || 0), 0);
+            const totalOrdersFromAd = payload.reduce((sum: number, p: any) => sum + parseInt(p.订单量 || p.成交数 || p.订单数 || 0), 0);
+            if (totalOrdersFromAd > 0 && financeData.totalOrders > 0) {
+              financeData.adCostPerOrder = totalAdSpend / totalOrdersFromAd;
+            }
+          } else if (row.category === 'financeData') {
+            // 财务数据：成本、佣金率
+            const productFinance = payload.filter((f: any) => {
+              const idFields = [f.商品ID, f.goodsId, f.productId, f.商品id];
+              return idFields.some((field: any) => String(field || '') === productId);
+            });
+            if (productFinance.length > 0) {
+              const costs = productFinance.map((f: any) => parseFloat(f.成本 || f.cost || f.进货价 || 0)).filter((c: any) => c > 0);
+              if (costs.length > 0) {
+                financeData.cost = costs.reduce((a: number, b: number) => a + b, 0) / costs.length;
+              }
+              const commissions = productFinance.map((f: any) => parseFloat(f.佣金比例 || f.commissionRate || f.平台扣点 || 0)).filter((c: any) => c > 0);
+              if (commissions.length > 0) {
+                financeData.commissionRate = commissions.reduce((a: number, b: number) => a + b, 0) / commissions.length;
+              }
+            }
+          }
+        } catch (e) {
+          // 跳过解析失败的行
+        }
+      }
+    }
+
+    res.json({ success: true, data: financeData });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || '查询失败' });
+  }
 });
 
 export default router;

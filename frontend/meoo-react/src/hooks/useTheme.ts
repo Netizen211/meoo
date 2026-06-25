@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { ThemeMode } from '../themes/types';
 import { applyTheme, getInitialTheme, getThemeByMode, saveThemePreference } from '../themes/theme-config';
+import { usePreferenceStore } from '../store/preferenceStore';
 
 /**
  * 主题管理 Hook
@@ -21,6 +22,8 @@ export function useTheme() {
     setThemeState(mode);
     saveThemePreference(mode);
     applyThemeToDOM(mode);
+    // 同步到 PreferenceStore（跨设备同步）
+    try { usePreferenceStore.getState().set('dark_mode', mode === 'dark'); } catch {}
   }, [applyThemeToDOM]);
 
   // 切换主题

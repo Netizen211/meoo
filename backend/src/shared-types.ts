@@ -191,3 +191,58 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
   page: number;
   pageSize: number;
 }
+
+// ===== 用户偏好 =====
+
+export interface UserPreference {
+  key: string;
+  value: any;
+  version: number;
+}
+
+export interface UserPreferencesMap {
+  [key: string]: {
+    value: any;
+    version: number;
+  };
+}
+
+export interface SetPreferenceRequest {
+  value: any;
+  version?: number;
+}
+
+export interface BatchPreferenceRequest {
+  key: string;
+  value: any;
+  version?: number;
+}
+
+export interface BatchPreferencesBody {
+  prefs: BatchPreferenceRequest[];
+}
+
+export interface MigratePreferencesBody {
+  prefs: Record<string, any>;
+}
+
+// ===== 偏好 Key 常量（前端引用） =====
+
+export const PREFERENCE_KEYS = {
+  PRODUCT_VISIBLE_KPIS: 'product_visible_kpis',
+  PRODUCT_KPI_ORDER: 'product_kpi_order',
+  DASHBOARD_VISIBLE_KPIS: 'dashboard_visible_kpis',
+  DASHBOARD_KPI_ORDER: 'dashboard_kpi_order',
+  DASHBOARD_TREND_KPIS: 'dashboard_trend_kpis',
+  DASHBOARD_HIDDEN_COLS: 'dashboard_hidden_cols',
+  DASHBOARD_PINNED_COLS: 'dashboard_pinned_cols',
+  DASHBOARD_CUSTOM_COSTS: 'dashboard_custom_costs',
+  SAVED_FILTERS: 'saved_filters',
+  FILTER_HISTORY: 'filter_history',
+  SAVED_RANGES: 'saved_ranges',
+  SEARCH_HISTORY: 'search_history',
+  DARK_MODE: 'dark_mode',
+  COST_ACTIVE_TAB: 'cost_active_tab',
+  COURIER_RATES: 'courier_rates',
+  LAST_STORE: 'last_store',
+} as const;

@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
+import { usePreference } from '../hooks/usePreference';
+import { usePreferenceStore } from '../store/preferenceStore';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Package, Edit3, Save, AlertCircle, AlertTriangle, Check, ChevronDown, ChevronUp,
@@ -154,16 +156,7 @@ function ProcessPanel({ alertData, alertType, onProcess, onCancel, existingData 
 }
 
 export default function CostManagementPage() {
-  const [activeTab, setActiveTab] = useState(() => {
-    try {
-      const saved = localStorage.getItem('dianfx_cost_active_tab');
-      if (saved) return saved;
-    } catch {}
-    return 'overview';
-  });
-  useEffect(() => {
-    localStorage.setItem('dianfx_cost_active_tab', activeTab);
-  }, [activeTab]);
+  const [activeTab, setActiveTab] = usePreference<string>('cost_active_tab', 'overview');
   const tf = useTimeFilter('7', 'day');
   const { timeRange, granularity, compareEnabled, useNaturalDate, setUseNaturalDate, customStart, customEnd, compareStart, compareEnd, quickRange } = tf;
 
@@ -662,7 +655,7 @@ export default function CostManagementPage() {
     const totalLabor = laborFeePerOrder * uniqueOrderCnt;
     // ★ F3: 快递费逐单计算 — 有实际邮费的取邮费，没有的按快递公司费率或默认费率
     let totalShipping = 0;
-    const courierRates = JSON.parse(localStorage.getItem('dianfx_courier_rates') || '{}');
+    const courierRates = usePreferenceStore.getState().get<Record<string, number>>('courier_rates', {});
     const skuOrders = orders.filter(o => {
       const oId = String(findField(o, '商品id', '商品ID', 'productId') || '');
       const sId = String(findField(o, '商家编码-SKU维度', '规格编码', 'SKU编码') || '');
@@ -2194,16 +2187,12 @@ export default function CostManagementPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [shippingSearch, setShippingSearch] = useState('');
 
-  const [courierRates, setCourierRates] = useState<Record<string, number>>(() => {
-    try { return JSON.parse(localStorage.getItem('dianfx_courier_rates') || '{}'); }
-    catch { return {}; }
-  });
+  const [courierRates, setCourierRates] = usePreference<Record<string, number>>('courier_rates', {});
   const [newCourierRate, setNewCourierRate] = useState('5');
 
   const saveCourierRate = (name: string, rate: number) => {
     const updated = { ...courierRates, [name]: rate };
     setCourierRates(updated);
-    localStorage.setItem('dianfx_courier_rates', JSON.stringify(updated));
   };
 
   const getRate = (name: string) => courierRates[name] || shippingFeePerOrder || 0;

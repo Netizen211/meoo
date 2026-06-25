@@ -122,19 +122,19 @@ export default function TrendPage() {
   const allKpiCards = useMemo(() => {
     if (!fullKpi) return [];
     return [
-      { key: 'gmv', label: 'GMV总额', value: fullKpi.gmv, fmt: (v: number) => `¥${v.toFixed(0)}`, color: '#1677FF', change: compareFullKpi ? changePct(fullKpi.gmv, compareFullKpi.gmv || 0) : null },
+      { key: 'gmv', label: 'GMV总额', value: fullKpi.gmv, fmt: (v: number) => `¥${v.toFixed(2)}`, color: '#1677FF', change: compareFullKpi ? changePct(fullKpi.gmv, compareFullKpi.gmv || 0) : null },
       { key: 'orderCount', label: '订单量', value: fullKpi.orderCount, fmt: (v: number) => v.toFixed(0), color: '#722ED1', change: compareFullKpi ? changePct(fullKpi.orderCount, compareFullKpi.orderCount || 0) : null },
       { key: 'avgPrice', label: '客单价', value: fullKpi.avgPrice, fmt: (v: number) => `¥${v.toFixed(2)}`, color: '#52C41A', change: compareFullKpi ? changePct(fullKpi.avgPrice, compareFullKpi.avgPrice || 0) : null },
-      { key: 'paid', label: '用户实付', value: fullKpi.paid, fmt: (v: number) => `¥${v.toFixed(0)}`, color: '#73D13D', change: null },
-      { key: 'promoCost', label: '推广花费', value: fullKpi.promoCost, fmt: (v: number) => `¥${v.toFixed(0)}`, color: '#F759AB', change: null },
+      { key: 'paid', label: '用户实付', value: fullKpi.paid, fmt: (v: number) => `¥${v.toFixed(2)}`, color: '#73D13D', change: null },
+      { key: 'promoCost', label: '推广花费', value: fullKpi.promoCost, fmt: (v: number) => `¥${v.toFixed(2)}`, color: '#F759AB', change: null },
       { key: 'promoRoi', label: '推广ROI', value: fullKpi.promoRoi, fmt: (v: number) => v.toFixed(2), color: '#2F54EB', change: null },
-      { key: 'rfRate', label: '退款率', value: fullKpi.rfRate, fmt: (v: number) => `${v.toFixed(1)}%`, color: '#FF4D4F', change: null },
-      { key: 'asRate', label: '售后率', value: fullKpi.asRate, fmt: (v: number) => `${v.toFixed(1)}%`, color: '#FAAD14', change: null },
-      { key: 'postage', label: '邮费总额', value: fullKpi.postage, fmt: (v: number) => `¥${v.toFixed(0)}`, color: 'var(--pdd-cyan)', change: null },
-      { key: 'refundAmount', label: '退款金额', value: fullKpi.refundAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, color: '#FF7875', change: null },
-      { key: 'discount', label: '优惠总额', value: fullKpi.discount, fmt: (v: number) => `¥${v.toFixed(0)}`, color: '#FFC53D', change: null },
-      { key: 'promoGmv', label: '推广GMV', value: fullKpi.promoGmv, fmt: (v: number) => `¥${v.toFixed(0)}`, color: 'var(--pdd-pink)', change: null },
-      { key: 'promoRatio', label: '推广占比', value: fullKpi.promoRatio, fmt: (v: number) => `${v.toFixed(1)}%`, color: 'var(--pdd-orange)', change: null },
+      { key: 'rfRate', label: '退款率', value: fullKpi.rfRate, fmt: (v: number) => `${v.toFixed(2)}%`, color: '#FF4D4F', change: null },
+      { key: 'asRate', label: '售后率', value: fullKpi.asRate, fmt: (v: number) => `${v.toFixed(2)}%`, color: '#FAAD14', change: null },
+      { key: 'postage', label: '邮费总额', value: fullKpi.postage, fmt: (v: number) => `¥${v.toFixed(2)}`, color: 'var(--pdd-cyan)', change: null },
+      { key: 'refundAmount', label: '退款金额', value: fullKpi.refundAmount, fmt: (v: number) => `¥${v.toFixed(2)}`, color: '#FF7875', change: null },
+      { key: 'discount', label: '优惠总额', value: fullKpi.discount, fmt: (v: number) => `¥${v.toFixed(2)}`, color: '#FFC53D', change: null },
+      { key: 'promoGmv', label: '推广GMV', value: fullKpi.promoGmv, fmt: (v: number) => `¥${v.toFixed(2)}`, color: 'var(--pdd-pink)', change: null },
+      { key: 'promoRatio', label: '推广占比', value: fullKpi.promoRatio, fmt: (v: number) => `${v.toFixed(2)}%`, color: 'var(--pdd-orange)', change: null },
       { key: 'shopRoi', label: '全店投产', value: fullKpi.shopRoi, fmt: (v: number) => v.toFixed(2), color: '#52C41A', change: null },
     ];
   }, [fullKpi, compareFullKpi]);

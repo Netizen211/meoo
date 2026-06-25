@@ -21,6 +21,7 @@ import rechargeRoutes from './routes/recharge';
 import analyticsRoutes from './routes/analytics';
 import subAccountRoutes from './routes/subAccounts';
 import sseRoutes from './routes/sse';
+import preferencesRoutes from './routes/preferences';
 import { startCleanupCron } from './services/cleanupService';
 import { startRiskDetection } from './services/riskDetectionService';
 import bcrypt from 'bcrypt';
@@ -240,7 +241,8 @@ app.use(`${API_V1}/admin`, tenantContext, adminRoutes);
 app.use(`${API_V1}/recharge`, tenantContext, rechargeRoutes);
 app.use(`${API_V1}/analytics`, tenantContext, analyticsRoutes);
 app.use(`${API_V1}/sub-accounts`, tenantContext, subAccountRoutes);
-app.use(`${API_V1}/sse`, tenantContext, sseRoutes);  // ★ SSE 实时推送
+app.use(`${API_V1}/sse`, tenantContext, sseRoutes);
+app.use(`${API_V1}/preferences`, tenantContext, preferencesRoutes);  // ★ 用户偏好  // ★ SSE 实时推送
 
 // auth 路由单独处理（不含 tenantContext，因登录时尚未有完整上下文）
 app.use(`${API_V1}/auth`, loginLimiter, authRoutes);

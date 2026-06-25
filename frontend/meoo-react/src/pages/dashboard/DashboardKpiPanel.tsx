@@ -1,37 +1,137 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ArrowUp, ArrowDown, TrendingUp, X, Search } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from 'recharts';
 import { KPI_LINES, ChartTooltip } from '../../utils/trendData';
+import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, useSortable, rectSortingStrategy, arrayMove } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
-// ─── 指标分组定义 ────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════
+//  ★★★  新增KPI完整指南  ★★★
+//
+//  【历史教训】之前 自然单/自然销售额/快递成本/平均询单成本/平均收藏成本/
+//  平均关注成本/总询单成本/总收藏成本/总关注成本 这 9 个KPI无法被选择器控制，
+//  就是因为没有完成以下所有步骤，导致"显示了但勾不掉"的bug。
+//
+//  【新增一个KPI必须修改以下 4 处（缺一不可）】
+//
+//  ① 本文件 KPI_GROUPS  ↓↓↓  把 label 加到对应分组
+//     例: labels: ['新指标名', ...]
+//
+//  ② 本文件 getCardLabelForKey  ↓↓↓  加上 key → label 映射
+//     例: 'newKpiKey': '新指标名',
+//
+//  ③ trendData.tsx 的 KPI_LINES  ↓↓↓  加上趋势线定义（color, type）
+//     例: { key: 'newKpiKey', label: '新指标名', type: 'value', color: '#xxxxxx' },
+//
+//  ④ DashboardPage.tsx 的 allKpiCards 计算区  ↓↓↓  算出 value/change/fmt
+//     例: { label: '新指标名', value: ..., change: ..., fmt: ..., icon: ... },
+//
+//  如果涉及后端新字段，还需要加：
+//  ⑤ backend/src/shared-types.ts → 类型定义
+//  ⑥ backend/src/services/dataService.ts → 聚合逻辑
+//
+//  【常见错误自查】
+//  ☐ 选择器面板里找不到这个指标？ → 漏了 ①
+//  ☐ 勾了不显示卡片？            → 漏了 ④
+//  ☐ 趋势图选不到这个指标？      → 漏了 ③
+//  ☐ 勾掉又自动出现？            → 漏了 ② 或者 MUST_SHOW 没删干净
+// ════════════════════════════════════════════════════════════════════════
 const KPI_GROUPS: { name: string; labels: string[] }[] = [
   {
     name: '收入',
-    labels: ['GMV（商品总价）', '商家实收', '用户实付', '自然销售额', '优惠总额'],
+    labels: [
+      'GMV（商品总价）', '商家实收', '用户实付', '自然销售额', '优惠总额',
+      '净GMV(GMV-退款)', '净实收(实收-退款)', '单均GMV', '单均实收',
+      '实收/GMV比', '实付/GMV比', '自然占比', '折扣率', '单均优惠',
+    ],
   },
   {
     name: '订单',
-    labels: ['有效订单量', '客单价', '买家数', '商品数', '自然单', '平均发货时长', '发货率', 'SKU数量'],
+    labels: [
+      '有效订单量', '客单价', '买家数', '商品数',
+      '自然单', '平均发货时长', '发货率', 'SKU数量',
+      '人均订单数', '每单件数',
+    ],
   },
   {
     name: '退款/售后',
-    labels: ['退款金额', '退款单数', '退款率', '售后率', '退款金额(按同意退款时间)', '退款单数(按同意退款时间)'],
+    labels: [
+      '退款金额', '退款单数', '退款率', '售后率',
+      '退款金额(按同意退款时间)', '退款单数(按同意退款时间)',
+      '平均退款额', '退款侵蚀率', '同意退款率',
+      '退款后实收', '退款成本合计',
+    ],
   },
   {
     name: '利润',
-    labels: ['利润金额', '罚款金额', '罚款次数'],
+    labels: [
+      '利润金额', '净利润率', '毛利润', '毛利率',
+      '单均利润', '单均实收', '人均利润', '单商品利润', '单SKU利润',
+      '罚款金额', '罚款次数', '调整后利润(去罚款)',
+    ],
+  },
+  {
+    name: '成本与费用',
+    labels: [
+      '平台服务费', '快递成本', '运费险',
+      '平台费率', '快递费率', '运费险率',
+      '总成本率', '总运营成本', '单均运营成本',
+      '退款成功快递发货成本', '退货退回成本',
+      '退款单均成本',
+    ],
   },
   {
     name: '推广',
-    labels: ['推广花费', '推广GMV', '推广ROI', '推广订单量', '推广占比', '全店投产'],
+    labels: [
+      '推广花费', '推广GMV', '推广ROI', '推广订单量', '推广占比', '全店投产',
+      '曝光量', '点击量',
+      '推广订单占比', '推广GMV占比', '单均推广费', '单品均推广费',
+      '自然单占比', '推广费用率', '推广收入比',
+    ],
   },
   {
     name: '广告效果',
-    labels: ['点击率', '转化率', '平均点击成本', '平均获客成本', '曝光量', '点击量', '询单成本', '收藏成本', '关注成本'],
+    labels: [
+      '点击率', '转化率', '点击转化率',
+      '平均点击成本', '平均订单花费', '千次曝光成本',
+      '每点击GMV', '每点击收入',
+    ],
   },
   {
-    name: '费用',
-    labels: ['平台服务费', '快递成本', '运费险', '退款成功快递发货成本', '退货退回成本'],
+    name: '推广互动成本',
+    labels: [
+      '总询单成本', '总收藏成本', '总关注成本',
+      '平均询单成本', '平均收藏成本', '平均关注成本',
+      '总互动成本', '互动成本率', '单次互动成本',
+    ],
+  },
+  {
+    name: '商品结构',
+    labels: [
+      '商品数', 'SKU数量',
+      '单商品收入', '单商品利润', '单商品订单',
+    ],
+  },
+  {
+    name: '客户价值',
+    labels: [
+      '买家数', '人均订单数', '人均消费', '人均利润',
+      '人均SKU数',
+    ],
+  },
+  {
+    name: '物流履约',
+    labels: [
+      '平均发货时长', '发货率', '快递成本', '快递费率',
+    ],
+  },
+  {
+    name: '财务',
+    labels: [
+      '罚款金额', '罚款次数', '百亿补贴', '平台服务费',
+      '罚款占利润比',
+    ],
   },
 ];
 
@@ -66,6 +166,42 @@ interface Props {
   onClearLines?: () => void;
 }
 
+// ─── 可拖拽 KPI 卡片（与原始卡片样式完全一致，无任何额外装饰） ───
+function SortableKpiCard({ card, noData, onCardClick }: { card: KpiCardItem; noData: boolean; onCardClick: (label: string) => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: card.label });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    position: 'relative',
+    zIndex: isDragging ? 50 : 'auto',
+  };
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      onClick={() => onCardClick(card.label)}
+      className="bg-pdd-card rounded-lg border border-pdd-border px-4 py-3 cursor-grab active:cursor-grabbing hover:border-pdd-primary/30 transition-colors"
+    >
+      <div className="flex items-center gap-1.5 mb-0.5">
+        <card.icon size={13} className="text-pdd-text-secondary" />
+        <span className="text-[11px] font-medium text-pdd-text-secondary/80">{card.label}</span>
+      </div>
+      <div className="flex items-baseline gap-1.5">
+        <span className="text-xl font-semibold text-pdd-text tracking-tight">{noData ? '--' : card.value != null ? card.fmt(card.value) : '--'}</span>
+        {card.change != null && Math.abs(card.change) > 0.01 && (
+          <span className={`text-[11px] ${card.change > 0 ? 'text-pdd-success' : 'text-pdd-danger'}`}>
+            {card.change > 0 ? <ArrowUp size={10} className="inline" /> : <ArrowDown size={10} className="inline" />}
+            {Math.abs(card.change).toFixed(1)}%
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardKpiPanel({
   kpiCards, allKpiCards, visibleKpis, setVisibleKpis, showKpiSelector, setShowKpiSelector,
   filteredOrders, noData,
@@ -77,6 +213,13 @@ export default function DashboardKpiPanel({
   const selectedLines = KPI_LINES.filter(l => selectedTrendKpis.has(l.key));
   // 指标选择面板搜索
   const [kpiSearch, setKpiSearch] = useState('');
+
+  // ★ 构建 label → { value, fmt } 映射，用于选择器显示数值
+  const kpiValueMap = useMemo(() => {
+    const map = new Map<string, { value: number | undefined; fmt: (v: number) => string }>();
+    allKpiCards.forEach(k => map.set(k.label, { value: k.value, fmt: k.fmt }));
+    return map;
+  }, [allKpiCards]);
 
   // 根据 KPI_LINES key 找到对应的卡片 label（42个全映射）
   const getCardLabelForKey = (key: string): string | undefined => {
@@ -95,10 +238,52 @@ export default function DashboardKpiPanel({
       'promoCost': '推广花费', 'promoGmv': '推广GMV', 'promoRoi': '推广ROI',
       'promoOrders': '推广订单量', 'promoRatio': '推广占比', 'shopRoi': '全店投产',
       'totalImpressions': '曝光量', 'totalClicks': '点击量',
-      'ctr': '点击率', 'cvr': '转化率', 'cpc': '平均点击成本', 'cpa': '平均获客成本',
-      'avgInquiryCost': '询单成本', 'avgFavoriteCost': '收藏成本', 'avgFollowCost': '关注成本',
+      'ctr': '点击率', 'cvr': '转化率', 'cpc': '平均点击成本', 'cpa': '平均订单花费',
+      'avgInquiryCost': '平均询单成本', 'avgFavoriteCost': '平均收藏成本', 'avgFollowCost': '平均关注成本',
+      'inquiryCost': '总询单成本', 'favoriteCost': '总收藏成本', 'followCost': '总关注成本',
       'refundedShippingCost': '退款成功快递发货成本', 'returnShippingCost': '退货退回成本',
       'platformFee': '平台服务费', 'postage': '快递成本', 'insurance': '运费险',
+      'grossProfitRate': '毛利率', 'netProfitRate': '净利润率',
+      'profitPerOrder': '单均利润', 'avgRefundAmount': '平均退款额',
+      'promoCostRate': '推广费用率',
+      // ── 扩展映射（与KPI_LINES一一对应） ──
+      'netGmv': '净GMV(GMV-退款)', 'netRevenue': '净实收(实收-退款)',
+      'gmvPerOrder': '单均GMV', 'mrPerOrder': '单均实收',
+      'ordersPerBuyer': '人均订单数', 'itemsPerOrder': '每单件数',
+      'refundErosionRate': '退款侵蚀率', 'refundApprovalRate': '同意退款率',
+      'mrAfterRefund': '退款后实收',
+      // 'profitRate': '利润率', -- removed (duplicate of netProfitRate)
+      'grossProfit': '毛利润',
+      'promoOrderRatio': '推广订单占比', 'promoGmvRatio': '推广GMV占比',
+      'promoCostPerOrder': '单均推广费', 'cpm': '千次曝光成本',
+      'promoCvr': '点击转化率',
+      'totalInteractionCost': '总互动成本', 'interactionCostRate': '互动成本率',
+      'avgInteractionCost': '单次互动成本',
+      'platformFeeRate': '平台费率', 'postageRate': '快递费率',
+      'totalCostRate': '总成本率',
+      'discRate': '折扣率', 'organicRatio': '自然占比',
+      'merchantTakeRate': '实收/GMV比', 'discPerOrder': '单均优惠',
+      'paidTakeRate': '实付/GMV比', 'insuranceRate': '运费险率',
+      'subsidyFee': '百亿补贴',
+      // -- 补齐缺失的 18 个 KPI_LINES 映射 --
+      'adjustedProfit': '调整后利润(去罚款)',
+      'gmvPerClick': '每点击GMV',
+      'opCostPerOrder': '单均运营成本',
+      'ordersPerProduct': '单商品订单',
+      'organicOrderRatio': '自然单占比',
+      'penaltyProfitRatio': '罚款占利润比',
+      'profitPerBuyer': '人均利润',
+      'profitPerProduct': '单商品利润',
+      'profitPerSku': '单SKU利润',
+      'promoCostPerProduct': '单品均推广费',
+      'promoToRevenue': '推广收入比',
+      'refundCostPerOrder': '退款单均成本',
+      'revenuePerClick': '每点击收入',
+      'revenuePerProduct': '单商品收入',
+      'skuPerBuyer': '人均SKU数',
+      'spendingPerBuyer': '人均消费',
+      'totalOpCost': '总运营成本',
+      'totalRefundCost': '退款成本合计',
     };
     return map[key];
   };
@@ -113,16 +298,49 @@ export default function DashboardKpiPanel({
     if (!wasChecked && onKpiSelect) onKpiSelect(label);
   };
 
+  // ── 点击外部关闭选择面板 ──
+  const selectorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showKpiSelector) return;
+    let handler: ((e: MouseEvent) => void) | null = null;
+    const id = setTimeout(() => {
+      handler = (e: MouseEvent) => {
+        if (selectorRef.current && !selectorRef.current.contains(e.target as Node)) {
+          setShowKpiSelector(false);
+        }
+      };
+      document.addEventListener('mousedown', handler);
+    }, 0);
+    return () => { clearTimeout(id); if (handler) document.removeEventListener('mousedown', handler); };
+  }, [showKpiSelector, setShowKpiSelector]);
+
+  // ── 传感器（只响应鼠标拖拽，点击不移） ──
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
+
+  /** 拖拽结束：更新排序 */
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = kpiCards.findIndex(c => c.label === active.id);
+    const newIndex = kpiCards.findIndex(c => c.label === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+    const newCards = arrayMove(kpiCards, oldIndex, newIndex);
+    onCardReorder?.(newCards);
+  };
+
   // 已选指标数量
   const checkedCount = visibleKpis.size;
 
   return (
     <div>
       {/* 指标选择面板 — 分组式 */}
+      <div ref={selectorRef}>
       {showKpiSelector && (
         <div className="bg-pdd-card rounded-lg border border-pdd-border mb-3 overflow-hidden shadow-lg">
           {/* 搜索栏 */}
-          <div className="flex items-center gap-2 px-3 py-2 border-b border-pdd-border/50">
+          <div className="flex items-center gap-2 px-2 py-1.5 border-b border-pdd-border/50">
             <Search size={13} className="text-pdd-text-secondary/50 shrink-0" />
             <input
               type="text"
@@ -144,7 +362,7 @@ export default function DashboardKpiPanel({
             <span className="text-[10px] text-pdd-text-secondary/40 tabular-nums">{checkedCount}/{allKpiCards.length}</span>
           </div>
           {/* 指标列表：有搜索 → 平铺；无搜索 → 分组 */}
-          <div className="max-h-64 overflow-y-auto p-2">
+          <div className="max-h-96 overflow-y-auto p-2">
             {kpiSearch.trim() ? (
               /* ── 搜索模式：平铺所有匹配项 ── */
               (() => {
@@ -152,28 +370,35 @@ export default function DashboardKpiPanel({
                 const matched = allKpiCards.filter(k => k.label.toLowerCase().includes(q));
                 if (matched.length === 0) return <div className="text-xs text-pdd-text-secondary/40 text-center py-4">无匹配指标</div>;
                 return (
-                  <div className="flex flex-wrap gap-1">
+                  <div className="grid grid-cols-2">
                     {matched.map(k => {
                       const isChecked = visibleKpis.has(k.label);
                       return (
-                        <button key={k.label} onClick={() => toggleKpi(k.label)}
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-all ${
-                            isChecked
-                              ? 'bg-pdd-primary/10 text-pdd-primary border border-pdd-primary/25'
-                              : 'text-pdd-text-secondary/70 border border-transparent hover:bg-pdd-gray-100/50'
-                          }`}
-                        >
-                          {isChecked && <span className="w-1.5 h-1.5 rounded-full bg-pdd-primary shrink-0" />}
-                          <span>{k.label}</span>
-                        </button>
+                        <div key={k.label} className="border border-dashed border-pdd-border/25 -mr-px -mb-px">
+                          <button onClick={() => toggleKpi(k.label)}
+                            className={`w-full inline-flex items-center gap-1 px-1.5 py-1 text-[11px] leading-tight transition-all ${
+                              isChecked
+                                ? 'bg-pdd-primary/10 text-pdd-primary'
+                                : 'text-pdd-text-secondary/70 hover:bg-pdd-gray-100/50'
+                            }`}
+                          >
+                            {isChecked && <span className="w-1.5 h-1.5 rounded-full bg-pdd-primary shrink-0" />}
+                            <span className="truncate">{k.label}</span>
+                            {(() => {
+                              const vm = kpiValueMap.get(k.label);
+                              if (!vm || vm.value === undefined) return null;
+                              return <span className="ml-auto text-[10px] tabular-nums text-pdd-text-secondary/50 font-medium">{vm.fmt(vm.value)}</span>;
+                            })()}
+                          </button>
+                        </div>
                       );
                     })}
                   </div>
                 );
               })()
             ) : (
-              /* ── 分组模式 ── */
-              <div className="space-y-2">
+              /* ── 分组模式 — 3列实线边框 + 内部虚线分割 ── */
+              <div className="grid grid-cols-4 gap-1.5">
                 {KPI_GROUPS.map(group => {
                   const groupCards = allKpiCards.filter(k => group.labels.includes(k.label));
                   if (groupCards.length === 0) return null;
@@ -181,10 +406,10 @@ export default function DashboardKpiPanel({
                   const allChecked = checkedInGroup === groupCards.length;
                   const noneChecked = checkedInGroup === 0;
                   return (
-                    <div key={group.name}>
+                    <div key={group.name} className="border border-solid border-pdd-border/40 rounded-md px-2 pt-1.5 pb-1">
                       {/* 分组头 */}
-                      <div className="flex items-center justify-between px-1 py-1">
-                        <span className="text-[10px] font-medium text-pdd-text-secondary/60 uppercase tracking-wider">{group.name}</span>
+                      <div className="flex items-center justify-between pb-1 mb-1 border-b border-dashed border-pdd-border/30">
+                        <span className="text-[11px] font-semibold text-pdd-text-secondary/70">{group.name}</span>
                         <button
                           onClick={() => {
                             const newSet = new Set(visibleKpis);
@@ -194,12 +419,11 @@ export default function DashboardKpiPanel({
                               groupCards.forEach(k => newSet.add(k.label));
                             }
                             setVisibleKpis(newSet);
-                            // 选中时逐个通知父级排序
                             if (!allChecked && onKpiSelect) {
                               groupCards.forEach(k => { if (!visibleKpis.has(k.label)) onKpiSelect(k.label); });
                             }
                           }}
-                          className={`text-[10px] px-2 py-0.5 rounded transition-colors ${
+                          className={`text-[10px] px-1.5 py-0.5 rounded transition-colors ${
                             allChecked
                               ? 'text-pdd-primary/60 hover:text-pdd-primary bg-pdd-primary/5'
                               : noneChecked
@@ -210,21 +434,29 @@ export default function DashboardKpiPanel({
                           {allChecked ? '取消全选' : noneChecked ? '全选' : `已选${checkedInGroup}/${groupCards.length}`}
                         </button>
                       </div>
-                      {/* 分组内指标按钮 */}
-                      <div className="flex flex-wrap gap-1 px-1 pb-2">
-                        {groupCards.map(k => {
+                      {/* 分组内指标 — 虚线网格分割 */}
+                      <div className="grid grid-cols-2">
+                        {groupCards.map((k, ki) => {
                           const isChecked = visibleKpis.has(k.label);
+                          const colSpan = groupCards.length === 3 && ki === 2 ? 'col-span-2' : '';
                           return (
-                            <button key={k.label} onClick={() => toggleKpi(k.label)}
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs transition-all ${
-                                isChecked
-                                  ? 'bg-pdd-primary/10 text-pdd-primary border border-pdd-primary/25'
-                                  : 'text-pdd-text-secondary/70 border border-transparent hover:bg-pdd-gray-100/50'
-                              }`}
-                            >
-                              {isChecked && <span className="w-1.5 h-1.5 rounded-full bg-pdd-primary shrink-0" />}
-                              <span>{k.label}</span>
-                            </button>
+                            <div key={k.label} className={`border border-dashed border-pdd-border/25 -mr-px -mb-px ${colSpan}`}>
+                              <button onClick={() => toggleKpi(k.label)}
+                                className={`w-full inline-flex items-center gap-1 px-1.5 py-1 text-[11px] leading-tight transition-all ${
+                                  isChecked
+                                    ? 'bg-pdd-primary/10 text-pdd-primary'
+                                    : 'text-pdd-text-secondary/70 hover:bg-pdd-gray-100/50'
+                                }`}
+                              >
+                                {isChecked && <span className="w-1.5 h-1.5 rounded-full bg-pdd-primary shrink-0" />}
+                                <span className="truncate">{k.label}</span>
+                                {(() => {
+                                  const vm = kpiValueMap.get(k.label);
+                                  if (!vm || vm.value === undefined) return null;
+                                  return <span className="ml-auto text-[10px] tabular-nums text-pdd-text-secondary/50 font-medium">{vm.fmt(vm.value)}</span>;
+                                })()}
+                              </button>
+                            </div>
                           );
                         })}
                       </div>
@@ -236,30 +468,18 @@ export default function DashboardKpiPanel({
           </div>
         </div>
       )}
-
-      {/* KPI 卡片网格 */}
-      <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
-        {kpiCards.map((c) => (
-            <div
-              key={c.label}
-              onClick={() => onCardClick(c.label)}
-              className="bg-pdd-card rounded-lg border border-pdd-border px-4 py-3 cursor-pointer hover:border-pdd-primary/30 transition-colors">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <c.icon size={13} className="text-pdd-text-secondary" />
-                <span className="text-[11px] font-medium text-pdd-text-secondary/80">{c.label}</span>
-              </div>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-xl font-semibold text-pdd-text tracking-tight">{noData ? '--' : c.value != null ? c.fmt(c.value) : '--'}</span>
-                {c.change != null && Math.abs(c.change) > 0.01 && (
-                  <span className={`text-[11px] ${c.change > 0 ? 'text-pdd-success' : 'text-pdd-danger'}`}>
-                    {c.change > 0 ? <ArrowUp size={10} className="inline" /> : <ArrowDown size={10} className="inline" />}
-                    {Math.abs(c.change).toFixed(1)}%
-                  </span>
-                )}
-              </div>
-            </div>
-          ))}
       </div>
+
+      {/* KPI 卡片网格 — 鼠标拖拽调整顺序 */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={kpiCards.map(c => c.label)} strategy={rectSortingStrategy}>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+            {kpiCards.map((c) => (
+              <SortableKpiCard key={c.label} card={c} noData={noData} onCardClick={onCardClick} />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
 
       {/* 趋势图 */}
       {dailyKpiData.length > 0 && (

@@ -299,4 +299,43 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
   }
 });
 
+// ★ 获取/创建 API Token（供浏览器扩展使用）
+router.get('/api-token', requireAuth, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const row = await db('user_preferences').where({ user_id: userId, key: 'api_token' }).first();
+
+    if (row) {
+      res.json({ success: true, data: { token: row.value } });
+    } else {
+      // 生成新 token
+      const token = 'hdt_' + crypto.randomBytes(24).toString('hex');
+      await db('user_preferences').insert({
+        user_id: userId,
+        key: 'api_token',
+        value: token,
+        version: 1,
+        updated_at: new Date(),
+      });
+      res.json({ success: true, data: { token } });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message || '获取API Token失败' });
+  }
+});
+
+// ★ 验证 API Token 中间件
+export async function verifyApiToken(token: string): Promise<{ userId: string; username: string } | null> {
+  try {
+    const row = await db('user_preferences')
+      .join('users', 'user_preferences.user_id', 'users.id')
+      .where({ 'user_preferences.key': 'api_token', 'user_preferences.value': token, 'users.is_banned': false })
+      .select('users.id', 'users.username')
+      .first();
+    return row || null;
+  } catch {
+    return null;
+  }
+}
+
 export default router;

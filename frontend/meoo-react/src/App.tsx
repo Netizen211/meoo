@@ -9,6 +9,7 @@ import { Toaster } from './components/ui/toast';
 import ProtectionProvider from './protection/ProtectionProvider';
 import { initTracker, trackPageView } from './services/tracker';
 import { useDarkMode } from './hooks/useDarkMode';
+import { usePreferenceStore } from './store/preferenceStore';
 import { useAutoReload } from './utils/useAutoReload';
 
 // ★ 代码分割：按路由懒加载（首屏只加载当前页面代码，其余按需加载）
@@ -199,7 +200,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setStoresLoaded(true);
       // ★ 自动选中店铺（双层策略）
       // 策略1：从 localStorage 恢复上次选中的店铺（刷新不丢）
-      const lastStoreId = (() => { try { return localStorage.getItem('dianfx_last_store'); } catch { return null; } })();
+      const lastStoreId = (() => { try { return usePreferenceStore.getState().get<string>('last_store', ''); } catch { return null; } })();
       const lastStore = lastStoreId ? mapped.find(s => s.id === lastStoreId) : null;
       // 策略2：选第一个非演示店铺
       const realStores = mapped.filter(s => s.id !== ALL_STORES_ID && !s.name.includes('演示'));
@@ -207,7 +208,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const autoStore = lastStore || nonDemoStore;
       if (autoStore && (wasEmpty || !storesRef.current.some(s => s.id === currentStore?.id))) {
         setCurrentStore(autoStore);
-        try { localStorage.setItem('dianfx_last_store', autoStore.id); } catch {}
+        try { usePreferenceStore.getState().set('last_store', autoStore.id); } catch {}
       }
       return mapped;
     } else if (res.success) {
@@ -237,7 +238,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const found = storesRef.current.find(s => s.id === id);
     if (found) {
       setCurrentStore(found);
-      try { localStorage.setItem('dianfx_last_store', id); } catch {}
+      try { usePreferenceStore.getState().set('last_store', id); } catch {}
     }
   }, []);
 
@@ -838,6 +839,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
                       lastRefreshTimeRef.current = Date.now();
                       refreshStoreData(payload.storeId, true);
                       refreshAnalytics(payload.storeId);
+                    } else if (eventType === 'preference:updated' && payload.key) {
+                      // ★ 跨设备偏好同步：远程更新的偏好立即应用到本地
+                      usePreferenceStore.getState().applyRemoteUpdate(payload.key, payload.value, payload.version);
+                    } else if (eventType === 'preference:deleted' && payload.key) {
+                      // 偏好被删除时，重新加载全量
+                      usePreferenceStore.getState().reload();
                     }
                   } catch {}
                 }
@@ -869,6 +876,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (reconnectTimer) clearTimeout(reconnectTimer);
     };
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ★ PreferenceStore 初始化：登录时加载用户偏好，退出时清理
+  useEffect(() => {
+    if (user?.id) {
+      usePreferenceStore.getState().initialize(user.id).then(() => {
+        // 异步迁移旧 localStorage 数据到服务端
+        usePreferenceStore.getState().migrateLegacyData(user.id).then((count) => {
+          if (count > 0) {
+            console.log(`[PreferenceStore] 已迁移 ${count} 项旧数据到服务端`);
+          }
+        });
+      });
+    } else {
+      usePreferenceStore.getState().destroy();
+    }
+  }, [user?.id]);
 
   // ★ Layer 3: 快速轮询兜底（SSE断开时每5秒兜底，SSE连接时不轮询）
   useEffect(() => {

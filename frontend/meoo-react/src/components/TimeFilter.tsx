@@ -30,6 +30,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { Calendar, ChevronDown, Clock, Save, X } from 'lucide-react';
 import { findField } from '../utils/fieldAccess';
+import { usePreferenceStore } from '../store/preferenceStore';
 
 export type TimeRange = '7' | '30' | '90' | 'all' | 'custom';
 export type TimeGranularity = 'day' | 'week' | 'month';
@@ -75,10 +76,10 @@ export function useTimeFilter(defaultRange: TimeRange = '7', defaultGranularity:
   const [compareEnd, setCompareEnd] = useState<string>('');
   const [quickRange, setQuickRangeState] = useState<QuickRange | undefined>();
   const [useNaturalDate, setUseNaturalDate] = useState(false);
-  const [savedRanges, setSavedRanges] = useState<SavedRange[]>(() => {
-    const saved = localStorage.getItem('dianfx_saved_ranges');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // 使用 PreferenceStore 管理 savedRanges（跨设备同步）
+  const prefStore = usePreferenceStore();
+  const savedRanges = prefStore.get<SavedRange[]>('saved_ranges', []);
+  const setSavedRanges = (newRanges: SavedRange[]) => prefStore.set('saved_ranges', newRanges);
 
   const setCustomRange = (start: string, end: string) => {
     setCustomStart(start);
@@ -121,13 +122,11 @@ export function useTimeFilter(defaultRange: TimeRange = '7', defaultGranularity:
     };
     const updated = [...savedRanges, newRange];
     setSavedRanges(updated);
-    localStorage.setItem('dianfx_saved_ranges', JSON.stringify(updated));
   };
 
   const deleteSavedRange = (id: string) => {
     const updated = savedRanges.filter(r => r.id !== id);
     setSavedRanges(updated);
-    localStorage.setItem('dianfx_saved_ranges', JSON.stringify(updated));
   };
 
   const applySavedRange = (range: SavedRange) => {

@@ -238,6 +238,24 @@ function AccountSection({ user, logout }: any) {
     : user?.membershipLevel === 'pro' ? '专业版' : '免费版';
   const membershipVariant = user?.membershipLevel === 'enterprise' ? 'default'
     : user?.membershipLevel === 'pro' ? 'success' : 'secondary';
+  const [apiToken, setApiToken] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    apiClient.get('/auth/api-token').then((r: any) => {
+      if (r.success && r.data?.token) setApiToken(r.data.token);
+    }).catch(() => {});
+  }, []);
+
+  const handleCopyToken = () => {
+    navigator.clipboard.writeText(apiToken).then(() => {
+      setCopied(true);
+      toast.success('API Token 已复制');
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      toast.error('复制失败，请手动选中复制');
+    });
+  };
 
   return (
     <div className="max-w-2xl">
@@ -258,6 +276,31 @@ function AccountSection({ user, logout }: any) {
               <Badge variant={membershipVariant as any}>{membershipLabel}</Badge>
             </div>
           </div>
+
+          {/* API Token (for browser extension) */}
+          {apiToken && (
+            <div className="mt-4 pt-4 border-t border-pdd-border/50">
+              <h4 className="text-sm font-medium mb-2 flex items-center gap-1.5">
+                <Shield size={14} className="text-pdd-primary" />
+                浏览器扩展 API Token
+              </h4>
+              <p className="text-[11px] text-pdd-text-secondary mb-2">
+                将此 Token 填入拼多多图片同步浏览器扩展中，即可自动导入商品图片。
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  value={apiToken}
+                  readOnly
+                  className="font-mono text-xs"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <Button variant="outline" size="sm" onClick={handleCopyToken} className="shrink-0">
+                  {copied ? <Check size={14} /> : '复制'}
+                </Button>
+              </div>
+            </div>
+          )}
+
           <div className="mt-4 pt-4 border-t border-pdd-border/50">
             <Button variant="destructive" size="sm" onClick={logout}>
               <LogOut size={14} className="mr-1.5" /> 退出登录

@@ -7,7 +7,7 @@ import {
   BarChart3, Eye, Hash, Zap, Box, Clock, Target, Activity,
   RefreshCw, Layers, Percent, RotateCcw, Filter, Upload,
   Image as ImageIcon, Settings, Edit3, FileImage, Lightbulb,
-  TrendingDown, GripVertical, Plus, Minus, Megaphone, Move, Info
+  TrendingDown, GripVertical, Plus, Minus, Megaphone, Move, Info, Tag
 } from 'lucide-react';
 import { useData, useAuth, useStore } from '../App';
 import { findField } from '../utils';
@@ -95,6 +95,60 @@ function EditableSpecLabel({ productId, defaultLabel, version, onRename }: {
     </span>
   );
 }
+
+// ── 模块级列配置常量（22列总额 / 15列单品） ──
+const COLS_TOTAL_DEFS: { key: string; label: string; width: string; sortable: boolean }[] = [
+  { key: 'revenue', label: '商家实收', width: '100px', sortable: true },
+  { key: 'orders', label: '订单量', width: '72px', sortable: true },
+  { key: 'sales', label: '销量', width: '72px', sortable: true },
+  { key: 'totalCost', label: '总成本', width: '90px', sortable: true },
+  { key: 'promo', label: '推广费', width: '90px', sortable: true },
+  { key: 'roi', label: '投产比', width: '80px', sortable: true },
+  { key: 'refundRate', label: '退款率', width: '80px', sortable: true },
+  { key: 'otherCost', label: '其他成本', width: '90px', sortable: true },
+  { key: 'profit', label: '利润', width: '100px', sortable: true },
+  { key: 'promoCost', label: '广告支出', width: '90px', sortable: true },
+  { key: 'logistics', label: '物流成本', width: '90px', sortable: true },
+  { key: 'platformFee', label: '平台佣金', width: '90px', sortable: true },
+  { key: 'profitRate', label: '毛利率', width: '80px', sortable: true },
+  { key: 'avgPrice', label: '客单价', width: '90px', sortable: true },
+  { key: 'stockDays', label: '库存周转', width: '80px', sortable: true },
+  { key: 'gmv', label: '销售额', width: '90px', sortable: true },
+  { key: 'promoTransaction', label: '推广成交', width: '90px', sortable: true },
+  { key: 'promoClicks', label: '推广点击', width: '80px', sortable: true },
+  { key: 'promoCostRatio', label: '费比', width: '72px', sortable: true },
+  { key: 'afterSaleRate', label: '售后率', width: '72px', sortable: true },
+  { key: 'unitProfit', label: '单品利润', width: '80px', sortable: true },
+  { key: 'unitCost', label: '单品成本', width: '80px', sortable: true },
+];
+const COLS_SINGLE_DEFS: { key: string; label: string; width: string; sortable: boolean }[] = [
+  { key: 'skuPrice', label: '单品价格', width: '90px', sortable: true },
+  { key: 'skuCount', label: 'SKU数量', width: '72px', sortable: true },
+  { key: 'skuCost', label: '单品成本', width: '90px', sortable: true },
+  { key: 'skuProfit', label: '单品利润', width: '90px', sortable: true },
+  { key: 'promoAvg', label: '单品推广费', width: '90px', sortable: true },
+  { key: 'roi', label: '投产比', width: '80px', sortable: true },
+  { key: 'refundRate', label: '退款率', width: '80px', sortable: true },
+  { key: 'profitRate', label: '利润率', width: '80px', sortable: true },
+  { key: 'grossMargin', label: '毛利率', width: '80px', sortable: true },
+  { key: 'stockDays', label: '库存周转', width: '80px', sortable: true },
+  { key: 'skuGmv', label: '单品销售额', width: '90px', sortable: true },
+  { key: 'skuOrders', label: '单品订单量', width: '72px', sortable: true },
+  { key: 'skuSales', label: '单品销量', width: '72px', sortable: true },
+  { key: 'afterSaleRate', label: '售后率', width: '72px', sortable: true },
+  { key: 'costRatio', label: '费比', width: '72px', sortable: true },
+];
+const COL_GROUPS: { label: string; keys: string[] }[] = [
+  { label: '收入', keys: ['revenue', 'gmv', 'avgPrice', 'profit', 'profitRate'] },
+  { label: '成本', keys: ['totalCost', 'promo', 'promoCost', 'logistics', 'platformFee', 'otherCost', 'unitCost'] },
+  { label: '效率', keys: ['orders', 'sales', 'roi', 'refundRate', 'afterSaleRate', 'promoCostRatio', 'stockDays', 'unitProfit', 'promoTransaction', 'promoClicks'] },
+];
+const SINGLE_GROUPS: { label: string; keys: string[] }[] = [
+  { label: '价格成本', keys: ['skuPrice', 'skuCost', 'skuProfit', 'promoAvg'] },
+  { label: '效率', keys: ['roi', 'refundRate', 'profitRate', 'grossMargin', 'stockDays', 'afterSaleRate', 'costRatio'] },
+  { label: '销售额', keys: ['skuGmv', 'skuOrders', 'skuSales'] },
+  { label: '其他', keys: ['skuCount'] },
+];
 
 export default function ProductPage() {
   const { currentDisplayData, productCosts, customDeductions, taxConfigs, defaultCostRatio, packagingFeePerOrder, shippingFeePerOrder, platformCommissionRate, insuranceFeePerOrder, orderFinancialActuals, abnormalOrders, serverProducts, serverDashboard } = useData();
@@ -204,9 +258,79 @@ export default function ProductPage() {
     });
   }, []);
 
-  const [dimMode, setDimMode] = useState<'单品' | '总额'>('总额');
-  const getRowDimMode = useCallback((productId: string): '单品' | '总额' => dimMode, [dimMode]);
+  // ── 单品/总额模式：每个商品独立 ──
+  const [productDimModes, setProductDimModes] = useState<Record<string, '单品' | '总额'>>({});
+  const getRowDimMode = useCallback((productId: string): '单品' | '总额' => {
+    return productDimModes[productId] || '总额';
+  }, [productDimModes]);
   const [listFilter, setListFilter] = useState<'all' | 'active' | 'zero'>('all');
+  // ── 列管理 ──
+  const MAX_VISIBLE_COLS = 8;
+  const [colSelectorOpen, setColSelectorOpen] = useState(false);
+  const colSelectorRef = useRef<HTMLDivElement>(null);
+  const DEFAULT_TOTAL_KEYS = new Set(COLS_TOTAL_DEFS.slice(0, MAX_VISIBLE_COLS).map(c => c.key));
+  const DEFAULT_SINGLE_KEYS = new Set(COLS_SINGLE_DEFS.slice(0, MAX_VISIBLE_COLS).map(c => c.key));
+  const [visibleTotalCols, setVisibleTotalCols] = useState<Set<string>>(() => new Set(DEFAULT_TOTAL_KEYS));
+  const [visibleSingleCols, setVisibleSingleCols] = useState<Set<string>>(() => new Set(DEFAULT_SINGLE_KEYS));
+
+  // ── 列选择器点击外部关闭（允许 gear icon 触发） ──
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (target.closest('[data-col-settings]')) return; // gear icon 触发放行
+      if (colSelectorRef.current && !colSelectorRef.current.contains(target)) {
+        setColSelectorOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+  // ── 每行独立数据窗口滚轮捕获（平滑滚动） ──
+  useEffect(() => {
+    const containers = document.querySelectorAll<HTMLElement>('[data-row-scroll="true"]');
+    const handlers: Array<[HTMLElement, (e: WheelEvent) => void]> = [];
+    containers.forEach(el => {
+      let scrollVelocity = 0;
+      let scrollAnimationId: number | null = null;
+      const SCROLL_DECEL = 0.85;
+      const SCROLL_SENSITIVITY = 0.6;
+
+      function animateScroll() {
+        if (Math.abs(scrollVelocity) < 0.5) {
+          scrollVelocity = 0;
+          scrollAnimationId = null;
+          return;
+        }
+        el.scrollLeft += scrollVelocity;
+        scrollVelocity *= SCROLL_DECEL;
+        scrollAnimationId = requestAnimationFrame(animateScroll);
+      }
+
+      const handler = (e: WheelEvent) => {
+        const colCount = parseInt(el.dataset.colCount || '0');
+        // 只有数据列超过9列且内容溢出时才捕获滚轮做横向平滑滚动
+        if (colCount > 9 && el.scrollWidth > el.clientWidth) {
+          e.preventDefault();
+          e.stopPropagation();
+          scrollVelocity += e.deltaY * SCROLL_SENSITIVITY;
+          const MAX_SPEED = 40;
+          if (scrollVelocity > MAX_SPEED) scrollVelocity = MAX_SPEED;
+          if (scrollVelocity < -MAX_SPEED) scrollVelocity = -MAX_SPEED;
+          if (!scrollAnimationId) {
+            scrollAnimationId = requestAnimationFrame(animateScroll);
+          }
+        }
+        // 否则不拦截，滚轮自然冒泡到页面，正常上下滚动
+      };
+      el.addEventListener('wheel', handler, { passive: false });
+      handlers.push([el, handler]);
+    });
+    return () => {
+      handlers.forEach(([el, handler]) => {
+        el.removeEventListener('wheel', handler);
+      });
+    };
+  }, [paginatedProducts, visibleTotalCols, visibleSingleCols]);
 
   // ── KPI 可见性 + 排序 ──
   const [visibleKpis, setVisibleKpis] = useState<Set<string>>(() => {
@@ -1256,6 +1380,16 @@ export default function ProductPage() {
     return nonEmpty.length > 0 ? nonEmpty : result;
   }
 
+  const getAlertTags = (p: any) => {
+    const tags: { label: string; color: string; bg: string }[] = [];
+    if (p.refundRate > 15) tags.push({ label: '高退款', color: 'var(--pdd-danger)', bg: 'var(--pdd-danger-bg)' });
+    if (p.sales <= 0) tags.push({ label: '零动销', color: 'var(--pdd-text-secondary)', bg: 'var(--pdd-bg)' });
+    if (p.inventoryStatus === 'low') tags.push({ label: '低库存', color: 'var(--pdd-warning)', bg: 'var(--pdd-warning-bg)' });
+    if (p.promoCostRatio > 30) tags.push({ label: '高推广依赖', color: 'var(--pdd-primary)', bg: 'var(--pdd-primary-bg)' });
+    if (p.turnoverDays > 30) tags.push({ label: '周转慢', color: 'var(--pdd-warning)', bg: 'var(--pdd-warning-bg)' });
+    return tags;
+  };
+
   // ── 智能目标算法：为所有列生成算法目标（基于「每单赚X元」引擎）──
   function computeSmartTargets(p: any, rowMode: '单品' | '总额'): Record<string, { value: number; fmt: string }> {
     const targetConfig = productTargets[p.id] || { profitPerOrder: 10 };
@@ -1488,54 +1622,111 @@ const noData = !filteredOrders.length;
     );
   };
 
-  // ── 列配置（上8框 / 下8框） ──
-  const COLS_TOTAL: { key: string; label: string; width: string; sortable: boolean }[] = [
-    { key: 'revenue', label: '商家实收', width: '100px', sortable: true },
-    { key: 'orders', label: '订单量', width: '72px', sortable: true },
-    { key: 'totalCost', label: '总成本', width: '90px', sortable: true },
-    { key: 'promo', label: '推广费', width: '90px', sortable: true },
-    { key: 'roi', label: '投产比', width: '80px', sortable: true },
-    { key: 'refundRate', label: '退款率', width: '80px', sortable: true },
-    { key: 'otherCost', label: '其他成本', width: '90px', sortable: true },
-    { key: 'profit', label: '利润', width: '100px', sortable: true },
-  ];
-  const COLS_SINGLE: { key: string; label: string; width: string; sortable: boolean }[] = [
-    { key: 'skuPrice', label: '单品价格', width: '100px', sortable: true },
-    { key: 'skuCount', label: 'SKU数量', width: '72px', sortable: true },
-    { key: 'skuCost', label: '单品成本', width: '90px', sortable: true },
-    { key: 'promoAvg', label: '推广费', width: '90px', sortable: true },
-    { key: 'roi', label: '投产比', width: '80px', sortable: true },
-    { key: 'refundRate', label: '退款率', width: '80px', sortable: true },
-    { key: 'profitRate', label: '利润率', width: '80px', sortable: true },
-    { key: 'skuProfit', label: '单品利润', width: '100px', sortable: true },
-  ];
+  // ── 列配置 — getMergedCellData：行内按 rowMode 映射 ──
 
   function getMergedCellData(colKey: string, p: any, rowMode: '单品' | '总额') {
+    const fmtMoney = (v: number) => v >= 10000 ? '¥' + (v / 10000).toFixed(1) + '万' : (v >= 100 ? '¥' + v.toFixed(0) : '¥' + v.toFixed(1));
+    const fmtPct = (v: number) => (v || 0).toFixed(1) + '%';
+    const fmtInt = (v: number) => (v || 0).toFixed(0);
     switch (colKey) {
       case 'revenue': {
         const r = p.revenue || 0;
-        return { val: r, tgtNum: 0, refNum: r, fmt: r >= 10000 ? '¥' + (r / 10000).toFixed(1) + '万' : '¥' + r.toFixed(0), refFmt: r >= 10000 ? '¥' + (r / 10000).toFixed(1) + '万' : '¥' + r.toFixed(0) };
+        return { val: r, tgtNum: 0, refNum: r, fmt: fmtMoney(r), refFmt: fmtMoney(r) };
       }
       case 'orders': return getCellData('orders', p);
+      case 'sales': return getCellData('sales', p);
       case 'totalCost': return getCellData('totalCost', p);
       case 'promo': {
         const pc = p.promoCost || 0;
-        return { val: pc, tgtNum: 0, refNum: pc, fmt: pc >= 10000 ? '¥' + (pc / 10000).toFixed(1) + '万' : (pc >= 100 ? '¥' + pc.toFixed(0) : '¥' + pc.toFixed(1)), refFmt: pc >= 10000 ? '¥' + (pc / 10000).toFixed(1) + '万' : (pc >= 100 ? '¥' + pc.toFixed(0) : '¥' + pc.toFixed(1)) };
+        return { val: pc, tgtNum: 0, refNum: pc, fmt: fmtMoney(pc), refFmt: fmtMoney(pc) };
       }
       case 'roi': return getCellData('roi', p);
       case 'refundRate': return getCellData('refundRate', p);
       case 'otherCost': {
         const cb = p.costBreakdown || {};
         const oc = (cb.packagingFee || 0) + (cb.shippingFee || 0) + (cb.platformFee || 0) + (cb.taxes || 0) + (cb.customDeductions || 0);
-        return { val: oc, tgtNum: 0, refNum: oc, fmt: oc > 0 ? '¥' + oc.toFixed(0) : '--', refFmt: oc > 0 ? '¥' + oc.toFixed(0) : '--' };
+        return { val: oc, tgtNum: 0, refNum: oc, fmt: oc > 0 ? fmtMoney(oc) : '--', refFmt: oc > 0 ? fmtMoney(oc) : '--' };
       }
       case 'profit': return getCellData('totalProfit', p);
+      case 'promoCost': {
+        const pc = p.promoCost || 0;
+        return { val: pc, tgtNum: 0, refNum: pc, fmt: fmtMoney(pc), refFmt: fmtMoney(pc) };
+      }
+      case 'logistics': {
+        const cb = p.costBreakdown || {};
+        const lg = (cb.shippingFee || 0) + (cb.packagingFee || 0);
+        return { val: lg, tgtNum: 0, refNum: lg, fmt: lg > 0 ? fmtMoney(lg) : '--', refFmt: lg > 0 ? fmtMoney(lg) : '--' };
+      }
+      case 'platformFee': {
+        const cb = p.costBreakdown || {};
+        const pf = cb.platformFee || 0;
+        return { val: pf, tgtNum: 0, refNum: pf, fmt: pf > 0 ? fmtMoney(pf) : '--', refFmt: pf > 0 ? fmtMoney(pf) : '--' };
+      }
+      case 'profitRate': return getCellData('profitRate', p);
+      case 'avgPrice': {
+        const a = p.avgPrice || 0;
+        return { val: a, tgtNum: 0, refNum: a, fmt: a > 0 ? '¥' + a.toFixed(0) : '--', refFmt: a > 0 ? '¥' + a.toFixed(0) : '--' };
+      }
+      case 'stockDays': {
+        const d = p.activeDays || 0;
+        return { val: d, tgtNum: 0, refNum: d, fmt: d > 0 ? d + '天' : '--', refFmt: d > 0 ? d + '天' : '--' };
+      }
+      case 'gmv': {
+        const g = p.gmv || 0;
+        return { val: g, tgtNum: 0, refNum: g, fmt: fmtMoney(g), refFmt: fmtMoney(g) };
+      }
+      case 'promoTransaction': {
+        const pt = p.promoTransaction || 0;
+        return { val: pt, tgtNum: 0, refNum: pt, fmt: pt > 0 ? fmtMoney(pt) : '--', refFmt: pt > 0 ? fmtMoney(pt) : '--' };
+      }
+      case 'promoClicks': {
+        const pc = p.promoClicks || 0;
+        return { val: pc, tgtNum: 0, refNum: pc, fmt: pc > 0 ? (pc >= 10000 ? (pc / 10000).toFixed(1) + '万' : pc.toFixed(0)) : '--', refFmt: pc > 0 ? (pc >= 10000 ? (pc / 10000).toFixed(1) + '万' : pc.toFixed(0)) : '--' };
+      }
+      case 'promoCostRatio': {
+        const pcr = p.promoCostRatio || 0;
+        return { val: pcr, tgtNum: 0, refNum: pcr, fmt: pcr > 0 ? fmtPct(pcr) : '--', refFmt: pcr > 0 ? fmtPct(pcr) : '--' };
+      }
+      case 'afterSaleRate': {
+        const ar = p.afterSaleRate || 0;
+        return { val: ar, tgtNum: 0, refNum: ar, fmt: ar > 0 ? fmtPct(ar) : '--', refFmt: ar > 0 ? fmtPct(ar) : '--' };
+      }
+      case 'unitProfit': {
+        const up = p.sales > 0 ? (p.profit || 0) / p.sales : 0;
+        return { val: up, tgtNum: 0, refNum: up, fmt: up > 0 ? '¥' + up.toFixed(2) : '--', refFmt: up > 0 ? '¥' + up.toFixed(2) : '--' };
+      }
+      case 'unitCost': {
+        const uc = p.sales > 0 ? (p.costs || 0) / p.sales : 0;
+        return { val: uc, tgtNum: 0, refNum: uc, fmt: uc > 0 ? '¥' + uc.toFixed(1) : '--', refFmt: uc > 0 ? '¥' + uc.toFixed(1) : '--' };
+      }
+      // ── 单品模式列 ──
       case 'skuPrice': return getCellData('price', p);
       case 'skuCount': return { val: 0, tgtNum: 0, refNum: 0, fmt: '--', refFmt: '--' };
       case 'skuCost': return getCellData('cost', p);
-      case 'promoAvg': return getCellData('promoPerUnit', p);
-      case 'profitRate': return getCellData('profitRate', p);
       case 'skuProfit': return getCellData('profit', p);
+      case 'promoAvg': return getCellData('promoPerUnit', p);
+      case 'grossMargin': {
+        const ap = p.avgPrice || 0;
+        const uc = p.sales > 0 ? (p.costs || 0) / p.sales : 0;
+        const gm = ap > 0 && uc > 0 ? ((ap - uc) / ap) * 100 : 0;
+        return { val: gm, tgtNum: 0, refNum: gm, fmt: gm > 0 ? fmtPct(gm) : '--', refFmt: gm > 0 ? fmtPct(gm) : '--' };
+      }
+      case 'skuGmv': {
+        const g = p.gmv || 0;
+        return { val: g, tgtNum: 0, refNum: g, fmt: fmtMoney(g), refFmt: fmtMoney(g) };
+      }
+      case 'skuOrders': {
+        const o = p.orders || 0;
+        return { val: o, tgtNum: 0, refNum: o, fmt: fmtInt(o), refFmt: fmtInt(o) };
+      }
+      case 'skuSales': {
+        const s = p.sales || 0;
+        return { val: s, tgtNum: 0, refNum: s, fmt: fmtInt(s), refFmt: fmtInt(s) };
+      }
+      case 'costRatio': {
+        const cr = p.promoCostRatio || 0;
+        return { val: cr, tgtNum: 0, refNum: cr, fmt: cr > 0 ? fmtPct(cr) : '--', refFmt: cr > 0 ? fmtPct(cr) : '--' };
+      }
       default: return { val: 0, tgtNum: 0, refNum: 0, fmt: '--', refFmt: '--' };
     }
   }
@@ -1552,8 +1743,26 @@ const noData = !filteredOrders.length;
   };
 
 
+  const isColVisibleInSet = useCallback((colKey: string, set: 'total' | 'single') => {
+    return set === 'total' ? visibleTotalCols.has(colKey) : visibleSingleCols.has(colKey);
+  }, [visibleTotalCols, visibleSingleCols]);
+  const toggleCol = useCallback((colKey: string, set: 'total' | 'single') => {
+    const upd = (prev: Set<string>) => {
+      const n = new Set(prev);
+      if (n.has(colKey)) n.delete(colKey); else n.add(colKey);
+      return n;
+    };
+    if (set === 'total') setVisibleTotalCols(upd);
+    else setVisibleSingleCols(upd);
+  }, []);
+  const resetCols = useCallback(() => {
+    setVisibleTotalCols(new Set(DEFAULT_TOTAL_KEYS));
+    setVisibleSingleCols(new Set(DEFAULT_SINGLE_KEYS));
+  }, []);
+  const totalVisibleColCount = visibleTotalCols.size;
+  const singleVisibleColCount = visibleSingleCols.size;
+
   const renderProductTable = () => {
-    const currentCols = dimMode === '单品' ? COLS_SINGLE : COLS_TOTAL;
     return (
     <>
       <div className="bg-pdd-card rounded-lg overflow-hidden border border-pdd-border/60">
@@ -1565,46 +1774,120 @@ const noData = !filteredOrders.length;
         ) : (
           <>
 
-          {/* ── 标签栏：只显示投产类标签，去掉分组文字和多余颜色 ── */}
+          {/* 隐藏滚动条（Chrome/Safari/Edge）& 整行悬停效果 */}
+          <style>{`
+            [data-row-scroll="true"]::-webkit-scrollbar { display: none; }
+            #product-table tbody tr:hover { filter: brightness(0.96); }
+          `}</style>
+          {/* ── 标签栏（含列管理） ── */}
           {products.length > 0 && (
             <div className="px-4 py-2.5 border-b border-pdd-border/20 bg-pdd-bg/10">
-              <div className="flex items-center gap-1.5 flex-wrap">
-                {activeTagFilter && (() => {
-                  const activeDef = TAG_DEF_MAP[activeTagFilter];
-                  const activeBg = activeDef?.bg || '#f3f4f6';
-                  const activeColor = activeDef?.color || '#374151';
-                  return (
-                    <button onClick={() => setActiveTagFilter(null)}
-                      className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md border transition-colors hover:opacity-80"
-                      style={{ backgroundColor: activeBg, color: activeColor, borderColor: activeColor + '30' }}>
-                      <X size={12} />
-                      {getTagLabel(activeTagFilter)}
-                    </button>
-                  );
-                })()}
-                {/* 只显示效率类（投产）标签，使用语义色 */}
-                {TAG_GROUPS.filter(g => g.group === '效率').flatMap(g => g.tags).map(t => {
-                  const count = tagCounts[t.key] || 0;
-                  if (count === 0) return null;
-                  const isHidden = hiddenTags.has(t.key);
-                  const def = TAG_DEF_MAP[t.key];
-                  const bgColor = def?.bg || '#f5f5f5';
-                  const textColor = def?.color || '#6b7280';
-                  return (
-                    <button key={t.key} onClick={() => toggleTagVisibility(t.key)}
-                      className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md border transition-all hover:shadow-sm`}
-                      style={{
-                        backgroundColor: isHidden ? '#f9fafb' : bgColor,
-                        color: isHidden ? '#d1d5db' : textColor,
-                        borderColor: isHidden ? '#f0f0f0' : textColor + '30',
-                        textDecoration: isHidden ? 'line-through' : 'none',
-                      }}
-                      title={isHidden ? `点击显示「${t.label}」标签` : `点击隐藏「${t.label}」标签`}>
-                      <span>{t.label}</span>
-                      <span className="text-[10px]" style={{ opacity: 0.6 }}>({count})</span>
-                    </button>
-                  );
-                })}
+              <div className="flex items-start gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap flex-1 min-w-0">
+                  {activeTagFilter && (() => {
+                    const activeDef = TAG_DEF_MAP[activeTagFilter];
+                    const activeBg = activeDef?.bg || '#f3f4f6';
+                    const activeColor = activeDef?.color || '#374151';
+                    return (
+                      <button onClick={() => setActiveTagFilter(null)}
+                        className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-md border transition-colors hover:opacity-80"
+                        style={{ backgroundColor: activeBg, color: activeColor, borderColor: activeColor + '30' }}>
+                        <X size={12} />
+                        {getTagLabel(activeTagFilter)}
+                      </button>
+                    );
+                  })()}
+                  {TAG_GROUPS.filter(g => g.group === '效率').flatMap(g => g.tags).map(t => {
+                    const count = tagCounts[t.key] || 0;
+                    if (count === 0) return null;
+                    const isHidden = hiddenTags.has(t.key);
+                    const def = TAG_DEF_MAP[t.key];
+                    const bgColor = def?.bg || '#f5f5f5';
+                    const textColor = def?.color || '#6b7280';
+                    return (
+                      <button key={t.key} onClick={() => toggleTagVisibility(t.key)}
+                        className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md border transition-all hover:shadow-sm`}
+                        style={{
+                          backgroundColor: isHidden ? '#f9fafb' : bgColor,
+                          color: isHidden ? '#d1d5db' : textColor,
+                          borderColor: isHidden ? '#f0f0f0' : textColor + '30',
+                          textDecoration: isHidden ? 'line-through' : 'none',
+                        }}
+                        title={isHidden ? `点击显示「${t.label}」标签` : `点击隐藏「${t.label}」标签`}>
+                        <span>{t.label}</span>
+                        <span className="text-[10px]" style={{ opacity: 0.6 }}>({count})</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {/* 列管理按钮（右对齐） */}
+                <div className="relative flex-shrink-0" ref={colSelectorRef}>
+                  <button onClick={() => setColSelectorOpen(prev => !prev)}
+                    className="inline-flex items-center gap-1 text-[11px] font-medium text-pdd-primary bg-blue-50 border border-blue-200 rounded-md px-2.5 py-1 hover:bg-blue-100 transition-colors">
+                    <span>☰ 列管理</span>
+                    <span className="text-[10px] text-pdd-text-secondary/60 ml-0.5">总额 {totalVisibleColCount} / 单品 {singleVisibleColCount}</span>
+                  </button>
+                  {colSelectorOpen && (
+                    <div className="absolute top-full right-0 mt-1 bg-white border border-pdd-border rounded-lg shadow-lg z-50 min-w-[600px] max-h-[420px] overflow-y-auto p-2">
+                      <div className="flex items-center justify-between mb-1.5 px-0.5">
+                        <span className="text-[9px] text-pdd-text-secondary/50">勾选要查看的列（每个商品独立切换总额/单品模式）</span>
+                      </div>
+                      <div className="mb-2">
+                        <div className="text-[10px] font-bold text-pdd-text-secondary/80 mb-1 px-0.5 pb-0.5 border-b border-pdd-border/20">总额模式</div>
+                        <div className="flex flex-wrap gap-0">
+                          {COL_GROUPS.map(group => (
+                            <div key={group.label} className="inline-block align-top mr-2 mb-1 w-[130px]">
+                              <div className="text-[9px] font-semibold text-pdd-text-secondary/60 mb-0.5 px-0.5">{group.label}</div>
+                              {group.keys.map(key => {
+                                const colDef = COLS_TOTAL_DEFS.find(c => c.key === key);
+                                if (!colDef) return null;
+                                const checked = isColVisibleInSet(key, 'total');
+                                return (
+                                  <label key={key}
+                                    className={'block text-[9px] py-0.5 px-0.5 cursor-pointer text-pdd-text-secondary hover:text-pdd-primary'}>
+                                    <input type="checkbox" checked={checked}
+                                      onChange={() => toggleCol(key, 'total')}
+                                      className="accent-pdd-primary mr-1 w-2.5 h-2.5 align-text-bottom" />
+                                    {colDef.label}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="pt-1.5 border-t border-pdd-border/20">
+                        <div className="text-[10px] font-bold text-pdd-text-secondary/80 mb-1 px-0.5 pb-0.5 border-b border-pdd-border/20">单品模式</div>
+                        <div className="flex flex-wrap gap-0">
+                          {SINGLE_GROUPS.map(group => (
+                            <div key={group.label} className="inline-block align-top mr-2 mb-1 w-[130px]">
+                              <div className="text-[9px] font-semibold text-pdd-text-secondary/60 mb-0.5 px-0.5">{group.label}</div>
+                              {group.keys.map(key => {
+                                const colDef = COLS_SINGLE_DEFS.find(c => c.key === key);
+                                if (!colDef) return null;
+                                const checked = isColVisibleInSet(key, 'single');
+                                return (
+                                  <label key={key}
+                                    className={'block text-[9px] py-0.5 px-0.5 cursor-pointer text-pdd-text-secondary hover:text-pdd-primary'}>
+                                    <input type="checkbox" checked={checked}
+                                      onChange={() => toggleCol(key, 'single')}
+                                      className="accent-pdd-primary mr-1 w-2.5 h-2.5 align-text-bottom" />
+                                    {colDef.label}
+                                  </label>
+                                );
+                              })}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex gap-1.5 mt-1.5 pt-1.5 border-t border-pdd-border/30">
+                        <button onClick={() => { setVisibleTotalCols(new Set()); setVisibleSingleCols(new Set()); }}
+                          className="text-[10px] px-2 py-0.5 rounded bg-white text-pdd-text-secondary border border-pdd-border cursor-pointer hover:bg-pdd-bg">全不选</button>
+                        <button onClick={resetCols} className="text-[10px] px-2 py-0.5 rounded bg-pdd-primary text-white border-0 cursor-pointer hover:bg-blue-700">重置（默认8列）</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               {activeTagFilter && (
                 <div className="mt-1.5 text-[11px] text-pdd-text-secondary/60">
@@ -1615,29 +1898,10 @@ const noData = !filteredOrders.length;
             </div>
           )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              {/* ── 京东风格表头：浅灰底、小字 ── */}
-              <thead>
-                <tr className="border-b border-pdd-border/30 bg-pdd-gray-50">
-                  <th className="py-3 px-1 text-center text-xs font-medium text-pdd-text-secondary/40 w-5">#</th>
-                  <th className="py-3 px-3 text-left text-xs font-medium text-pdd-text-secondary/60 min-w-[240px]">
-                    商品信息 <SortIcon colKey="name" />
-                  </th>
-                  <th className="py-3 px-0 text-center text-xs font-medium text-pdd-text-secondary/40" style={{ width: '36px' }}> </th>
-                  {currentCols.map(col => (
-                    <th key={col.key}
-                      onClick={() => handleSort(col.key)}
-                      className="py-3 px-1 text-right text-xs font-medium text-pdd-text-secondary/60 cursor-pointer hover:text-pdd-text select-none whitespace-nowrap"
-                      style={{ width: col.width }}>
-                      {col.label} <SortIcon colKey={col.key} />
-                    </th>
-                  ))}
-                  <th className="py-3 px-0.5 text-center text-xs font-medium text-pdd-text-secondary/60" style={{ width: '70px' }}>操作</th>
-                </tr>
-              </thead>
-              {/* ── 京东风格行：大图 + 蓝链商品名 + 编号 ── */}
-              <tbody className="divide-y divide-pdd-border/20">
+          <div id="product-table">
+            <table style={{ borderCollapse: 'collapse', fontSize: '12px', width: '1394px', tableLayout: 'fixed' }}>
+              {/* ── 每行独立数据窗口 ── */}
+              <tbody>
                 {paginatedProducts.flatMap((p, i) => {
                   const profit = p.profit || 0;
                   const isExpanded = expandedRows.has(p.id);
@@ -1663,16 +1927,73 @@ const noData = !filteredOrders.length;
                     };
                   }
                   const rowMode = getRowDimMode(p.id);
+                  const smartTargets = computeSmartTargets(p, rowMode);
+                  const prevP = prevProductMap[p.id];
+                  const rowVisibleCols = (rowMode === '总额' ? COLS_TOTAL_DEFS : COLS_SINGLE_DEFS).filter(
+                    c => (rowMode === '总额' ? visibleTotalCols : visibleSingleCols).has(c.key)
+                  );
+                  function getCompare(colKey) {
+                    if (!prevP) return { fmt: "", cls: "text-gray-300" };
+                    let curVal = 0, prevVal = 0;
+                    const getOC = (pp) => { const cb = pp.costBreakdown || {}; return (cb.packagingFee || 0) + (cb.shippingFee || 0) + (cb.platformFee || 0) + (cb.taxes || 0) + (cb.customDeductions || 0); };
+                    switch (colKey) {
+                      case "revenue": curVal = p.revenue || 0; prevVal = prevP.revenue || 0; break;
+                      case "orders": curVal = p.orders || 0; prevVal = prevP.orders || 0; break;
+                      case "sales": curVal = p.sales || 0; prevVal = prevP.sales || 0; break;
+                      case "totalCost": curVal = p.costs || 0; prevVal = prevP.costs || 0; break;
+                      case "promo": curVal = p.promoCost || 0; prevVal = prevP.promoCost || 0; break;
+                      case "promoCost": curVal = p.promoCost || 0; prevVal = prevP.promoCost || 0; break;
+                      case "roi": curVal = p.roi || 0; prevVal = prevP.roi || 0; break;
+                      case "refundRate": curVal = p.refundRate || 0; prevVal = prevP.refundRate || 0; break;
+                      case "otherCost": curVal = getOC(p); prevVal = getOC(prevP); break;
+                      case "profit": curVal = p.profit || 0; prevVal = prevP.profit || 0; break;
+                      case "logistics": { const cb1 = p.costBreakdown||{}, cb2 = prevP.costBreakdown||{}; curVal = (cb1.shippingFee||0)+(cb1.packagingFee||0); prevVal = (cb2.shippingFee||0)+(cb2.packagingFee||0); break; }
+                      case "platformFee": { const cb1 = p.costBreakdown||{}, cb2 = prevP.costBreakdown||{}; curVal = cb1.platformFee||0; prevVal = cb2.platformFee||0; break; }
+                      case "profitRate": curVal = p.profitRate || 0; prevVal = prevP.profitRate || 0; break;
+                      case "avgPrice": curVal = p.avgPrice || 0; prevVal = prevP.avgPrice || 0; break;
+                      case "stockDays": curVal = p.activeDays || 0; prevVal = prevP.activeDays || 0; break;
+                      case "gmv": curVal = p.gmv || 0; prevVal = prevP.gmv || 0; break;
+                      case "promoTransaction": curVal = p.promoTransaction || 0; prevVal = prevP.promoTransaction || 0; break;
+                      case "promoClicks": curVal = p.promoClicks || 0; prevVal = prevP.promoClicks || 0; break;
+                      case "promoCostRatio": curVal = p.promoCostRatio || 0; prevVal = prevP.promoCostRatio || 0; break;
+                      case "afterSaleRate": curVal = p.afterSaleRate || 0; prevVal = prevP.afterSaleRate || 0; break;
+                      case "unitProfit": { curVal = p.sales > 0 ? (p.profit||0)/p.sales : 0; prevVal = prevP.sales > 0 ? (prevP.profit||0)/prevP.sales : 0; break; }
+                      case "unitCost": { curVal = p.sales > 0 ? (p.costs||0)/p.sales : 0; prevVal = prevP.sales > 0 ? (prevP.costs||0)/prevP.sales : 0; break; }
+                      case "skuPrice": curVal = p.avgPrice || 0; prevVal = prevP.avgPrice || 0; break;
+                      case "skuCount": return { fmt: "-", cls: "text-gray-300" };
+                      case "skuCost": { curVal = p.sales > 0 ? (p.costs||0)/p.sales : 0; prevVal = prevP.sales > 0 ? (prevP.costs||0)/prevP.sales : 0; break; }
+                      case "skuProfit": { curVal = p.profit > 0 && p.sales > 0 ? p.profit/p.sales : 0; prevVal = prevP.profit > 0 && prevP.sales > 0 ? prevP.profit/prevP.sales : 0; break; }
+                      case "promoAvg": { curVal = p.promoCost > 0 && p.orders > 0 ? p.promoCost/p.orders : 0; prevVal = prevP.promoCost > 0 && prevP.orders > 0 ? prevP.promoCost/prevP.orders : 0; break; }
+                      case "grossMargin": {
+                        const ap1 = p.avgPrice||0, uc1 = p.sales>0?(p.costs||0)/p.sales:0;
+                        const ap2 = prevP.avgPrice||0, uc2 = prevP.sales>0?(prevP.costs||0)/prevP.sales:0;
+                        curVal = ap1>0&&uc1>0?((ap1-uc1)/ap1)*100:0; prevVal = ap2>0&&uc2>0?((ap2-uc2)/ap2)*100:0; break;
+                      }
+                      case "skuGmv": curVal = p.gmv || 0; prevVal = prevP.gmv || 0; break;
+                      case "skuOrders": curVal = p.orders || 0; prevVal = prevP.orders || 0; break;
+                      case "skuSales": curVal = p.sales || 0; prevVal = prevP.sales || 0; break;
+                      case "costRatio": curVal = p.promoCostRatio || 0; prevVal = prevP.promoCostRatio || 0; break;
+                      default: return { fmt: "-", cls: "text-gray-300" };
+                    }
+                    if (prevVal > 0 && curVal !== prevVal) {
+                      const change = ((curVal - prevVal) / prevVal) * 100;
+                      const fmt = (change > 0 ? "+" : "") + change.toFixed(1) + "%";
+                      const goodKeys = new Set(["revenue","orders","sales","profit","profitRate","roi","gmv","avgPrice","promoTransaction","skuProfit","skuPrice","skuGmv","skuOrders","skuSales","unitProfit","grossMargin"]);
+                      const badKeys = new Set(["refundRate","totalCost","promo","promoCost","otherCost","promoAvg","skuCost","logistics","platformFee","promoCostRatio","afterSaleRate","stockDays","unitCost","costRatio"]);
+                      const isGood = goodKeys.has(colKey);
+                      const isBad = badKeys.has(colKey);
+                      const cls = (isGood && change > 0) || (isBad && change < 0) ? "text-green-600" : (isGood && change < 0) || (isBad && change > 0) ? "text-red-500" : "text-gray-400";
+                      return { fmt, cls };
+                    }
+                    return { fmt: "-", cls: "text-gray-300" };
+                  }
 
                   const row = (
                     <tr key={p.id}
-                      className={`transition-colors ${isExpanded ? 'bg-blue-50/40' : 'hover:bg-pdd-gray-50'}`}>
-                      {/* 序号 */}
-                      <td className="py-1 px-1 text-center text-xs text-pdd-text-secondary/30 font-mono align-middle">{(currentPage - 1) * pageSize + i + 1}</td>
-
-                      {/* ── 商品信息：左图 + 右文字（紧凑版） ── */}
-                      <td className="py-2 px-3 align-middle">
-                        <div className="flex gap-2 items-stretch">
+                      className={`group ${isExpanded ? 'bg-blue-50/30' : ''} hover:bg-black/[0.02]`}
+                      style={{ height: '100px', borderTop: '1px solid #e5e7eb', borderBottom: '1px solid #e5e7eb', transition: 'background-color 1s cubic-bezier(0.22, 1, 0.36, 1)' }}>
+                      <td className="px-3 align-middle" style={{ minWidth: '430px', maxWidth: '430px', width: '430px', height: '100px', borderRight: '1px solid #e5e7eb' }}>
+                        <div className="flex gap-2 items-center" style={{ height: '100%' }}>
                           {/* 商品图 — 88px正方形 */}
                           <div className="w-[88px] flex-shrink-0 flex flex-col justify-center">
                             <div className="w-full aspect-square rounded-lg overflow-hidden border border-gray-200 cursor-pointer group relative bg-gray-50"
@@ -1694,14 +2015,14 @@ const noData = !filteredOrders.length;
                               {img ?
                                 <div className="w-full h-full bg-cover bg-center transition-transform duration-200 group-hover:scale-110"
                                   style={{ backgroundImage: `url(${img})`, imageRendering: 'auto' }} />
-                                : <div className="w-full h-full flex items-center justify-center"><ImageIcon size={16} className="text-gray-300" /></div>
+                                : <div className="w-full h-full flex items-center justify-center"><Upload size={14} className="text-gray-300" /></div>
                               }
                             </div>
                           </div>
                           {/* 文字区 */}
-                          <div className="flex-1 min-w-0 space-y-0.5">
+                          <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-1 flex-wrap">
-                              <span className="text-[13px] font-medium text-blue-600 hover:text-blue-800 cursor-pointer truncate max-w-[180px] leading-snug"
+                              <span className="text-[13px] font-medium text-blue-600 hover:text-blue-800 cursor-pointer truncate max-w-[160px] leading-snug"
                                 title={displayName}
                                 onClick={(e) => { e.stopPropagation(); setDrawerProductId(p.id); }}>
                                 {displayName}
@@ -1711,42 +2032,35 @@ const noData = !filteredOrders.length;
                                 {skuGroups.groups.length}个规格
                               </button>
                               <div className="inline-flex bg-gray-100 rounded text-[9px] leading-none p-[1px]">
-                                <button onClick={(e) => { e.stopPropagation(); setDimMode('单品'); }}
-                                  className={'px-1.5 py-0.5 rounded ' + (dimMode === '单品' ? 'bg-white text-gray-700 shadow-sm font-medium' : 'text-gray-400')}>单品</button>
-                                <button onClick={(e) => { e.stopPropagation(); setDimMode('总额'); }}
-                                  className={'px-1.5 py-0.5 rounded ' + (dimMode === '总额' ? 'bg-white text-gray-700 shadow-sm font-medium' : 'text-gray-400')}>总额</button>
+                                <button onClick={(e) => { e.stopPropagation(); setProductDimModes(prev => ({...prev, [p.id]: '单品'})); }}
+                                  className={'px-1.5 py-0.5 rounded ' + (rowMode === '单品' ? 'bg-white text-gray-700 shadow-sm font-medium' : 'text-gray-400')}>单品</button>
+                                <button onClick={(e) => { e.stopPropagation(); setProductDimModes(prev => ({...prev, [p.id]: '总额'})); }}
+                                  className={'px-1.5 py-0.5 rounded ' + (rowMode === '总额' ? 'bg-white text-gray-700 shadow-sm font-medium' : 'text-gray-400')}>总额</button>
                               </div>
                             </div>
-                            <div className="flex items-center gap-1.5 text-[10px] text-gray-400 flex-wrap">
-                              <span className="font-mono text-gray-500" title={p.id}>{p.id || '--'}</span>
+                            <div className="flex items-center gap-1.5 text-[10px] text-gray-400 flex-wrap mt-0.5">
+                              <span className="font-mono text-gray-500">{p.id || '--'}</span>
                               {p.code && <><span className="text-gray-300">|</span><span>编码 {p.code}</span></>}
                               <span className="text-gray-300">|</span>
                               <span>{p.firstDate || '--'}出单</span>
-                              {p.activeDays > 0 && <><span className="text-gray-300">|</span><span>活跃{p.activeDays}天</span></>}
                             </div>
-                            <div className="flex items-center gap-1.5 text-[10px] text-gray-500 flex-wrap">
+                            <div className="flex items-center gap-1 text-[10px] text-gray-500 flex-wrap mt-0.5">
                               {(() => {
-                                const unitCost = p.costs > 0 && p.sales > 0 ? p.costs / p.sales : 0;
-                                const sellingPrice = p.avgPrice || 0;
-                                const unitProfit = sellingPrice > 0 && unitCost > 0 ? sellingPrice - unitCost : 0;
-                                const marginRate = sellingPrice > 0 && unitCost > 0 ? (unitProfit / sellingPrice) * 100 : 0;
+                                const uc = p.costs > 0 && p.sales > 0 ? p.costs / p.sales : 0;
+                                const sp = p.avgPrice || 0;
+                                const up = sp > 0 && uc > 0 ? sp - uc : 0;
                                 return (<>
-                                  <span>成本<span className="font-semibold text-gray-600 ml-0.5">¥{unitCost > 0 ? unitCost.toFixed(1) : '--'}</span></span>
+                                  <span>成本<span className="font-semibold text-gray-600 ml-0.5">{uc > 0 ? '¥' + uc.toFixed(1) : '--'}</span></span>
                                   <span className="text-gray-300">|</span>
-                                  <span>售价<span className="font-semibold text-gray-600 ml-0.5">¥{sellingPrice > 0 ? sellingPrice.toFixed(sellingPrice < 10 ? 2 : 1) : '--'}</span></span>
-                                  <span className="text-gray-300">|</span>
-                                  <span>利润<span className={`font-semibold ml-0.5 ${unitProfit !== 0 ? 'text-pdd-text' : 'text-gray-500'}`}>
-                                    {unitProfit > 0 ? '¥' + unitProfit.toFixed(2) : unitProfit < 0 ? '-¥' + Math.abs(unitProfit).toFixed(2) : '--'}
-                                  </span></span>
-                                  {marginRate > 0 && <><span className="text-gray-300">|</span><span>毛利率<span className="font-semibold text-gray-600 ml-0.5">{marginRate.toFixed(1)}%</span></span></>}
+                                  <span>售价<span className="font-semibold text-gray-600 ml-0.5">{sp > 0 ? '¥' + sp.toFixed(sp < 10 ? 2 : 1) : '--'}</span></span>
+                                  {up !== 0 && <><span className="text-gray-300">|</span><span>利润<span className={'font-semibold ml-0.5 ' + (up > 0 ? 'text-green-600' : 'text-red-500')}>{up > 0 ? '¥' + up.toFixed(2) : '-¥' + Math.abs(up).toFixed(2)}</span></span></>}
                                 </>);
                               })()}
                             </div>
-                            {/* ── 推广数据行（仅在有推广数据时显示）── */}
+                            {/* ── 推广数据行 ── */}
                             {p.promoCost > 0 && (
-                              <div className="flex items-center gap-1.5 text-[10px] text-gray-500 flex-wrap">
+                              <div className="flex items-center gap-1.5 text-[10px] text-gray-500 flex-wrap mt-0.5">
                                 <span className="inline-flex items-center gap-1">
-                                  <Megaphone size={9} className="text-orange-400" />
                                   推广费<span className="font-semibold text-orange-600 ml-0.5">{p.promoCost >= 10000 ? '¥' + (p.promoCost / 10000).toFixed(1) + '万' : '¥' + p.promoCost.toFixed(0)}</span>
                                 </span>
                                 <span className="text-gray-300">|</span>
@@ -1755,183 +2069,155 @@ const noData = !filteredOrders.length;
                                 <span>成交<span className="font-semibold text-blue-600 ml-0.5">{p.promoTransaction >= 10000 ? '¥' + (p.promoTransaction / 10000).toFixed(1) + '万' : '¥' + (p.promoTransaction || 0).toFixed(0)}</span></span>
                                 <span className="text-gray-300">|</span>
                                 <span>费比<span className="font-semibold text-purple-600 ml-0.5">{(p.promoCostRatio || 0).toFixed(1)}%</span></span>
-                                <span className="text-gray-300">|</span>
-                                <span>点击<span className="font-semibold text-amber-600 ml-0.5">{(p.promoClicks || 0) >= 10000 ? ((p.promoClicks || 0) / 10000).toFixed(1) + '万' : (p.promoClicks || 0).toFixed(0)}</span></span>
                               </div>
                             )}
                             <div className="flex items-center gap-1 flex-wrap mt-[2px]">
-                              {/* 全店占比标签 */}
-                              <span className="text-[9px] font-medium px-1.5 py-[1px] rounded-sm border bg-blue-50 text-blue-600 border-blue-200">
-                                销{(storeTotals.totalSales > 0 ? ((p.sales / storeTotals.totalSales) * 100) : 0).toFixed(1)}%
-                              </span>
-                              {p.promoCost > 0 && (
-                                <span className="text-[9px] font-medium px-1.5 py-[1px] rounded-sm border bg-orange-50 text-orange-500 border-orange-200">
-                                  推{(storeTotals.totalPromo > 0 ? (((p.promoCost || 0) / storeTotals.totalPromo) * 100) : 0).toFixed(1)}%
-                                </span>
-                              )}
-                              <span className="text-[9px] font-medium px-1.5 py-[1px] rounded-sm border bg-green-50 text-green-600 border-green-200">
-                                单{(storeTotals.totalOrders > 0 ? ((p.orders / storeTotals.totalOrders) * 100) : 0).toFixed(1)}%
-                              </span>
-                              {(autoTags[p.id] || []).filter(tk => {
-                                const def = TAG_DEF_MAP[tk];
-                                return def && def.group === '效率' && !hiddenTags.has(tk);
-                              }).slice(0, 4).map(tk => {
-                                const def = TAG_DEF_MAP[tk];
-                                return (
-                                  <span key={tk}
+                              {(() => {
+                                const alertTags = getAlertTags(p).map(t => ({ ...t, key: t.label }));
+                                const sysTags = (autoTags[p.id] || []).map(tk => {
+                                  const def = TAG_DEF_MAP[tk];
+                                  return def ? { label: def.label, color: def.color, bg: def.bg, key: tk } : null;
+                                }).filter(Boolean);
+                                const allTags = [...alertTags, ...sysTags].slice(0, 6);
+                                return allTags.map(t => (
+                                  <span key={t.key}
                                     className="text-[9px] font-medium px-1.5 py-[1px] rounded-sm cursor-pointer border"
-                                    style={{
-                                      backgroundColor: def?.bg || 'var(--pdd-gray-100)',
-                                      color: def?.color || 'var(--pdd-text-secondary)',
-                                      borderColor: (def?.color || 'var(--pdd-text-secondary)') + '30',
-                                    }}
-                                    onClick={(e) => { e.stopPropagation(); setActiveTagFilter(activeTagFilter === tk ? null : tk); }}>
-                                    {getTagLabel(tk)}
+                                    style={{ backgroundColor: t.bg, color: t.color, borderColor: t.color + '30' }}
+                                    onClick={(e) => { e.stopPropagation(); setActiveTagFilter(activeTagFilter === t.key ? null : t.key); }}>
+                                    {t.label}
                                   </span>
-                                );
-                              })}
+                                ));
+                              })()}
                             </div>
                           </div>
                         </div>
-                        {/* 悬停弹窗 */}
-                        {hoveredImage && hoveredImage.id === p.id && img && (
-                          <div className="fixed z-[9999] rounded-xl overflow-hidden shadow-2xl border border-gray-200 pointer-events-none"
-                            style={{ left: hoveredImage.x, top: hoveredImage.y, maxWidth: 280, maxHeight: 280 }}>
-                            <img src={img} alt="" className="w-full h-full object-contain" />
-                          </div>
-                        )}
                       </td>
-
-                      {/* ── 数据列：8列，每列竖排三行（目标/本期/同比），左标签右数值 ── */}
-                      {(() => {
-                        const smartTargets = computeSmartTargets(p, rowMode);
-                        const prevP = prevProductMap[p.id];
-                        function getCompare(colKey: string): { fmt: string; cls: string } {
-                          if (!prevP) return { fmt: '', cls: 'text-gray-300' };
-                          let curVal = 0, prevVal = 0;
-                          switch (colKey) {
-                            case 'revenue': curVal = p.revenue || 0; prevVal = prevP.revenue || 0; break;
-                            case 'orders': curVal = p.orders || 0; prevVal = prevP.orders || 0; break;
-                            case 'totalCost': curVal = p.costs || 0; prevVal = prevP.costs || 0; break;
-                            case 'promo': curVal = p.promoCost || 0; prevVal = prevP.promoCost || 0; break;
-                            case 'roi': curVal = p.roi || 0; prevVal = prevP.roi || 0; break;
-                            case 'refundRate': curVal = p.refundRate || 0; prevVal = prevP.refundRate || 0; break;
-                            case 'otherCost': {
-                              const calcOC = (pp: any) => { const cb = pp.costBreakdown || {}; return (cb.packagingFee || 0) + (cb.shippingFee || 0) + (cb.platformFee || 0) + (cb.taxes || 0) + (cb.customDeductions || 0); };
-                              curVal = calcOC(p); prevVal = calcOC(prevP); break;
-                            }
-                            case 'profit': curVal = p.profit || 0; prevVal = prevP.profit || 0; break;
-                            case 'skuPrice': curVal = p.avgPrice || 0; prevVal = prevP.avgPrice || 0; break;
-                            case 'skuCount': return { fmt: '-', cls: 'text-gray-300' };
-                            case 'skuCost': {
-                              const uc = p.costs > 0 && p.sales > 0 ? p.costs / p.sales : 0;
-                              const puc = prevP.costs > 0 && prevP.sales > 0 ? prevP.costs / prevP.sales : 0;
-                              curVal = uc; prevVal = puc; break;
-                            }
-                            case 'promoAvg': {
-                              curVal = p.promoCost > 0 && p.orders > 0 ? p.promoCost / p.orders : 0;
-                              prevVal = prevP.promoCost > 0 && prevP.orders > 0 ? prevP.promoCost / prevP.orders : 0;
-                              break;
-                            }
-                            case 'profitRate': curVal = p.profitRate || 0; prevVal = prevP.profitRate || 0; break;
-                            case 'skuProfit': {
-                              curVal = p.profit > 0 && p.sales > 0 ? p.profit / p.sales : 0;
-                              prevVal = prevP.profit > 0 && prevP.sales > 0 ? prevP.profit / prevP.sales : 0;
-                              break;
-                            }
-                            default: return { fmt: '-', cls: 'text-gray-300' };
-                          }
-                          if (prevVal > 0 && curVal !== prevVal) {
-                            const change = ((curVal - prevVal) / prevVal) * 100;
-                            const fmt = (change > 0 ? '+' : '') + change.toFixed(1) + '%';
-                            const isGood = colKey === 'profit' || colKey === 'profitRate' || colKey === 'revenue' || colKey === 'orders' || colKey === 'roi' || colKey === 'skuProfit' || colKey === 'skuPrice';
-                            const isBad = colKey === 'refundRate' || colKey === 'totalCost' || colKey === 'promo' || colKey === 'promoAvg' || colKey === 'otherCost' || colKey === 'skuCost';
-                            const cls = (isGood && change > 0) || (isBad && change < 0) ? 'text-green-600' : (isGood && change < 0) || (isBad && change > 0) ? 'text-red-500' : 'text-gray-400';
-                            return { fmt, cls };
-                          }
-                          return { fmt: '-', cls: 'text-gray-300' };
-                        }
-                        return [
-                          <td key="label" className="p-0 align-middle" style={{ width: '36px' }}>
-                            <div className="flex flex-col h-full">
-                              <div className="flex-1 flex items-center justify-center border-b border-dashed border-gray-100 min-h-[26px]">
-                                <span className="text-[9px] text-gray-400 font-medium leading-[26px]">目标</span>
-                              </div>
-                              <div className="flex-1 flex items-center justify-center border-b border-dashed border-gray-100 min-h-[26px]">
-                                <span className="text-[9px] text-gray-400 font-medium leading-[26px]">本期</span>
-                              </div>
-                              <div className="flex-1 flex items-center justify-center min-h-[26px]">
-                                <span className="text-[9px] text-gray-400 font-medium leading-[26px]">同比</span>
-                              </div>
+                      {/* ── 占比列（固定60px，100px高度三等分） ── */}
+                      <td className="p-0 align-middle" style={{ width: '60px', minWidth: '60px', maxWidth: '60px', height: '100px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                          <div style={{ height: '28px', background: '#f8f9fb', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 500, color: '#9ca3af' }}>占比</div>
+                          <div className="flex flex-col" style={{ flex: 1 }}>
+                            <div className="border-b border-dashed border-gray-100 tabular-nums" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 3px', flex: 1, gap: '1px' }}>
+                              <span style={{ fontSize: '8px', fontWeight: 500, color: '#9ca3af' }}>销售</span>
+                              <span style={{ fontSize: '10px', fontWeight: 600, color: '#6b7280' }}>{((storeTotals.totalSales > 0 ? ((p.sales / storeTotals.totalSales) * 100) : 0)).toFixed(1).padStart(4, '0')}%</span>
                             </div>
-                          </td>,
-                          ...currentCols.map(col => {
-                            let cd = getMergedCellData(col.key, p, rowMode);
-                            if (col.key === 'skuCount') {
-                              const count = skuGroups.groups.length;
-                              cd = { ...cd, val: count, fmt: String(count) };
-                            }
-                            const st = smartTargets[col.key];
-                            const cmp = getCompare(col.key);
-                            const profitCol = col.key === 'profit' || col.key === 'profitRate' || col.key === 'skuProfit';
-                            const profitVal = col.key === 'profit' ? (p.profit || 0) : (col.key === 'profitRate' ? (p.profitRate || 0) : (col.key === 'skuProfit' ? (p.profit > 0 && p.sales > 0 ? p.profit / p.sales : 0) : 0));
-                            const valColor = profitCol ? 'text-pdd-text' : 'text-pdd-text';
-                            return (
-                              <td key={col.key} className="p-0 align-middle" style={{ width: col.width }}>
-                                <div className="flex flex-col h-full">
-                                  <div className="flex-1 flex items-center justify-end px-1.5 border-b border-dashed border-gray-100 min-h-[26px]">
-                                    <span className="text-[11px] font-semibold text-gray-400 tabular-nums leading-[26px] cursor-pointer hover:text-pdd-primary transition-colors"
+                            <div className="border-b border-dashed border-gray-100 tabular-nums" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 3px', flex: 1, gap: '1px' }}>
+                              <span style={{ fontSize: '8px', fontWeight: 500, color: '#9ca3af' }}>推广</span>
+                              <span style={{ fontSize: '10px', fontWeight: 600, color: '#6b7280' }}>{((storeTotals.totalPromo > 0 ? (((p.promoCost || 0) / storeTotals.totalPromo) * 100) : 0)).toFixed(1).padStart(4, '0')}%</span>
+                            </div>
+                            <div className="tabular-nums" style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', padding: '0 3px', flex: 1, gap: '1px' }}>
+                              <span style={{ fontSize: '8px', fontWeight: 500, color: '#9ca3af' }}>订单</span>
+                              <span style={{ fontSize: '10px', fontWeight: 600, color: '#6b7280' }}>{((storeTotals.totalOrders > 0 ? ((p.orders / storeTotals.totalOrders) * 100) : 0)).toFixed(1).padStart(4, '0')}%</span>
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      {/* ── 数值列（固定36px，100px高度三等分） ── */}
+                      <td className="p-0 align-middle" style={{ width: '36px', minWidth: '36px', maxWidth: '36px', height: '100px' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', height: '100%', borderRight: '1px solid #e5e7eb' }}>
+                          <div style={{ height: '28px', background: '#f8f9fb', borderBottom: '1px solid #e5e7eb', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 500, color: '#9ca3af' }}>数值</div>
+                          <div className="flex flex-col" style={{ flex: 1 }}>
+                            <div className="border-b border-dashed border-gray-100" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, fontSize: '10px', fontWeight: 500, color: '#9ca3af' }}>目标</div>
+                            <div className="border-b border-dashed border-gray-100" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, fontSize: '10px', fontWeight: 500, color: '#9ca3af' }}>本期</div>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flex: 1, fontSize: '10px', fontWeight: 500, color: '#9ca3af' }}>同比</div>
+                          </div>
+                        </div>
+                      </td>
+                      {/* ── 滚动数据窗口（798px固定，100px填充） ── */}
+                      <td key="data-cols" className="p-0 align-middle overflow-x-auto"
+                        data-row-scroll="true"
+                        data-col-count={rowVisibleCols.length}
+                        style={{ width: '798px', minWidth: '798px', maxWidth: '798px', height: '100px', scrollbarWidth: 'none', scrollbarColor: 'transparent transparent', overflowY: 'clip', borderRight: '1px solid #e5e7eb' }}>
+                          <table className="w-full text-xs" style={{ borderCollapse: 'collapse', tableLayout: 'fixed', height: '100%', minWidth: rowVisibleCols.reduce((s, c) => s + parseInt(c.width), 0) }}>
+                            <thead style={{ boxShadow: '0 1px 3px rgba(0,0,0,0.04)', height: '28px' }}>
+                              <tr className="border-b border-gray-200" style={{ background: '#f8f9fb' }}>
+                                {rowVisibleCols.map(col => (
+                                  <th key={col.key}
+                                    onClick={() => handleSort(col.key)}
+                                    className="px-1.5 text-right text-[10px] font-medium text-gray-500 cursor-pointer hover:text-gray-700 whitespace-nowrap"
+                                    style={{ width: col.width, minWidth: col.width }}>
+                                    {col.label}{sortField === col.key ? (sortDesc ? ' ↓' : ' ↑') : ''}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody style={{ height: 'calc(100% - 28px)' }}>
+                              {/* 目标行 */}
+                              <tr className="border-b border-dashed border-gray-100" style={{ height: '33.33%' }}>
+                                {rowVisibleCols.map(col => {
+                                  const st = smartTargets[col.key];
+                                  return (
+                                    <td key={col.key} className="px-1.5 text-right text-[11px] font-semibold text-gray-400 tabular-nums cursor-pointer hover:text-blue-600"
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         const cfg = productTargets[p.id] || { profitPerOrder: 10 };
                                         const ppo = cfg.profitPerOrder || 10;
                                         const er = computeTargetsByProfit(p, ppo, undefined, cfg.manualOverrides);
                                         setTargetDetailProduct({ product: p, engineResult: er, rowMode, profitPerOrder: ppo });
-                                      }}>{st.value > 0 ? st.fmt : '--'}</span>
-                                  </div>
-                                  <div className="flex-1 flex items-center justify-end px-1.5 border-b border-dashed border-gray-100 min-h-[26px]">
-                                    <span className={'text-[14px] font-bold tabular-nums leading-[26px] ' + valColor}>{cd.fmt}</span>
-                                  </div>
-                                  <div className="flex-1 flex items-center justify-end px-1.5 min-h-[26px]">
-                                    <span className={'text-[11px] font-semibold tabular-nums leading-[26px] ' + cmp.cls}>{cmp.fmt || '--'}</span>
-                                  </div>
-                                </div>
-                              </td>
-                            );
-                          }),
-                          ];
-                      })()}
-                      {/* 操作 - 四个竖直排列按钮：商品分析/商品复盘/推广数据/商品编辑 */}
-                      <td className="py-1 px-0.5 text-center align-middle" style={{ width: '70px' }}>
-                        <div className="flex flex-col items-center justify-center">
-                          <button onClick={(e) => { e.stopPropagation(); setDataAnalysisProductId(p.id); }}
-                            className="flex items-center justify-center gap-1 w-full px-1 py-0.5 rounded text-[9px] text-blue-600 hover:bg-blue-50 transition-colors font-medium"
-                            title="商品分析">
-                            <BarChart3 size={10} /><span>商品分析</span>
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); setRetrospectiveProductId(p.id); }}
-                            className="flex items-center justify-center gap-1 w-full px-1 py-0.5 rounded text-[9px] text-amber-600 hover:bg-amber-50 transition-colors font-medium"
-                            title="商品复盘">
-                            <RotateCcw size={10} /><span>商品复盘</span>
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); setPromoDataProductId(p.id); }}
-                            className="flex items-center justify-center gap-1 w-full px-1 py-0.5 rounded text-[9px] text-orange-600 hover:bg-orange-50 transition-colors font-medium"
-                            title="推广数据">
-                            <Megaphone size={10} /><span>推广数据</span>
-                          </button>
-                          <button onClick={(e) => { e.stopPropagation(); setEditorProductId(p.id); }}
-                            className="flex items-center justify-center gap-1 w-full px-1 py-0.5 rounded text-[9px] text-violet-600 hover:bg-violet-50 transition-colors font-medium"
-                            title="商品编辑">
-                            <Edit3 size={10} /><span>商品编辑</span>
-                          </button>
-                        </div>
+                                      }}>
+                                      {st?.value > 0 ? st.fmt : '--'}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                              {/* 本期行 */}
+                              <tr className="border-b border-dashed border-gray-100" style={{ height: '33.33%' }}>
+                                {rowVisibleCols.map(col => {
+                                  let cd = getMergedCellData(col.key, p, rowMode);
+                                  if (col.key === 'skuCount') {
+                                    const count = skuGroups.groups.length;
+                                    cd = { ...cd, val: count, fmt: String(count) };
+                                  }
+                                  return (
+                                    <td key={col.key} className="px-1.5 text-right text-[13px] font-bold tabular-nums">{cd.fmt}</td>
+                                  );
+                                })}
+                              </tr>
+                              {/* 同比行 */}
+                              <tr style={{ height: '33.33%' }}>
+                                {rowVisibleCols.map(col => {
+                                  const cmp = getCompare(col.key);
+                                  return (
+                                    <td key={col.key} className={'px-1.5 text-right text-[11px] font-semibold tabular-nums ' + cmp.cls}>
+                                      {cmp.fmt || '--'}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            </tbody>
+                          </table>
                       </td>
+                          {/* 操作 - 四个竖直排列按钮：商品分析/商品复盘/推广数据/商品编辑 */}
+                          <td className="px-0.5 text-center align-middle whitespace-nowrap" style={{ borderLeft: '1px solid #e5e7eb', borderRight: '1px solid #e5e7eb', width: '70px', height: '100px' }}>
+                            <div className="flex flex-col items-center justify-around" style={{ height: '100%' }}>
+                              <button onClick={(e) => { e.stopPropagation(); setDataAnalysisProductId(p.id); }}
+                                className="flex items-center justify-center gap-1 w-full px-1 rounded text-[9px] text-blue-600 hover:bg-blue-50 transition-colors font-medium"
+                                title="商品分析">
+                                <BarChart3 size={10} /><span>商品分析</span>
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); setRetrospectiveProductId(p.id); }}
+                                className="flex items-center justify-center gap-1 w-full px-1 rounded text-[9px] text-amber-600 hover:bg-amber-50 transition-colors font-medium"
+                                title="商品复盘">
+                                <RotateCcw size={10} /><span>商品复盘</span>
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); setPromoDataProductId(p.id); }}
+                                className="flex items-center justify-center gap-1 w-full px-1 rounded text-[9px] text-orange-600 hover:bg-orange-50 transition-colors font-medium"
+                                title="推广数据">
+                                <Megaphone size={10} /><span>推广数据</span>
+                              </button>
+                              <button onClick={(e) => { e.stopPropagation(); setEditorProductId(p.id); }}
+                                className="flex items-center justify-center gap-1 w-full px-1 rounded text-[9px] text-violet-600 hover:bg-violet-50 transition-colors font-medium"
+                                title="商品编辑">
+                                <Edit3 size={10} /><span>商品编辑</span>
+                              </button>
+                            </div>
+                          </td>
                     </tr>
                   );
 
                   const skuRow = isExpanded && skuGroups.groups.length > 0 ? (
-                    <tr key={p.id + '_sku'}>
-                      <td colSpan={12} className="p-0">
+                    <tr key={p.id + '_sku'} className="border-b border-gray-100">
+                      <td colSpan={99} className="p-0">
                         <div className="border-t border-pdd-border bg-pdd-bg/40">
                           {/* Level 1: Compressed groups */}
                           <table className="w-full text-xs">
@@ -2190,7 +2476,7 @@ const noData = !filteredOrders.length;
                     </tr>
                   ) : null;
 
-                  return isExpanded && skuRow ? [row, skuRow] : [row];
+                  return isExpanded && skuRow ? row : row;
                 })}
               </tbody>
             </table>

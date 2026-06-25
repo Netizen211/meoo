@@ -505,7 +505,7 @@ router.get('/dashboard-full', requireStoreOwnership, async (req: Request, res: R
     const storeId = req.query.storeId as string;
     if (!storeId) { res.status(400).json({ success: false, error: '缺少storeId' }); return; }
     const { data, configs, productCosts } = await analytics.resolveStoreContext(storeId, req.user!.userId);
-    const kpi = analytics.computeDashboardKPI(data);
+    const kpi = analytics.computeDashboardKPI(data, configs);
     const costs = analytics.computeCostSummary(
       data.orders || [], productCosts, configs,
       data.financialRecords || [], data.afterSaleRecords || [],
@@ -533,58 +533,40 @@ router.get('/bulk', requireStoreOwnership, async (req: Request, res: Response) =
     const startTime = Date.now();
     const { data, configs, productCosts } = await analytics.resolveStoreContext(storeId, req.user!.userId);
 
-    // 并行计算所有分析结果
+    // 并行计算分析结果（仅计算 Dashboard + 基础数据）
+    // ★ 商品列表/成本汇总/环比/财务汇总 由各自页面独立加载，不在此处计算（性能优化）
     const [
       dashboardKpi,
-      productsList,
       promotionStats,
       afterSaleStats,
       dailyTrends,
       regionDistribution,
-      shipTimeDistribution,
       promoByDate,
-      costSummary,
-      periodCompare,
-      financialSummary,
     ] = await Promise.all([
       Promise.resolve(analytics.computeDashboardKPI(data)),
-      isAll
-        ? Promise.resolve([]) // __all__ 模式不计算商品列表（数据量可能很大）
-        : analytics.computeProductsList(data, storeId),
       Promise.resolve(analytics.computePromotionStats(data)),
       Promise.resolve(analytics.computeAfterSaleStats(data)),
       Promise.resolve(analytics.computeDailyTrends(data.orders || [], data.afterSaleRecords || [])),
       Promise.resolve(analytics.computeRegionDistribution(data.orders || [])),
-      Promise.resolve(analytics.computeShipTimeDistribution(data.orders || [])),
       Promise.resolve(analytics.computePromoByDate(
         data.promotionProducts || [], data.starStoreSummary || [], data.liveStreamSummary || []
       )),
-      Promise.resolve(analytics.computeCostSummary(
-        data.orders || [], productCosts, configs,
-        data.financialRecords || [], data.afterSaleRecords || [],
-        storeId
-      )),
-      Promise.resolve(analytics.computePeriodCompare(
-        data.orders || [], data.promotionProducts || [], data.afterSaleRecords || [], 7,
-        productCosts, configs, storeId
-      )),
-      Promise.resolve(analytics.computeFinancialSummary(data.financialRecords || [], data.orders || [])),
     ]);
 
     const elapsed = Date.now() - startTime;
 
     const result = {
       dashboard: { kpi: dashboardKpi.kpi, status: dashboardKpi.status, provinces: dashboardKpi.provinces },
-      products: productsList,
+      products: [],
       promotion: promotionStats,
       afterSale: afterSaleStats,
       trends: dailyTrends,
       regions: regionDistribution,
-      logistics: shipTimeDistribution,
+      logistics: null,
       promoByDate,
-      costs: costSummary,
-      compare: periodCompare,
-      financial: financialSummary,
+      costs: null,
+      compare: null,
+      financial: null,
       meta: { storeId, computedInMs: elapsed, dataRows: data.orders?.length || 0 },
     };
 

@@ -20,14 +20,18 @@ import { sf } from './index';
 export interface OrderFinancialActual {
   orderNo: string;
   baseTechFee: number;         // 0030002 基础技术服务费
+  baseTechFeeTime?: string;    // 基础技术服务费扣费时间（首次）
   subTechFee: number;          // 0030003 百亿补贴技术服务费
+  subTechFeeTime?: string;     // 百亿补贴技术服务费扣费时间（首次）
   experiencePlan: number;      // 0050002 消费者体验提升计划（原错标为 shippingInsurance）
+  experiencePlanTime?: string; // 体验提升计划扣费时间（首次）
   shippingInsurance: number;   // 保留字段，货款明细中恒为0（运费险来自独立文件）
   adTransfer: number;          // 0070004 转账到推广账户
   penalties: number;           // 004xxxx 售后罚款总额（含理赔）
   insuranceClaims: number;     // 0040002 售后补偿消费者（运费险理赔，罚款中的理赔部分）
   penaltyRecords: { time: string; amount: number; type: string; desc: string }[];  // 罚款明细
   marketingFees: number;       // 006xxxx 营销费用
+  marketingFeesTime?: string;  // 营销费用扣费时间（首次）
   netRevenue: number;          // 0010002 订单收入（正）
   couponIncome: number;        // 0010005 优惠券结算（正）
   refundAmount: number;        // 0020002 退款金额（正）
@@ -120,8 +124,10 @@ export function buildFinancialIndex(records: any[]): {
       entry.refundCoupon += Math.abs(exp);
     } else if (code === '0030002') {
       entry.baseTechFee += inc + exp;    // 通常 exp<0（扣费），inc>0（返还）
+      if (!entry.baseTechFeeTime && time) entry.baseTechFeeTime = time;
     } else if (code === '0030003') {
       entry.subTechFee += inc + exp;
+      if (!entry.subTechFeeTime && time) entry.subTechFeeTime = time;
     } else if (code.startsWith('004')) {
       entry.penalties += inc + exp;
       if (code === '0040002') {
@@ -137,8 +143,10 @@ export function buildFinancialIndex(records: any[]): {
       });
     } else if (code === '0050002') {
       entry.experiencePlan += inc + exp;
+      if (!entry.experiencePlanTime && time) entry.experiencePlanTime = time;
     } else if (code.startsWith('006')) {
       entry.marketingFees += inc + exp;
+      if (!entry.marketingFeesTime && time) entry.marketingFeesTime = time;
     } else if (code === '0070004') {
       entry.adTransfer += inc + exp;
     }

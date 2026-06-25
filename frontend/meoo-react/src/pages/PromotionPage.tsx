@@ -247,7 +247,7 @@ export default function PromotionPage() {
           {/* 推广花费 */}
           <div className="bg-pdd-card border border-pdd-border rounded-lg px-4 py-3">
             <p className="text-[11px] font-medium text-pdd-text-secondary/80">推广花费</p>
-            <p className="text-xl font-semibold text-pdd-text tracking-tight tabular-nums">{YEN}{tk.tc.toFixed(0)}</p>
+            <p className="text-xl font-semibold text-pdd-text tracking-tight tabular-nums">{YEN}{tk.tc.toFixed(2)}</p>
             <p className="text-[10px] text-pdd-text-secondary">CPA {YEN}{tk.cpa.toFixed(2)}</p>
           </div>
           {/* 曝光量 */}
@@ -298,8 +298,8 @@ export default function PromotionPage() {
               className="bg-pdd-card border border-pdd-border rounded-lg p-4 flex items-center justify-between hover:border-pdd-primary/30 transition-colors cursor-default">
               <div>
                 <p className="text-xs text-pdd-text-secondary">{ch.n}</p>
-                <p className="text-xl font-semibold text-pdd-text tracking-tight tabular-nums">{YEN}{ch.cost.toFixed(0)}</p>
-                <p className="text-[11px] font-medium text-pdd-text-secondary/80">GMV {YEN}{ch.gmv.toFixed(0)}</p>
+                <p className="text-xl font-semibold text-pdd-text tracking-tight tabular-nums">{YEN}{ch.cost.toFixed(2)}</p>
+                <p className="text-[11px] font-medium text-pdd-text-secondary/80">GMV {YEN}{ch.gmv.toFixed(2)}</p>
               </div>
               <div className="text-right">
                 <p className="text-xs text-pdd-text-secondary">ROI</p>
@@ -358,8 +358,8 @@ export default function PromotionPage() {
                     <div className="w-full bg-gradient-to-t from-blue-500 to-blue-400 rounded-t-sm transition-all"
                       style={{ height: barPct + '%', minHeight: barPct > 0 ? '4px' : '0' }} />
                   </div>
-                  <div className="text-[10px] font-bold text-gray-700 tabular-nums">{YEN}{h.cost.toFixed(0)}</div>
-                  <div className="text-[9px] text-gray-400">ROI <span className={rc(h.roi)}>{h.roi.toFixed(1)}</span></div>
+                  <div className="text-[10px] font-bold text-gray-700 tabular-nums">{YEN}{h.cost.toFixed(2)}</div>
+                  <div className="text-[9px] text-gray-400">ROI <span className={rc(h.roi)}>{h.roi.toFixed(2)}</span></div>
                 </div>
               );
             })}
@@ -381,13 +381,13 @@ export default function PromotionPage() {
                 <div key={s.sc} className="bg-gray-50 rounded-lg px-3 py-2.5">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs font-medium text-gray-700">{s.sc}</span>
-                    <span className="text-[11px] font-bold text-gray-800 tabular-nums">{YEN}{s.cost.toFixed(0)}</span>
+                    <span className="text-[11px] font-bold text-gray-800 tabular-nums">{YEN}{s.cost.toFixed(2)}</span>
                   </div>
                   <div className="h-1.5 bg-gray-200 rounded-full mb-2.5 overflow-hidden">
                     <div className="h-full bg-blue-500 rounded-full transition-all" style={{width: barPct + "%"}} />
                   </div>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px] font-medium text-pdd-text-secondary/80">
-                    <span>GMV <span className="font-medium text-gray-600">{YEN}{s.gmv.toFixed(0)}</span></span>
+                    <span>GMV <span className="font-medium text-gray-600">{YEN}{s.gmv.toFixed(2)}</span></span>
                     <span>ROI <span className={"font-medium " + rc(s.roi)}>{s.roi.toFixed(2)}</span></span>
                     <span>订单 <span className="font-medium text-gray-600">{s.ord}</span></span>
                   </div>
@@ -430,8 +430,8 @@ export default function PromotionPage() {
                 {pTops.map((p, i) => (
                   <tr key={p.pid || i} className="border-b border-gray-50 hover:bg-pdd-gray-50 transition-colors">
                     <td className="py-2.5 px-3 max-w-[140px] truncate text-gray-700 font-medium" title={p.name}>{p.name}</td>
-                    <td className="py-2.5 px-3 text-right font-mono text-pdd-text font-medium">{YEN}{p.cost.toFixed(0)}</td>
-                    <td className="py-2.5 px-3 text-right font-mono text-pdd-text">{YEN}{p.gmv.toFixed(0)}</td>
+                    <td className="py-2.5 px-3 text-right font-mono text-pdd-text font-medium">{YEN}{p.cost.toFixed(2)}</td>
+                    <td className="py-2.5 px-3 text-right font-mono text-pdd-text">{YEN}{p.gmv.toFixed(2)}</td>
                     <td className={"py-2.5 px-3 text-right font-mono font-medium " + rc(p.roi)}>{p.roi.toFixed(2)}</td>
                     <td className="py-2.5 px-3 text-right text-gray-800">{p.ord}</td>
                     <td className="py-2.5 px-3 text-right text-gray-400">{p.ctr ? p.ctr.toFixed(2) + "%" : "-"}</td>

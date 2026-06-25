@@ -279,7 +279,7 @@ export default function RegionPage() {
         {[{ label: '覆盖省份', value: kpis.provCount, fmt: (v: number) => `${v}个`, icon: Flag, color: 'var(--pdd-danger)' },
           { label: '覆盖城市', value: kpis.cityCount, fmt: (v: number) => `${v}个`, icon: Building2, color: 'var(--pdd-primary)' },
           { label: '总买家数', value: kpis.totalBuyers, fmt: (v: number) => v > 0 ? `${v}人` : '--', icon: Target, color: 'var(--pdd-success)' },
-          { label: '偏远订单占比', value: kpis.remoteRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: Mountain, color: 'var(--pdd-warning)' },
+          { label: '偏远订单占比', value: kpis.remoteRate, fmt: (v: number) => `${v.toFixed(2)}%`, icon: Mountain, color: 'var(--pdd-warning)' },
         ].map((card, i) => (
           <motion.div key={card.label} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }} className="pdd-card px-3 py-2.5 flex items-center gap-3">
             <card.icon size={16} color={card.color} />
@@ -312,10 +312,10 @@ export default function RegionPage() {
                     <div key={p.name} className="p-2 rounded bg-[var(--pdd-bg)]">
                       <div className="text-xs font-medium">{p.name}</div>
                       <div className="text-xs text-[var(--pdd-text-secondary)]">订单: {p.count.toLocaleString()}</div>
-                      <div className="text-xs text-[var(--pdd-text-secondary)]">GMV: ¥{p.revenue.toFixed(0)}</div>
+                      <div className="text-xs text-[var(--pdd-text-secondary)]">GMV: ¥{p.revenue.toFixed(2)}</div>
                       <div className="text-xs text-[var(--pdd-text-secondary)]">买家: {p.buyers}人</div>
                       <div className="text-xs text-[var(--pdd-text-secondary)]">客单: ¥{p.avgOrder.toFixed(2)}</div>
-                      <div className="text-xs text-[var(--pdd-text-secondary)]">邮费: ¥{p.postage.toFixed(0)}</div>
+                      <div className="text-xs text-[var(--pdd-text-secondary)]">邮费: ¥{p.postage.toFixed(2)}</div>
                     </div>
                   ))}
                 </div>
@@ -355,8 +355,8 @@ export default function RegionPage() {
                         {provinceStats.map((p, i) => (
                           <tr key={p.name} className={`${i % 2 === 1 ? 'bg-[var(--pdd-bg)]/50' : ''} border-b border-[var(--pdd-border)]/30`}>
                             <td className="py-1 px-1 font-medium">{p.name}</td>
-                            <td className="py-1 px-1 text-right tabular-nums text-[var(--pdd-primary-light)] font-medium">¥{p.revenue.toFixed(0)}</td>
-                            <td className="py-1 px-1 text-right tabular-nums">¥{p.paid.toFixed(0)}</td>
+                            <td className="py-1 px-1 text-right tabular-nums text-[var(--pdd-primary-light)] font-medium">¥{p.revenue.toFixed(2)}</td>
+                            <td className="py-1 px-1 text-right tabular-nums">¥{p.paid.toFixed(2)}</td>
                             <td className="py-1 px-1 text-right tabular-nums">¥{p.avgOrder.toFixed(2)}</td>
                             <td className="py-1 px-1 text-right">{p.rate.toFixed(1)}%</td>
                           </tr>
@@ -416,10 +416,10 @@ export default function RegionPage() {
                           <td className="py-1.5 px-2 text-[var(--pdd-text-muted)]">{i + 1}</td>
                           <td className="py-1.5 px-2 font-medium flex items-center gap-1"><ChevronRight size={12} className={`text-[var(--pdd-text-muted)] transition-transform ${expandedCity === c.label ? 'rotate-90' : ''}`} />{c.label}</td>
                           <td className="py-1.5 px-2 text-right tabular-nums">{c.count.toLocaleString()}</td>
-                          <td className="py-1.5 px-2 text-right tabular-nums text-pdd-primary-light font-medium">¥{c.revenue.toFixed(0)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-pdd-primary-light font-medium">¥{c.revenue.toFixed(2)}</td>
                           <td className="py-1.5 px-2 text-right">{c.buyers}</td>
                           <td className="py-1.5 px-2 text-right tabular-nums">¥{c.avgOrder.toFixed(2)}</td>
-                          <td className="py-1.5 px-2 text-right tabular-nums">¥{c.postage.toFixed(0)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums">¥{c.postage.toFixed(2)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -443,7 +443,7 @@ export default function RegionPage() {
               <div className="pdd-card p-3">
                 <h3 className="text-sm font-semibold mb-2">渗透率饼图({rangeLabel})</h3>
                 {noData ? <div className="h-40 flex items-center justify-center text-xs text-[var(--pdd-text-secondary)]">暂无数据</div> : (
-                  <ResponsiveContainer width="100%" height={200}><PieChart><Pie data={provinceStats.slice(0, 8).map(p => ({ name: p.name, value: hasBuyerData ? p.buyers : p.count }))} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}>{provinceStats.slice(0, 8).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer>
+                  <ResponsiveContainer width="100%" height={200}><PieChart><Pie data={provinceStats.slice(0, 8).map(p => ({ name: p.name, value: hasBuyerData ? p.buyers : p.count }))} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={65} label={({ name, percent }) => `${name} ${(percent * 100).toFixed(2)}%`}>{provinceStats.slice(0, 8).map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie><Tooltip /></PieChart></ResponsiveContainer>
                 )}
               </div>
             </div>
@@ -462,7 +462,7 @@ export default function RegionPage() {
                         <td className="py-1.5 px-2 text-right">{hasBuyerData ? p.buyers : '--'}</td>
                         <td className="py-1.5 px-2 text-right">{p.count.toLocaleString()}</td>
                         <td className="py-1.5 px-2 text-right">{hasBuyerData ? p.avgBuyerOrder.toFixed(1) : '--'}</td>
-                        <td className="py-1.5 px-2 text-right tabular-nums text-pdd-primary-light font-medium">¥{p.revenue.toFixed(0)}</td>
+                        <td className="py-1.5 px-2 text-right tabular-nums text-pdd-primary-light font-medium">¥{p.revenue.toFixed(2)}</td>
                         <td className="py-1.5 px-2 text-right tabular-nums">¥{p.avgOrder.toFixed(2)}</td>
                         <td className="py-1.5 px-2 text-right">{hasBuyerData ? ((p.buyers / totalBuyers) * 100).toFixed(1) : '--'}%</td>
                       </tr>
@@ -487,7 +487,7 @@ export default function RegionPage() {
                         <td className="py-1.5 px-2 text-right">{c.buyers}</td>
                         <td className="py-1.5 px-2 text-right">{c.count.toLocaleString()}</td>
                         <td className="py-1.5 px-2 text-right">{c.buyers > 0 ? (c.count / c.buyers).toFixed(1) : '0'}</td>
-                        <td className="py-1.5 px-2 text-right tabular-nums">¥{c.revenue.toFixed(0)}</td>
+                        <td className="py-1.5 px-2 text-right tabular-nums">¥{c.revenue.toFixed(2)}</td>
                       </tr>
                     ))}
                   </tbody></table>
@@ -514,10 +514,10 @@ export default function RegionPage() {
                     <div className="grid grid-cols-2 gap-2">
                       <div className="p-2 rounded bg-[var(--pdd-bg)]"><div className="text-[10px] text-[var(--pdd-text-secondary)]">偏远订单数</div><div className="text-sm font-bold text-[var(--pdd-warning)]">{remoteStats.count}单</div></div>
                       <div className="p-2 rounded bg-[var(--pdd-bg)]"><div className="text-[10px] text-[var(--pdd-text-secondary)]">偏远占比</div><div className="text-sm font-bold text-[var(--pdd-warning)]">{remoteStats.rate.toFixed(1)}%</div></div>
-                      <div className="p-2 rounded bg-[var(--pdd-bg)]"><div className="text-[10px] text-[var(--pdd-text-secondary)]">偏远GMV</div><div className="text-sm font-bold">¥{remoteStats.revenue.toFixed(0)}</div></div>
-                      <div className="p-2 rounded bg-[var(--pdd-bg)]"><div className="text-[10px] text-[var(--pdd-text-secondary)]">偏远邮费合计</div><div className="text-sm font-bold">¥{remoteStats.shipping.toFixed(0)}</div></div>
+                      <div className="p-2 rounded bg-[var(--pdd-bg)]"><div className="text-[10px] text-[var(--pdd-text-secondary)]">偏远GMV</div><div className="text-sm font-bold">¥{remoteStats.revenue.toFixed(2)}</div></div>
+                      <div className="p-2 rounded bg-[var(--pdd-bg)]"><div className="text-[10px] text-[var(--pdd-text-secondary)]">偏远邮费合计</div><div className="text-sm font-bold">¥{remoteStats.shipping.toFixed(2)}</div></div>
                       <div className="p-2 rounded bg-[var(--pdd-bg)]"><div className="text-[10px] text-[var(--pdd-text-secondary)]">平均邮费/单</div><div className="text-sm font-bold">¥{remoteStats.avgShipping.toFixed(2)}</div></div>
-                      <div className="p-2 rounded bg-[var(--pdd-bg)]"><div className="text-[10px] text-[var(--pdd-text-secondary)]">偏远实付</div><div className="text-sm font-bold">¥{remoteStats.paid.toFixed(0)}</div></div>
+                      <div className="p-2 rounded bg-[var(--pdd-bg)]"><div className="text-[10px] text-[var(--pdd-text-secondary)]">偏远实付</div><div className="text-sm font-bold">¥{remoteStats.paid.toFixed(2)}</div></div>
                     </div>
                     <div className="text-xs font-medium mt-2 text-[var(--pdd-text-secondary)]">偏远省份明细</div>
                     {remoteStats.byProv.length > 0 ? remoteStats.byProv.map(([prov, count]) => (
@@ -617,7 +617,7 @@ export default function RegionPage() {
                         <tr key={p.name} className={`${i % 2 === 1 ? 'bg-[var(--pdd-bg)]/50' : ''} hover:bg-[var(--pdd-gray-200)]/50 border-b border-[var(--pdd-border)]/50`}>
                           <td className="py-1.5 px-2 font-medium">{p.name}</td>
                           <td className="py-1.5 px-2 text-right tabular-nums">{p.count.toLocaleString()}</td>
-                          <td className="py-1.5 px-2 text-right tabular-nums text-pdd-primary-light font-medium">¥{p.revenue.toFixed(0)}</td>
+                          <td className="py-1.5 px-2 text-right tabular-nums text-pdd-primary-light font-medium">¥{p.revenue.toFixed(2)}</td>
                           <td className="py-1.5 px-2 text-right">{p.buyers}</td>
                           <td className="py-1.5 px-2 text-right tabular-nums">¥{p.avgOrder.toFixed(2)}</td>
                           {compareEnabled && compareProvinceStats && (

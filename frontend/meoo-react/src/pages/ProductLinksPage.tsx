@@ -142,7 +142,7 @@ export default function ProductLinksPage() {
     { label: '总成本', value: `¥${fmtInt(totalStats.totalCost)}`, icon: TrendingDown, color: 'var(--pdd-danger)' },
     { label: '净利润', value: `¥${fmtInt(totalStats.netProfit)}`, icon: DollarSign, color: totalStats.netProfit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' },
     { label: '平均ROI', value: `${totalStats.roi.toFixed(2)}x`, icon: BarChart3, color: totalStats.roi >= 1 ? 'var(--pdd-success)' : 'var(--pdd-danger)' },
-    { label: '退款率', value: `${totalStats.refundRate.toFixed(1)}%`, icon: RotateCcw, color: '#ff7875' },
+    { label: '退款率', value: `${totalStats.refundRate.toFixed(2)}%`, icon: RotateCcw, color: '#ff7875' },
   ];
 
   const tableColumns = [
@@ -179,7 +179,7 @@ export default function ProductLinksPage() {
     }
     if (isRate) {
       const color = key === 'profitRate' ? (val >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)') : undefined;
-      return <span style={{ color }}>{val.toFixed(1)}%</span>;
+      return <span style={{ color }}>{val.toFixed(2)}%</span>;
     }
     if (isMoney) {
       const color = key === 'netProfit' ? (val >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)') : key === 'revenue' || key === 'promoTransaction' ? 'var(--pdd-success)' : key === 'totalCost' || key === 'promoCost' ? 'var(--pdd-danger)' : undefined;
@@ -299,9 +299,9 @@ export default function ProductLinksPage() {
                     <div><span className="text-[var(--pdd-text-secondary)]">订单</span><br /><span className="font-mono">{p.orders}</span></div>
                     <div><span className="text-[var(--pdd-text-secondary)]">销量</span><br /><span className="font-mono">{p.sales}</span></div>
                     <div><span className="text-[var(--pdd-text-secondary)]">客单价</span><br /><span className="font-mono">¥{fmt(p.avgOrderValue)}</span></div>
-                    <div><span className="text-[var(--pdd-text-secondary)]">退款率</span><br /><span className="font-mono">{p.refundRate.toFixed(1)}%</span></div>
+                    <div><span className="text-[var(--pdd-text-secondary)]">退款率</span><br /><span className="font-mono">{p.refundRate.toFixed(2)}%</span></div>
                     <div><span className="text-[var(--pdd-text-secondary)]">净利润</span><br /><span className="font-mono font-bold" style={{ color: p.netProfit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' }}>¥{fmt(p.netProfit)}</span></div>
-                    <div><span className="text-[var(--pdd-text-secondary)]">利润率</span><br /><span className="font-mono">{p.profitRate.toFixed(1)}%</span></div>
+                    <div><span className="text-[var(--pdd-text-secondary)]">利润率</span><br /><span className="font-mono">{p.profitRate.toFixed(2)}%</span></div>
                     {p.hasPromoData && (
                       <>
                         <div><span className="text-[var(--pdd-text-secondary)]">推广花费</span><br /><span className="font-mono text-[var(--pdd-purple)]">¥{fmt(p.promoCost)}</span></div>
@@ -381,8 +381,8 @@ export default function ProductLinksPage() {
                       <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">订单数</span><p className="font-mono font-bold">{selectedDetail.orders}</p></div>
                       <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">销量</span><p className="font-mono font-bold">{selectedDetail.sales}</p></div>
                       <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">客单价</span><p className="font-mono font-bold">¥{fmt(selectedDetail.avgOrderValue)}</p></div>
-                      <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">退款率</span><p className="font-mono font-bold">{selectedDetail.refundRate.toFixed(1)}%</p></div>
-                      <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">售后率</span><p className="font-mono font-bold">{selectedDetail.afterSaleRate.toFixed(1)}%</p></div>
+                      <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">退款率</span><p className="font-mono font-bold">{selectedDetail.refundRate.toFixed(2)}%</p></div>
+                      <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">售后率</span><p className="font-mono font-bold">{selectedDetail.afterSaleRate.toFixed(2)}%</p></div>
                       <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">折扣</span><p className="font-mono font-bold text-[var(--pdd-warning)]">¥{fmt(selectedDetail.discount)}</p></div>
                     </div>
                   </div>
@@ -400,7 +400,7 @@ export default function ProductLinksPage() {
                       <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">CTR</span><p className="font-mono font-bold">{selectedDetail.ctr.toFixed(2)}%</p></div>
                       <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">CVR</span><p className="font-mono font-bold">{selectedDetail.cvr.toFixed(2)}%</p></div>
                       <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">推广交易额</span><p className="font-mono font-bold">¥{fmt(selectedDetail.promoTransaction)}</p></div>
-                      <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">推广占比</span><p className="font-mono font-bold">{selectedDetail.promoCostRatio.toFixed(1)}%</p></div>
+                      <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">推广占比</span><p className="font-mono font-bold">{selectedDetail.promoCostRatio.toFixed(2)}%</p></div>
                     </div>
                   </div>
                 </div>
@@ -410,7 +410,7 @@ export default function ProductLinksPage() {
                   <div className="grid grid-cols-4 gap-2 text-xs">
                     <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">总成本</span><p className="font-mono font-bold text-pdd-danger">¥{fmt(selectedDetail.totalCost)}</p></div>
                     <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">净利润</span><p className="font-mono font-bold" style={{ color: selectedDetail.netProfit >= 0 ? 'var(--pdd-success)' : 'var(--pdd-danger)' }}>¥{fmt(selectedDetail.netProfit)}</p></div>
-                    <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">利润率</span><p className="font-mono font-bold">{selectedDetail.profitRate.toFixed(1)}%</p></div>
+                    <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">利润率</span><p className="font-mono font-bold">{selectedDetail.profitRate.toFixed(2)}%</p></div>
                     <div className="bg-[var(--pdd-bg)] rounded-lg p-2"><span className="text-[var(--pdd-text-secondary)]">ROI</span><p className="font-mono font-bold" style={{ color: selectedDetail.roi >= 1 ? 'var(--pdd-success)' : 'var(--pdd-danger)' }}>{selectedDetail.roi.toFixed(2)}x</p></div>
                   </div>
                 </div>

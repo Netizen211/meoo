@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Filter, X, ChevronDown, ChevronUp, Save, Trash2, Tag } from 'lucide-react';
+import { usePreference } from '../hooks/usePreference';
 
 interface FilterConfig {
   key: string;
@@ -60,14 +61,9 @@ const FILTER_CONFIGS: FilterConfig[] = [
 export default function FilterPanel({ onFilterChange }: { onFilterChange?: (filters: FilterState) => void }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [filters, setFilters] = useState<FilterState>({});
-  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+  const [savedFilters, setSavedFilters] = usePreference<SavedFilter[]>('saved_filters', []);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveName, setSaveName] = useState('');
-
-  useEffect(() => {
-    const saved = localStorage.getItem('dianfx_saved_filters');
-    if (saved) setSavedFilters(JSON.parse(saved));
-  }, []);
 
   const activeFilters = Object.entries(filters).filter(([_, v]) => v && (Array.isArray(v) ? v.length > 0 : v !== ''));
 
@@ -99,7 +95,6 @@ export default function FilterPanel({ onFilterChange }: { onFilterChange?: (filt
     };
     const updated = [...savedFilters, newSaved];
     setSavedFilters(updated);
-    localStorage.setItem('dianfx_saved_filters', JSON.stringify(updated));
     setShowSaveDialog(false);
     setSaveName('');
   };
@@ -112,7 +107,6 @@ export default function FilterPanel({ onFilterChange }: { onFilterChange?: (filt
   const deleteSavedFilter = (id: string) => {
     const updated = savedFilters.filter(s => s.id !== id);
     setSavedFilters(updated);
-    localStorage.setItem('dianfx_saved_filters', JSON.stringify(updated));
   };
 
   return (

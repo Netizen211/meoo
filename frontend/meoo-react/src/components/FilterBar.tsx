@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Filter, X, ChevronDown, Save, Trash2, Tag, Clock, Star, History } from 'lucide-react';
+import { usePreference } from '../hooks/usePreference';
 
 interface FilterConfig {
   key: string;
@@ -84,18 +85,11 @@ const QUICK_FILTERS = [
 export default function FilterBar({ onFilterChange }: { onFilterChange?: (filters: FilterState) => void }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [filters, setFilters] = useState<FilterState>({});
-  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
-  const [filterHistory, setFilterHistory] = useState<FilterHistory[]>([]);
+  const [savedFilters, setSavedFilters] = usePreference<SavedFilter[]>('saved_filters', []);
+  const [filterHistory, setFilterHistory] = usePreference<FilterHistory[]>('filter_history', []);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [saveName, setSaveName] = useState('');
   const [activeTab, setActiveTab] = useState<'filters' | 'saved' | 'history'>('filters');
-
-  useEffect(() => {
-    const saved = localStorage.getItem('dianfx_saved_filters');
-    if (saved) setSavedFilters(JSON.parse(saved));
-    const history = localStorage.getItem('dianfx_filter_history');
-    if (history) setFilterHistory(JSON.parse(history));
-  }, []);
 
   const activeFilters = Object.entries(filters).filter(([_, v]) => v && (Array.isArray(v) ? v.length > 0 : v !== ''));
 
@@ -138,7 +132,6 @@ export default function FilterBar({ onFilterChange }: { onFilterChange?: (filter
     };
     const updated = [...savedFilters, newSaved];
     setSavedFilters(updated);
-    localStorage.setItem('dianfx_saved_filters', JSON.stringify(updated));
     setShowSaveDialog(false);
     setSaveName('');
   };
@@ -154,19 +147,16 @@ export default function FilterBar({ onFilterChange }: { onFilterChange?: (filter
     };
     const updatedHistory = [newHistory, ...filterHistory.slice(0, 9)];
     setFilterHistory(updatedHistory);
-    localStorage.setItem('dianfx_filter_history', JSON.stringify(updatedHistory));
   };
 
   const deleteSavedFilter = (id: string) => {
     const updated = savedFilters.filter(s => s.id !== id);
     setSavedFilters(updated);
-    localStorage.setItem('dianfx_saved_filters', JSON.stringify(updated));
   };
 
   const toggleFavorite = (id: string) => {
     const updated = savedFilters.map(s => s.id === id ? { ...s, isFavorite: !s.isFavorite } : s);
     setSavedFilters(updated);
-    localStorage.setItem('dianfx_saved_filters', JSON.stringify(updated));
   };
 
   return (

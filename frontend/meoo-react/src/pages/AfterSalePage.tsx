@@ -819,8 +819,8 @@ export default function AfterSalePage() {
  if (!applyTime || !agreeTime) return { text: '-', isAbnormal: false };
  const hours = (new Date(agreeTime).getTime() - new Date(applyTime).getTime()) / 3600000;
  if (hours < 0) return { text: '数据异常', isAbnormal: true };
- if (hours > 720) return { text: `${(hours / 24).toFixed(0)}天(超长)`, isAbnormal: true };
- return { text: hours < 1 ? `${Math.round(hours * 60)}分钟` : `${hours.toFixed(1)}h`, isAbnormal: false };
+ if (hours > 720) return { text: `${(hours / 24).toFixed(2)}天(超长)`, isAbnormal: true };
+ return { text: hours < 1 ? `${Math.round(hours * 60)}分钟` : `${hours.toFixed(2)}h`, isAbnormal: false };
  };
 
  const exportCSV = () => {
@@ -853,10 +853,10 @@ export default function AfterSalePage() {
 
  const kpis = [
  { label: '售后订单数', value: kpiData.afterSaleCount, fmt: (v: number) => v.toString(), icon: ShieldCheck, color: 'var(--pdd-danger)', change: compareEnabled ? changePct(kpiData.afterSaleCount, kpiData.compareAfterSaleCount) : null, reverse: true },
- { label: '售后率', value: kpiData.afterSaleRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: AlertTriangle, color: 'var(--pdd-warning)', change: compareEnabled ? changePct(kpiData.afterSaleRate, kpiData.compareAfterSaleRate) : null, reverse: true },
- { label: '退款总金额', value: kpiData.refundAmount, fmt: (v: number) => `¥${v.toFixed(0)}`, icon: DollarSign, color: 'var(--pdd-danger)', change: compareEnabled ? changePct(kpiData.refundAmount, kpiData.compareRefundAmount) : null, reverse: true },
- { label: '平均处理时长', value: kpiData.avgProcessTime, fmt: (v: number) => v > 0 ? `${v.toFixed(1)}h` : '-', icon: Clock, color: 'var(--pdd-primary)', change: null },
- { label: '退货退款率', value: kpiData.returnRefundRate, fmt: (v: number) => `${v.toFixed(1)}%`, icon: RotateCcw, color: 'var(--pdd-primary)', change: null },
+ { label: '售后率', value: kpiData.afterSaleRate, fmt: (v: number) => `${v.toFixed(2)}%`, icon: AlertTriangle, color: 'var(--pdd-warning)', change: compareEnabled ? changePct(kpiData.afterSaleRate, kpiData.compareAfterSaleRate) : null, reverse: true },
+ { label: '退款总金额', value: kpiData.refundAmount, fmt: (v: number) => `¥${v.toFixed(2)}`, icon: DollarSign, color: 'var(--pdd-danger)', change: compareEnabled ? changePct(kpiData.refundAmount, kpiData.compareRefundAmount) : null, reverse: true },
+ { label: '平均处理时长', value: kpiData.avgProcessTime, fmt: (v: number) => v > 0 ? `${v.toFixed(2)}h` : '-', icon: Clock, color: 'var(--pdd-primary)', change: null },
+ { label: '退货退款率', value: kpiData.returnRefundRate, fmt: (v: number) => `${v.toFixed(2)}%`, icon: RotateCcw, color: 'var(--pdd-primary)', change: null },
  { label: '超长处理', value: kpiData.overlongCount, fmt: (v: number) => v.toString(), icon: AlertTriangle, color: 'var(--pdd-danger)', change: null },
  { label: '仅退款单', value: kpiData.afterSaleCount - (() => { let c = 0; records.forEach((r: any) => { if (safeField(r, '退款类型').includes('退货')) c++; }); return c; })(), fmt: (v: number) => v.toString(), icon: FileText, color: 'var(--pdd-primary)', change: null },
  { label: '退货退款单', value: (() => { let c = 0; records.forEach((r: any) => { if (safeField(r, '退款类型').includes('退货')) c++; }); return c; })(), fmt: (v: number) => v.toString(), icon: Truck, color: 'var(--pdd-warning)', change: null },
@@ -919,9 +919,9 @@ export default function AfterSalePage() {
  <div className="pdd-card px-4 py-3 cursor-pointer hover:bg-pdd-gray-50 transition-colors" onClick={() => setActiveTab('promoCross')}>
  <p className="text-xs text-pdd-text-secondary">推广 vs 自然售后率</p>
  <div className="flex items-center gap-1.5 mt-1">
- <span className="text-lg font-bold text-[var(--pdd-text)]">{hasPromoData ? `${promoCrossAnalysis.promoAfterSaleRate.toFixed(1)}%` : '-'}</span>
+ <span className="text-lg font-bold text-[var(--pdd-text)]">{hasPromoData ? `${promoCrossAnalysis.promoAfterSaleRate.toFixed(2)}%` : '-'}</span>
  <span className="text-xs text-pdd-text-secondary">/</span>
- <span className="text-lg font-bold text-[var(--pdd-text)]">{hasPromoData ? `${promoCrossAnalysis.nonPromoAfterSaleRate.toFixed(1)}%` : '-'}</span>
+ <span className="text-lg font-bold text-[var(--pdd-text)]">{hasPromoData ? `${promoCrossAnalysis.nonPromoAfterSaleRate.toFixed(2)}%` : '-'}</span>
  </div>
  <p className="text-xs text-pdd-text-secondary">点击查看明细对比</p>
  </div>
@@ -930,9 +930,9 @@ export default function AfterSalePage() {
  {hasTimeData ? (
  <>
  <div className="grid grid-cols-3 gap-1 mt-1">
- <div><span className="text-xs text-pdd-text-secondary">≤30天</span><p className="text-base font-bold text-[var(--pdd-warning)]">{cumulativePct(30)!.toFixed(0)}%</p><p className="text-[10px] text-pdd-text-secondary">{cumulativeCount(30)}单</p></div>
- <div><span className="text-xs text-pdd-text-secondary">≤60天</span><p className="text-base font-bold text-[var(--pdd-primary)]">{cumulativePct(60)!.toFixed(0)}%</p><p className="text-[10px] text-pdd-text-secondary">{cumulativeCount(60)}单</p></div>
- <div><span className="text-xs text-pdd-text-secondary">≤90天</span><p className="text-base font-bold text-[var(--pdd-success)]">{cumulativePct(90)!.toFixed(0)}%</p><p className="text-[10px] text-pdd-text-secondary">{cumulativeCount(90)}单</p></div>
+ <div><span className="text-xs text-pdd-text-secondary">≤30天</span><p className="text-base font-bold text-[var(--pdd-warning)]">{cumulativePct(30)!.toFixed(2)}%</p><p className="text-[10px] text-pdd-text-secondary">{cumulativeCount(30)}单</p></div>
+ <div><span className="text-xs text-pdd-text-secondary">≤60天</span><p className="text-base font-bold text-[var(--pdd-primary)]">{cumulativePct(60)!.toFixed(2)}%</p><p className="text-[10px] text-pdd-text-secondary">{cumulativeCount(60)}单</p></div>
+ <div><span className="text-xs text-pdd-text-secondary">≤90天</span><p className="text-base font-bold text-[var(--pdd-success)]">{cumulativePct(90)!.toFixed(2)}%</p><p className="text-[10px] text-pdd-text-secondary">{cumulativeCount(90)}单</p></div>
  </div>
  <p className="text-[10px] text-right text-pdd-text-secondary mt-1">点击查看完整窗口</p>
  </>
@@ -947,8 +947,8 @@ export default function AfterSalePage() {
  </div>
  <div className="pdd-card px-4 py-3">
  <p className="text-xs text-pdd-text-secondary">拦截恢复(估)</p>
- <p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{logisticsData.interceptRate > 0 ? `¥${interceptRecovery.toFixed(0)}` : '-'}</p>
- <p className="text-xs text-pdd-text-secondary">拦截率 {logisticsData.interceptRate > 0 ? `${logisticsData.interceptRate.toFixed(1)}%` : '-'}</p>
+ <p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{logisticsData.interceptRate > 0 ? `¥${interceptRecovery.toFixed(2)}` : '-'}</p>
+ <p className="text-xs text-pdd-text-secondary">拦截率 {logisticsData.interceptRate > 0 ? `${logisticsData.interceptRate.toFixed(2)}%` : '-'}</p>
  </div>
  </div>
  <div className="grid grid-cols-2 gap-4">
@@ -1004,7 +1004,7 @@ export default function AfterSalePage() {
  const renderRefund = () => (
  <div className="space-y-4">
  <div className="grid grid-cols-3 gap-3">
- <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">退款总金额</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">¥{refundAnalysis.totalRefundAmt.toFixed(0)}</p></div>
+ <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">退款总金额</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">¥{refundAnalysis.totalRefundAmt.toFixed(2)}</p></div>
  <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">仅退款笔数</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{records.filter((r: any) => !safeField(r, '退款类型').includes('退货')).length}</p></div>
  <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">退货退款笔数</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{records.filter((r: any) => safeField(r, '退款类型').includes('退货')).length}</p></div>
  </div>
@@ -1064,7 +1064,7 @@ export default function AfterSalePage() {
  <div key={w.key} className="pdd-card px-4 py-3">
  <p className="text-xs text-pdd-text-secondary">{w.label}</p>
  <p className="text-xl font-bold text-[var(--pdd-text)]">{w.count}<span className="text-sm font-normal text-pdd-text-secondary"> 单</span></p>
- <p className="text-xs text-pdd-text-secondary">¥{w.refundAmount.toFixed(0)} ({w.pct.toFixed(1)}%)</p>
+ <p className="text-xs text-pdd-text-secondary">¥{w.refundAmount.toFixed(2)} ({w.pct.toFixed(2)}%)</p>
  </div>
  ))}
  {timeWindowAnalysis.windowList.length === 0 && (
@@ -1140,9 +1140,9 @@ export default function AfterSalePage() {
  const renderEfficiency = () => (
  <div className="space-y-4">
  <div className="grid grid-cols-4 gap-3">
- <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">平均处理时长</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{efficiencyData.avgHours > 0 ? `${efficiencyData.avgHours.toFixed(1)}h` : '-'}</p></div>
- <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">SLA达标率(&lt;24h)</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{efficiencyData.slaRate.toFixed(1)}%</p></div>
- <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">超时(&gt;24h)</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{efficiencyData.overtimeCount}<span className="text-sm font-normal text-pdd-text-secondary ml-1">({efficiencyData.overtimeRate.toFixed(1)}%)</span></p></div>
+ <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">平均处理时长</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{efficiencyData.avgHours > 0 ? `${efficiencyData.avgHours.toFixed(2)}h` : '-'}</p></div>
+ <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">SLA达标率(&lt;24h)</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{efficiencyData.slaRate.toFixed(2)}%</p></div>
+ <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">超时(&gt;24h)</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{efficiencyData.overtimeCount}<span className="text-sm font-normal text-pdd-text-secondary ml-1">({efficiencyData.overtimeRate.toFixed(2)}%)</span></p></div>
  <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">超长(&gt;30天)</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{efficiencyData.overlongCount}<span className="text-sm font-normal text-pdd-text-secondary"> 单</span></p></div>
  </div>
  <div className="grid grid-cols-2 gap-4">
@@ -1174,7 +1174,7 @@ export default function AfterSalePage() {
  <td className="py-2 text-right font-mono">{h.count}</td>
  <td className="py-2 text-right font-mono">{h.onlyRefund}</td>
  <td className="py-2 text-right font-mono">{h.returnRefund}</td>
- <td className="py-2 text-right font-mono">{h.avgHours.toFixed(1)}h</td>
+ <td className="py-2 text-right font-mono">{h.avgHours.toFixed(2)}h</td>
  <td className="py-2 text-center"><span className={`px-2 py-0.5 rounded text-[10px] ${h.avgHours <= 2 ? 'bg-gray-50 text-green-700' : h.avgHours <= 6 ? 'bg-pdd-info/10 text-blue-700' : h.avgHours <= 24 ? 'bg-gray-50 text-yellow-700' : 'bg-gray-50 text-red-700'}`}>{h.avgHours <= 2 ? '极快' : h.avgHours <= 6 ? '正常' : h.avgHours <= 24 ? '偏慢' : '超时'}</span></td>
  </tr>
  ))}
@@ -1192,8 +1192,8 @@ export default function AfterSalePage() {
  <div className="space-y-4">
  <div className="grid grid-cols-4 gap-3">
  <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">退货包裹数</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{logisticsData.totalReturns}</p></div>
- <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">快递拦截成功率</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{logisticsData.interceptRate > 0 ? `${logisticsData.interceptRate.toFixed(1)}%` : '-'}</p></div>
- <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">平均退货物流时效</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{logisticsData.avgReturnDays > 0 ? `${logisticsData.avgReturnDays.toFixed(1)}天` : '-'}</p></div>
+ <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">快递拦截成功率</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{logisticsData.interceptRate > 0 ? `${logisticsData.interceptRate.toFixed(2)}%` : '-'}</p></div>
+ <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">平均退货物流时效</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{logisticsData.avgReturnDays > 0 ? `${logisticsData.avgReturnDays.toFixed(2)}天` : '-'}</p></div>
  <div className="pdd-card px-4 py-3"><p className="text-xs text-pdd-text-secondary">异常物流</p><p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{logisticsData.abnormalLogistics}</p></div>
  </div>
  <div className="grid grid-cols-2 gap-4">
@@ -1252,7 +1252,7 @@ export default function AfterSalePage() {
  <div className="flex items-center justify-between gap-8">
  <div className="text-center flex-1">
  <p className="text-xs text-pdd-text-secondary mb-1">推广订单售后率</p>
- <p className="text-3xl font-bold text-[var(--pdd-text)]">{a.promoAfterSaleRate.toFixed(1)}%</p>
+ <p className="text-3xl font-bold text-[var(--pdd-text)]">{a.promoAfterSaleRate.toFixed(2)}%</p>
  <p className="text-xs text-pdd-text-secondary">{a.promoOrderEst} 单推广订单 · {a.promoAfterSaleCount} 笔售后</p>
  </div>
  <div className="text-center flex-shrink-0">
@@ -1264,20 +1264,20 @@ export default function AfterSalePage() {
  ) : gap > 0 ? (
  <div className="flex flex-col items-center">
  <ArrowUp size={24} className="text-[var(--pdd-primary)]" />
- <span className="text-lg font-bold text-[var(--pdd-text)]">{gap.toFixed(1)}%</span>
+ <span className="text-lg font-bold text-[var(--pdd-text)]">{gap.toFixed(2)}%</span>
  <span className="text-xs text-[var(--pdd-danger)] bg-red-100 px-2 py-0.5 rounded-full">推广更高</span>
  </div>
  ) : (
  <div className="flex flex-col items-center">
  <ArrowDown size={24} className="text-[var(--pdd-primary)]" />
- <span className="text-lg font-bold text-[var(--pdd-text)]">{Math.abs(gap).toFixed(1)}%</span>
+ <span className="text-lg font-bold text-[var(--pdd-text)]">{Math.abs(gap).toFixed(2)}%</span>
  <span className="text-xs text-[var(--pdd-success)] bg-green-100 px-2 py-0.5 rounded-full">自然更高</span>
  </div>
  )}
  </div>
  <div className="text-center flex-1">
  <p className="text-xs text-pdd-text-secondary mb-1">非推广订单售后率</p>
- <p className="text-3xl font-bold text-[var(--pdd-text)]">{a.nonPromoAfterSaleRate.toFixed(1)}%</p>
+ <p className="text-3xl font-bold text-[var(--pdd-text)]">{a.nonPromoAfterSaleRate.toFixed(2)}%</p>
  <p className="text-xs text-pdd-text-secondary">{a.nonPromoOrderEst} 单自然订单 · {a.nonPromoAfterSaleCount} 笔售后</p>
  </div>
  </div>
@@ -1311,7 +1311,7 @@ export default function AfterSalePage() {
  <td className="py-2.5 font-medium">订单总量</td>
  <td className="py-2.5 text-right font-mono text-[var(--pdd-text)]">{a.promoOrderEst}</td>
  <td className="py-2.5 text-right font-mono text-[var(--pdd-text)]">{a.nonPromoOrderEst}</td>
- <td className="py-2.5 text-right font-mono text-pdd-text-secondary">{a.promoOrderEst + a.nonPromoOrderEst > 0 ? (a.promoOrderEst / (a.promoOrderEst + a.nonPromoOrderEst) * 100).toFixed(0) : '-'}% 来自推广</td>
+ <td className="py-2.5 text-right font-mono text-pdd-text-secondary">{a.promoOrderEst + a.nonPromoOrderEst > 0 ? (a.promoOrderEst / (a.promoOrderEst + a.nonPromoOrderEst) * 100).toFixed(2) : '-'}% 来自推广</td>
  </tr>
  <tr className="border-b border-pdd-border">
  <td className="py-2.5 font-medium">售后笔数（估算）</td>
@@ -1329,9 +1329,9 @@ export default function AfterSalePage() {
  </tr>
  <tr className="border-b border-pdd-border">
  <td className="py-2.5 font-medium">退款金额</td>
- <td className="py-2.5 text-right font-mono text-[var(--pdd-text)]">¥{a.promoRefundAmount.toFixed(0)}</td>
- <td className="py-2.5 text-right font-mono text-[var(--pdd-text)]">¥{a.nonPromoRefundAmount.toFixed(0)}</td>
- <td className="py-2.5 text-right font-mono text-pdd-text-secondary">¥{(a.promoRefundAmount - a.nonPromoRefundAmount).toFixed(0)}</td>
+ <td className="py-2.5 text-right font-mono text-[var(--pdd-text)]">¥{a.promoRefundAmount.toFixed(2)}</td>
+ <td className="py-2.5 text-right font-mono text-[var(--pdd-text)]">¥{a.nonPromoRefundAmount.toFixed(2)}</td>
+ <td className="py-2.5 text-right font-mono text-pdd-text-secondary">¥{(a.promoRefundAmount - a.nonPromoRefundAmount).toFixed(2)}</td>
  </tr>
  <tr className="border-b border-pdd-border">
  <td className="py-2.5 font-medium">平均每单退款</td>
@@ -1351,19 +1351,19 @@ export default function AfterSalePage() {
  <div className="space-y-3">
  <div className="flex items-center justify-between">
  <span className="text-xs text-pdd-text-secondary">推广总花费</span>
- <span className="text-sm font-mono font-bold">¥{a.totalPromoCost.toFixed(0)}</span>
+ <span className="text-sm font-mono font-bold">¥{a.totalPromoCost.toFixed(2)}</span>
  </div>
  <div className="flex items-center justify-between">
  <span className="text-xs text-pdd-text-secondary">推广GMV</span>
- <span className="text-sm font-mono font-bold">¥{a.totalPromoGmv.toFixed(0)}</span>
+ <span className="text-sm font-mono font-bold">¥{a.totalPromoGmv.toFixed(2)}</span>
  </div>
  <div className="flex items-center justify-between">
  <span className="text-xs text-pdd-text-secondary">退款金额（推广部分）</span>
- <span className="text-sm font-mono font-bold text-[var(--pdd-danger)]">- ¥{a.promoRefundAmount.toFixed(0)}</span>
+ <span className="text-sm font-mono font-bold text-[var(--pdd-danger)]">- ¥{a.promoRefundAmount.toFixed(2)}</span>
  </div>
  <div className="border-t border-pdd-border pt-2 flex items-center justify-between">
  <span className="text-xs font-semibold">退款后GMV</span>
- <span className="text-sm font-mono font-bold text-pdd-text">¥{(a.totalPromoGmv - a.promoRefundAmount).toFixed(0)}</span>
+ <span className="text-sm font-mono font-bold text-pdd-text">¥{(a.totalPromoGmv - a.promoRefundAmount).toFixed(2)}</span>
  </div>
  <div className="bg-pdd-gray-50 rounded-lg p-3 flex items-center justify-between">
  <span className="text-xs font-semibold">名义ROI → 真实ROI</span>
@@ -1417,9 +1417,9 @@ export default function AfterSalePage() {
  return (
  <tr key={i} className="border-b border-pdd-border hover:bg-pdd-gray-50">
  <td className="py-2 font-medium">{ch.channel}</td>
- <td className="py-2 text-right font-mono">¥{ch.cost.toFixed(0)}</td>
+ <td className="py-2 text-right font-mono">¥{ch.cost.toFixed(2)}</td>
  <td className="py-2 text-right font-mono">{ch.orderCount}</td>
- <td className="py-2 text-right font-mono text-[var(--pdd-text)]">¥{ch.refundAmount.toFixed(0)}</td>
+ <td className="py-2 text-right font-mono text-[var(--pdd-text)]">¥{ch.refundAmount.toFixed(2)}</td>
  <td className="py-2 text-right font-mono">{ch.nominalRoi.toFixed(2)}</td>
  <td className="py-2 text-right font-mono text-[var(--pdd-success)]">{ch.trueRoi.toFixed(2)}</td>
  <td className="py-2 text-right font-mono text-[var(--pdd-text)]">{chErosion > 0.01 ? `-${chErosion.toFixed(2)}` : '≈0'}</td>
@@ -1451,7 +1451,7 @@ export default function AfterSalePage() {
  </div>
  <div className="pdd-card px-4 py-3">
  <p className="text-xs text-pdd-text-secondary">全店平均售后率</p>
- <p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{regionAnalysis.avgRate.toFixed(1)}%</p>
+ <p className="text-2xl font-bold text-pdd-text tracking-tight tabular-nums">{regionAnalysis.avgRate.toFixed(2)}%</p>
  </div>
  <div className="pdd-card px-4 py-3">
  <p className="text-xs text-pdd-text-secondary">异常省份（超2σ）</p>
@@ -1467,7 +1467,7 @@ export default function AfterSalePage() {
  <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" horizontal={false} />
  <XAxis type="number" tick={{ fontSize: 10 }} unit="%" />
  <YAxis type="category" dataKey="province" tick={{ fontSize: 10 }} width={60} />
- <Tooltip formatter={(v: number) => [`${v.toFixed(1)}%`, '售后率']} contentStyle={{ fontSize: 11 }} />
+ <Tooltip formatter={(v: number) => [`${v.toFixed(2)}%`, '售后率']} contentStyle={{ fontSize: 11 }} />
  <Bar dataKey="afterSaleRate" radius={[0, 4, 4, 0]} barSize={18}>
  {regionAnalysis.list.filter(p => p.sufficient).slice(0, 15).map((p, i) => {
  const isAnomaly = (p.afterSaleRate ?? 0) > regionAnalysis.avgRate + 2 * regionAnalysis.stdRate;
@@ -1491,7 +1491,7 @@ export default function AfterSalePage() {
  {regionAnalysis.list.filter(p => p.sufficient).sort((a, b) => (b.afterSaleRate ?? 0) - (a.afterSaleRate ?? 0)).slice(0, 8).map((p, i) => (
  <tr key={i} className="border-b border-pdd-border hover:bg-pdd-gray-50">
  <td className="py-2 font-medium">{p.province}</td>
- <td className={`py-2 text-right font-mono ${(p.afterSaleRate ?? 0) > regionAnalysis.avgRate + 2 * regionAnalysis.stdRate ? 'text-pdd-danger' : ''}`}>{(p.afterSaleRate ?? 0).toFixed(1)}%</td>
+ <td className={`py-2 text-right font-mono ${(p.afterSaleRate ?? 0) > regionAnalysis.avgRate + 2 * regionAnalysis.stdRate ? 'text-pdd-danger' : ''}`}>{(p.afterSaleRate ?? 0).toFixed(2)}%</td>
  {regionAnalysis.topReasons.map(reason => (
  <td key={reason} className="py-2 text-right text-pdd-text-secondary">{p.reasons[reason] || 0}</td>
  ))}
@@ -1539,7 +1539,7 @@ export default function AfterSalePage() {
  <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" horizontal={false} />
  <XAxis type="number" tick={{ fontSize: 10 }} />
  <YAxis type="category" dataKey="name" tick={{ fontSize: 9 }} width={120} />
- <Tooltip formatter={(v: number) => [`¥${v.toFixed(0)}`, '退款金额']} contentStyle={{ fontSize: 11 }} />
+ <Tooltip formatter={(v: number) => [`¥${v.toFixed(2)}`, '退款金额']} contentStyle={{ fontSize: 11 }} />
  <Bar dataKey="refundAmount" fill="var(--pdd-danger)" radius={[0, 4, 4, 0]} barSize={18} />
  </BarChart>
  </ResponsiveContainer>
@@ -1558,8 +1558,8 @@ export default function AfterSalePage() {
  <tr key={i} className="border-b border-pdd-border hover:bg-pdd-gray-50">
  <td className="py-2 truncate max-w-[200px]" title={s.name}>{s.name}</td>
  <td className="py-2 text-right font-mono text-[var(--pdd-text)]">{s.count}</td>
- <td className="py-2 text-right font-mono">¥{s.refundAmount.toFixed(0)}</td>
- <td className="py-2 text-right font-mono">{s.orderCount > 0 ? `${s.afterSaleRate.toFixed(1)}%` : '-'}</td>
+ <td className="py-2 text-right font-mono">¥{s.refundAmount.toFixed(2)}</td>
+ <td className="py-2 text-right font-mono">{s.orderCount > 0 ? `${s.afterSaleRate.toFixed(2)}%` : '-'}</td>
  </tr>
  ))}
  </tbody>
@@ -1587,9 +1587,9 @@ export default function AfterSalePage() {
  <td className="py-2 font-mono text-[10px]">{p.productId}</td>
  <td className="py-2 text-right">{p.orderCount}</td>
  <td className="py-2 text-right text-[var(--pdd-text)]">{p.afterSaleCount}</td>
- <td className="py-2 text-right font-mono">{p.afterSaleRate.toFixed(1)}%</td>
- <td className="py-2 text-right font-mono">¥{p.refundAmount.toFixed(0)}</td>
- <td className="py-2 text-right font-mono">{p.refundRevenueRatio.toFixed(1)}%</td>
+ <td className="py-2 text-right font-mono">{p.afterSaleRate.toFixed(2)}%</td>
+ <td className="py-2 text-right font-mono">¥{p.refundAmount.toFixed(2)}</td>
+ <td className="py-2 text-right font-mono">{p.refundRevenueRatio.toFixed(2)}%</td>
  <td className="py-2 text-right font-mono">{p.riskScore.toFixed(0)}</td>
  <td className="py-2 text-center"><span className={`px-2 py-0.5 rounded text-[10px] ${riskLevel(p.riskScore).cls}`}>{riskLevel(p.riskScore).label}</span></td>
  </tr>
@@ -1631,10 +1631,10 @@ export default function AfterSalePage() {
  <tr key={i} className="border-b border-pdd-border hover:bg-pdd-gray-50">
  <td className="py-2 truncate max-w-[160px]" title={p.name}>{p.name}</td>
  <td className="py-2 text-right font-mono">{p.afterSaleCount}</td>
- <td className="py-2 text-right font-mono">¥{p.refundAmount.toFixed(0)}</td>
- <td className="py-2 text-right font-mono">{p.avgRefundDays.toFixed(1)}天</td>
- <td className="py-2 text-right font-mono text-[var(--pdd-text)]">{p.fastRefundRate.toFixed(1)}%</td>
- <td className="py-2 text-right font-mono text-[var(--pdd-text)]">{p.longTailRate.toFixed(1)}%</td>
+ <td className="py-2 text-right font-mono">¥{p.refundAmount.toFixed(2)}</td>
+ <td className="py-2 text-right font-mono">{p.avgRefundDays.toFixed(2)}天</td>
+ <td className="py-2 text-right font-mono text-[var(--pdd-text)]">{p.fastRefundRate.toFixed(2)}%</td>
+ <td className="py-2 text-right font-mono text-[var(--pdd-text)]">{p.longTailRate.toFixed(2)}%</td>
  <td className="py-2 text-center">
  <span className={`px-1.5 py-0.5 rounded text-[10px] ${p.fastRefundRate > 60 ? 'bg-gray-50 text-red-700' : p.longTailRate > 20 ? 'bg-gray-50 text-yellow-700' : 'bg-gray-50 text-green-700'}`}>
  {p.fastRefundRate > 60 ? '疑似质量/描述问题' : p.longTailRate > 20 ? '关注长尾风险' : '正常'}
@@ -1684,7 +1684,7 @@ export default function AfterSalePage() {
  {warningData.overdueList.slice(0, 20).map((item: any, i: number) => (
  <tr key={i} className="border-b border-pdd-border hover:bg-pdd-gray-50">
  <td className="py-2 font-mono text-[10px]">{item.orderNo}</td>
- <td className="py-2 text-right text-[var(--pdd-text)]">{(item.hours / 24).toFixed(0)}天</td>
+ <td className="py-2 text-right text-[var(--pdd-text)]">{(item.hours / 24).toFixed(2)}天</td>
  <td className="py-2 text-[10px]">{safeField(item, '售后状态')}</td>
  </tr>
  ))}
@@ -1835,7 +1835,7 @@ export default function AfterSalePage() {
  {k.change != null && (
  <span className={`flex items-center text-[10px] font-medium ${k.reverse ? (k.change > 0 ? 'text-pdd-danger' : 'text-pdd-success') : (k.change > 0 ? 'text-pdd-success' : 'text-pdd-danger')}`}>
  {k.change > 0 ? <ArrowUp size={10} /> : k.change < 0 ? <ArrowDown size={10} /> : null}
- {Math.abs(k.change).toFixed(1)}%
+ {Math.abs(k.change).toFixed(2)}%
  </span>
  )}
  </div>

@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Search, X, Clock, TrendingUp } from 'lucide-react';
 import { useData } from '../App';
 import { findField } from '../utils';
+import { usePreference } from '../hooks/usePreference';
 
 interface SearchResult {
   type: 'order' | 'product' | 'phone';
@@ -16,14 +17,9 @@ export default function SearchBox() {
   const parsedData = currentDisplayData;
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
-  const [history, setHistory] = useState<string[]>([]);
+  const [history, setHistory] = usePreference<string[]>('search_history', []);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const saved = localStorage.getItem('dianfx_search_history');
-    if (saved) setHistory(JSON.parse(saved));
-  }, []);
 
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
@@ -40,12 +36,12 @@ export default function SearchBox() {
     const q = query.toLowerCase();
     const results: SearchResult[] = [];
     const seen = new Set<string>();
-    
+
     parsedData.orders.forEach((o: any) => {
       const orderNo = String(findField(o, '订单号') || '');
       const product = String(findField(o, '商品', '商品名称') || '');
       const phone = String(findField(o, '收货人手机', '收货人电话', '用户购买手机号', '手机号') || '');
-      
+
       if (orderNo.toLowerCase().includes(q) && !seen.has(`order:${orderNo}`)) {
         seen.add(`order:${orderNo}`);
         results.push({ type: 'order', value: orderNo, label: '订单号', highlight: highlightText(orderNo, q) as string });
@@ -59,7 +55,7 @@ export default function SearchBox() {
         results.push({ type: 'phone', value: phone, label: '手机号', highlight: highlightText(phone, q) as string });
       }
     });
-    
+
     return results.slice(0, 10);
   }, [query, parsedData]);
 
@@ -79,14 +75,12 @@ export default function SearchBox() {
     if (!value.trim()) return;
     const newHistory = [value, ...history.filter(h => h !== value)].slice(0, 10);
     setHistory(newHistory);
-    localStorage.setItem('dianfx_search_history', JSON.stringify(newHistory));
     setQuery(value);
     setIsOpen(false);
   };
 
   const clearHistory = () => {
     setHistory([]);
-    localStorage.removeItem('dianfx_search_history');
   };
 
   return (

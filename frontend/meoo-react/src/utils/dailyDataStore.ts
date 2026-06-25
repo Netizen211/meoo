@@ -230,7 +230,13 @@ export function buildDailyDataStore(
 
       let platformFee = 0, shippedCost = 0, postage = 0, insuranceTotal = 0;
       try {
-        const cr: Record<string, number> = JSON.parse(localStorage.getItem('dianfx_courier_rates') || '{}');
+        let cr: Record<string, number> = {};
+        try {
+          const { usePreferenceStore } = require('../store/preferenceStore');
+          cr = usePreferenceStore.getState().get<Record<string, number>>('courier_rates', {});
+        } catch {
+          cr = JSON.parse(localStorage.getItem('dianfx_courier_rates') || '{}');
+        }
         allOrd.forEach((o: any) => {
           const on = String(findField(o, '订单号', '订单编号') || '').trim();
           const mr = safeFloat(findField(o, '商家实收金额(元)', '商家实收金额', '商家实收', '实收金额'));
