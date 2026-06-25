@@ -583,6 +583,10 @@ export default function ProductPage() {
       sellThroughRate: s.sellThroughRate,
       hourlyPromotedOrders: s.hourlyPromotedOrders || 0,
       hourlyConfirmed: s.hourlyConfirmed || false,
+      promoOrders: s.promoOrders || 0,
+      discount: s.discount || 0,
+      ctr: s.ctr || 0,
+      cvr: s.cvr || 0,
     }));
   }, [productStats, productTags]);
 
@@ -625,6 +629,11 @@ export default function ProductPage() {
       sellThroughRate: s.sellThroughRate,
       hourlyPromotedOrders: s.hourlyPromotedOrders || 0,
       hourlyConfirmed: s.hourlyConfirmed || false,
+      promoOrders: s.promoOrders || 0,
+      discount: s.discount || 0,
+      ctr: s.ctr || 0,
+      cvr: s.cvr || 0,
+      costBreakdown: s.costBreakdown || { productCost: 0, packagingFee: 0, shippingFee: 0, promoCost: 0, discount: 0, platformFee: 0, taxes: 0, customDeductions: 0 },
     }));
   }, [prevProductStats]);
 
@@ -729,13 +738,52 @@ export default function ProductPage() {
     const highAfterSaleCount = filteredProducts.filter(p => (p.afterSaleRate || 0) > 20).length;
     const totalPromoTransaction = filteredProducts.reduce((s, p) => s + (p.promoTransaction || 0), 0);
     const totalPromoClicks = filteredProducts.reduce((s, p) => s + (p.promoClicks || 0), 0);
-    const avgPromoCostPerProduct = filteredProducts.reduce((s, p) => s + (p.promoCost || 0), 0) / (filteredProducts.length || 1);
+    const totalPromoCost = filteredProducts.reduce((s, p) => s + (p.promoCost || 0), 0);
+    const avgPromoCostPerProduct = totalPromoCost / (filteredProducts.length || 1);
     const promoConvertRate = totalPromoClicks > 0 ? (totalPromoTransaction / totalPromoClicks) * 100 : 0;
     const roiValues = filteredProducts.map(p => p.roi || 0).filter(r => r > 0);
     const maxRoi = roiValues.length > 0 ? Math.max(...roiValues) : 0;
     const minRoi = roiValues.length > 0 ? Math.min(...roiValues) : 0;
     const highPromoCount = filteredProducts.filter(p => (p.promoCostRatio || 0) > 30).length;
     const highRefundCount = filteredProducts.filter(p => (p.refundRate || 0) > 15).length;
+
+    // ── 新增指标 ──
+    const totalRefund = filteredProducts.reduce((s, p) => s + (p.refund || 0), 0);
+    const netRevenue = totalRevenue - totalRefund;
+    const totalDiscount = filteredProducts.reduce((s, p) => s + (p.discount || 0), 0);
+    const refundLossRate = totalRevenue > 0 ? (totalRefund / totalRevenue) * 100 : 0;
+    const discountRate = totalRevenue > 0 ? (totalDiscount / totalRevenue) * 100 : 0;
+    const grossProfit = filteredProducts.reduce((s, p) => s + (p.grossProfit || 0), 0);
+    const preTaxProfit = filteredProducts.reduce((s, p) => s + (p.preTaxProfit || 0), 0);
+    const netProfitAfterTax = filteredProducts.reduce((s, p) => s + (p.netProfitAfterTax || 0), 0);
+    const grossProfitMargin = totalRevenue > 0 ? (grossProfit / totalRevenue) * 100 : 0;
+    const netProfitMargin = totalRevenue > 0 ? (netProfitAfterTax / totalRevenue) * 100 : 0;
+    const totalPackagingFee = filteredProducts.reduce((s, p) => { const cb = p.costBreakdown || {}; return s + (cb.packagingFee || 0); }, 0);
+    const totalShippingFee = filteredProducts.reduce((s, p) => { const cb = p.costBreakdown || {}; return s + (cb.shippingFee || 0); }, 0);
+    const totalProductCost = filteredProducts.reduce((s, p) => { const cb = p.costBreakdown || {}; return s + (cb.productCost || 0); }, 0);
+    const totalAllowance = filteredProducts.reduce((s, p) => { const cb = p.costBreakdown || {}; return s + (cb.discount || 0); }, 0);
+    const totalTaxes = filteredProducts.reduce((s, p) => { const cb = p.costBreakdown || {}; return s + (cb.taxes || 0); }, 0);
+    const totalCustomDeductions = filteredProducts.reduce((s, p) => { const cb = p.costBreakdown || {}; return s + (cb.customDeductions || 0); }, 0);
+    const afterSaleAmount = filteredProducts.reduce((s, p) => s + (p.refund || 0), 0);
+    const refundPerProduct = productIds.size > 0 ? totalRefund / productIds.size : 0;
+    const totalPromoOrders = filteredProducts.reduce((s, p) => s + (p.promoOrders || 0), 0);
+    const totalPromoImpressions = filteredProducts.reduce((s, p) => s + (p.promoImpressions || 0), 0);
+    const avgCpc = totalPromoClicks > 0 ? totalPromoCost / totalPromoClicks : 0;
+    const promoOrderRatio = totalOrders > 0 ? (totalPromoOrders / totalOrders) * 100 : 0;
+    const avgCtr = totalPromoImpressions > 0 ? (totalPromoClicks / totalPromoImpressions) * 100 : 0;
+    const avgCvr = totalPromoImpressions > 0 ? (totalPromoOrders / totalPromoImpressions) * 100 : 0;
+    const promoTransactionPerProduct = productIds.size > 0 ? totalPromoTransaction / productIds.size : 0;
+    const promoClicksPerProduct = productIds.size > 0 ? totalPromoClicks / productIds.size : 0;
+    const avgCpm = totalPromoImpressions > 0 ? (totalPromoCost / totalPromoImpressions) * 1000 : 0;
+    const hourlyPromotedOrders = filteredProducts.reduce((s, p) => s + (p.hourlyPromotedOrders || 0), 0);
+    const avgDailySales = filteredProducts.reduce((s, p) => s + (p.avgDailySales || 0), 0) / (filteredProducts.length || 1);
+    const inventoryEstimate = filteredProducts.reduce((s, p) => s + (p.inventory || 0), 0);
+    const inventoryDepth = avgDailySales > 0 ? inventoryEstimate / avgDailySales : 0;
+    const firstDates = filteredProducts.map(p => p.firstDate).filter(Boolean);
+    const productLifecycle = firstDates.length > 0
+      ? firstDates.reduce((min, d) => { const ts = new Date(d).getTime(); return ts < min ? ts : min; }, Infinity)
+      : 0;
+    const productLifecycleDays = productLifecycle > 0 ? Math.max(0, Math.floor((Date.now() - productLifecycle) / 86400000)) : 0;
 
     // 环比变化
     const diffs: Record<string, number | null> = {};
@@ -760,6 +808,7 @@ export default function ProductPage() {
       const prevGrossProfitRate = prevRevenue > 0 ? (prevProfit / prevRevenue) * 100 : 0;
       const prevTotalCost = prevMatched.reduce((s, p) => s + (p.costs || 0), 0);
       const prevCostRate = prevRevenue > 0 ? (prevTotalCost / prevRevenue) * 100 : 0;
+      const prevPromoCost = prevMatched.reduce((s, p) => s + (p.promoCost || 0), 0);
       const prevPromoTransaction = prevMatched.reduce((s, p) => s + (p.promoTransaction || 0), 0);
       const prevPromoClicks = prevMatched.reduce((s, p) => s + (p.promoClicks || 0), 0);
       const prevPromoConvertRate = prevPromoClicks > 0 ? (prevPromoTransaction / prevPromoClicks) * 100 : 0;
@@ -781,14 +830,59 @@ export default function ProductPage() {
       diffs.grossProfitRate = changePct(grossProfitRate, prevGrossProfitRate);
       diffs.totalCost = changePct(totalCost, prevTotalCost);
       diffs.costRate = changePct(costRate, prevCostRate);
+      diffs.totalPromoCost = changePct(totalPromoCost, prevPromoCost);
       diffs.totalPromoTransaction = changePct(totalPromoTransaction, prevPromoTransaction);
       diffs.totalPromoClicks = changePct(totalPromoClicks, prevPromoClicks);
       diffs.promoConvertRate = changePct(promoConvertRate, prevPromoConvertRate);
+      const prevTotalRefund = prevMatched.reduce((s, p) => s + (p.refund || 0), 0);
+      const prevNetRevenue = prevRevenue - prevTotalRefund;
+      const prevTotalDiscount = prevMatched.reduce((s, p) => s + (p.discount || 0), 0);
+      const prevRefundLossRate = prevRevenue > 0 ? (prevTotalRefund / prevRevenue) * 100 : 0;
+      const prevDiscountRate = prevRevenue > 0 ? (prevTotalDiscount / prevRevenue) * 100 : 0;
+      const prevGrossProfit = prevMatched.reduce((s, p) => s + (p.grossProfit || 0), 0);
+      const prevPreTaxProfit = prevMatched.reduce((s, p) => s + (p.preTaxProfit || 0), 0);
+      const prevNetProfitAfterTax = prevMatched.reduce((s, p) => s + (p.netProfitAfterTax || 0), 0);
+      const prevGrossProfitMargin = prevRevenue > 0 ? (prevGrossProfit / prevRevenue) * 100 : 0;
+      const prevNetProfitMargin = prevRevenue > 0 ? (prevNetProfitAfterTax / prevRevenue) * 100 : 0;
+      const prevAllClicks = prevMatched.reduce((s, p) => s + (p.promoClicks || 0), 0);
+      const prevAllOrders = prevMatched.reduce((s, p) => s + (p.orders || 0), 0);
+      const prevAllPromoOrders = prevMatched.reduce((s, p) => s + (p.promoOrders || 0), 0);
+      const prevAllImpressions = prevMatched.reduce((s, p) => s + (p.promoImpressions || 0), 0);
+      const prevAvgCpc = prevAllClicks > 0 ? (prevMatched.reduce((s, p) => s + (p.promoCost || 0), 0) / prevAllClicks) : 0;
+      const prevPromoOrderRatio = prevAllOrders > 0 ? (prevAllPromoOrders / prevAllOrders) * 100 : 0;
+      const prevCtr = prevAllImpressions > 0 ? (prevAllClicks / prevAllImpressions) * 100 : 0;
+      const prevCvr = prevAllImpressions > 0 ? (prevAllPromoOrders / prevAllImpressions) * 100 : 0;
+      const prevAvgDailySales = prevMatched.length > 0 ? prevMatched.reduce((s, p) => s + (p.avgDailySales || 0), 0) / prevMatched.length : 0;
+      const prevTotalPromoOrders = prevMatched.reduce((s, p) => s + (p.promoOrders || 0), 0);
+      const prevTotalPromoImpressions = prevMatched.reduce((s, p) => s + (p.promoImpressions || 0), 0);
+      const prevHourlyPromoted = prevMatched.reduce((s, p) => s + (p.hourlyPromotedOrders || 0), 0);
+      diffs.totalRefund = changePct(totalRefund, prevTotalRefund);
+      diffs.netRevenue = changePct(netRevenue, prevNetRevenue);
+      diffs.totalDiscount = changePct(totalDiscount, prevTotalDiscount);
+      diffs.refundLossRate = changePct(refundLossRate, prevRefundLossRate);
+      diffs.discountRate = changePct(discountRate, prevDiscountRate);
+      diffs.grossProfit = changePct(grossProfit, prevGrossProfit);
+      diffs.preTaxProfit = changePct(preTaxProfit, prevPreTaxProfit);
+      diffs.netProfitAfterTax = changePct(netProfitAfterTax, prevNetProfitAfterTax);
+      diffs.grossProfitMargin = changePct(grossProfitMargin, prevGrossProfitMargin);
+      diffs.netProfitMargin = changePct(netProfitMargin, prevNetProfitMargin);
+      diffs.totalPromoOrders = changePct(totalPromoOrders, prevTotalPromoOrders);
+      diffs.totalPromoImpressions = changePct(totalPromoImpressions, prevTotalPromoImpressions);
+      diffs.avgCpc = changePct(avgCpc, prevAvgCpc);
+      diffs.promoOrderRatio = changePct(promoOrderRatio, prevPromoOrderRatio);
+      diffs.avgCtr = changePct(avgCtr, prevCtr);
+      diffs.avgCvr = changePct(avgCvr, prevCvr);
+      diffs.avgDailySales = changePct(avgDailySales, prevAvgDailySales);
+      diffs.hourlyPromotedOrders = changePct(hourlyPromotedOrders, prevHourlyPromoted);
     } else {
       ['productCount','totalGmv','totalRevenue','totalProfit','totalSales','avgPrice',
        'sellThroughRate','totalOrders','afterSaleRate','refundRate','avgPromoRatio',
        'gmvPerOrder','revenuePerOrder','ordersPerProduct','profitPerOrder','grossProfitRate',
-       'totalCost','costRate','totalPromoTransaction','totalPromoClicks','promoConvertRate'
+       'totalCost','costRate','totalPromoTransaction','totalPromoClicks','promoConvertRate',
+       'totalRefund','netRevenue','totalDiscount','refundLossRate','discountRate',
+       'grossProfit','preTaxProfit','netProfitAfterTax','grossProfitMargin','netProfitMargin',
+       'totalPromoOrders','totalPromoImpressions','avgCpc','promoOrderRatio','avgCtr','avgCvr',
+       'avgDailySales','hourlyPromotedOrders'
       ].forEach(k => { diffs[k] = null; });
     }
     return {
@@ -799,7 +893,18 @@ export default function ProductPage() {
       newProductCount, grossProfitRate, profitPerOrder, totalCost, avgUnitCost,
       avgUnitProfit, costRate, totalLogistics, totalPlatformFee, totalAfterSale,
       highAfterSaleCount, totalPromoTransaction, totalPromoClicks,
-      avgPromoCostPerProduct, promoConvertRate, maxRoi, minRoi, diffs,
+      avgPromoCostPerProduct, promoConvertRate, maxRoi, minRoi,
+      // 新增指标
+      totalRefund, netRevenue, totalDiscount, refundLossRate, discountRate,
+      grossProfit, preTaxProfit, netProfitAfterTax, grossProfitMargin, netProfitMargin,
+      totalPackagingFee, totalShippingFee, totalProductCost, totalAllowance,
+      totalTaxes, totalCustomDeductions,
+      refundPerProduct, afterSaleAmount,
+      totalPromoOrders, totalPromoImpressions, avgCpc, promoOrderRatio,
+      avgCtr, avgCvr, promoTransactionPerProduct, promoClicksPerProduct, avgCpm,
+      hourlyPromotedOrders,
+      avgDailySales, productLifecycle: productLifecycleDays, inventoryEstimate, inventoryDepth,
+      diffs,
     };
   }, [filteredProducts, prevProducts, allDates]);
 
@@ -811,7 +916,7 @@ export default function ProductPage() {
       ...vals,
       activeProductCount: kpiMetrics.productCount - (kpiMetrics.zeroSales || 0),
       profitRate: kpiMetrics.grossProfitRate,
-      totalRefundOrders: filteredProducts.reduce((s, p) => s + (p.refundCount || 0), 0),
+      totalRefundOrders: kpiMetrics.totalRefundOrders || filteredProducts.reduce((s, p) => s + (p.refundCount || 0), 0),
       highPromoCount: filteredProducts.filter(p => (p.promoCostRatio || 0) > 30).length,
       highRefundCount: filteredProducts.filter(p => (p.refundRate || 0) > 15).length,
       profitPerProduct: kpiMetrics.productCount > 0 ? kpiMetrics.totalProfit / kpiMetrics.productCount : 0,
@@ -832,6 +937,16 @@ export default function ProductPage() {
       'avgUnitProfit', 'costRate', 'totalLogistics', 'totalPlatformFee',
       'totalAfterSale', 'highAfterSaleCount', 'totalPromoTransaction',
       'totalPromoClicks', 'avgPromoCostPerProduct', 'promoConvertRate', 'maxRoi', 'minRoi',
+      // 新增指标变化率
+      'totalRefund', 'netRevenue', 'totalDiscount', 'refundLossRate', 'discountRate',
+      'grossProfit', 'preTaxProfit', 'netProfitAfterTax', 'grossProfitMargin', 'netProfitMargin',
+      'totalPackagingFee', 'totalShippingFee', 'totalProductCost', 'totalAllowance',
+      'totalTaxes', 'totalCustomDeductions',
+      'refundPerProduct', 'afterSaleAmount', 'qualityRefundRate',
+      'totalPromoOrders', 'totalPromoImpressions', 'avgCpc', 'promoOrderRatio',
+      'avgCtr', 'avgCvr', 'promoTransactionPerProduct', 'promoClicksPerProduct', 'avgCpm',
+      'hourlyPromotedOrders',
+      'avgDailySales', 'productLifecycle', 'inventoryEstimate', 'inventoryDepth',
     ];
     const changes: Record<string, number | null> = {};
     allKeys.forEach(k => {

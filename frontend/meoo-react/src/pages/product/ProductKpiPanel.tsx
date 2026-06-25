@@ -8,7 +8,7 @@
  * - 纯灰卡片，无任何装饰条
  */
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { ArrowUp, ArrowDown, TrendingUp, X, Search, Package, DollarSign, ShoppingCart, Percent, AlertTriangle, Zap, Clock, Activity, Target, BarChart3, RotateCcw } from 'lucide-react';
+import { ArrowUp, ArrowDown, TrendingUp, X, Search, Package, DollarSign, ShoppingCart, Percent, AlertTriangle, Zap, Clock, Activity, Target, BarChart3, RotateCcw, Eye } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, useSortable, rectSortingStrategy, arrayMove } from '@dnd-kit/sortable';
@@ -38,6 +38,10 @@ export const ALL_PRODUCT_KPIS: ProductKpiItem[] = [
   { label: '新品数', key: 'newProductCount', group: '商品概况', icon: Package, fmt: (v) => (v || 0).toFixed(0) },
   { label: '平均活跃天数', key: 'avgActiveDays', group: '商品概况', icon: Activity, fmt: (v) => (v || 0).toFixed(0) + '天' },
   { label: '平均售价', key: 'avgSellingPrice', group: '商品概况', icon: DollarSign, fmt: (v) => (v || 0) ? '¥' + (v || 0).toFixed(0) : '-' },
+  { label: '日均销量', key: 'avgDailySales', group: '商品概况', icon: ShoppingCart, fmt: (v) => (v || 0).toFixed(1) },
+  { label: '商品生命周期', key: 'productLifecycle', group: '商品概况', icon: Clock, fmt: (v) => (v || 0).toFixed(0) + '天' },
+  { label: '库存预估', key: 'inventoryEstimate', group: '商品概况', icon: Package, fmt: (v) => (v || 0) >= 10000 ? ((v || 0) / 10000).toFixed(1) + '万' : (v || 0).toFixed(0) },
+  { label: '库存深度(天)', key: 'inventoryDepth', group: '商品概况', icon: BarChart3, fmt: (v) => (v || 0) > 0 ? (v || 0).toFixed(0) + '天' : '-' },
   // ── 收入 ──
   { label: '总GMV', key: 'totalGmv', group: '收入', icon: TrendingUp, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
   { label: '总实收', key: 'totalRevenue', group: '收入', icon: DollarSign, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
@@ -48,12 +52,22 @@ export const ALL_PRODUCT_KPIS: ProductKpiItem[] = [
   { label: '单均实收', key: 'revenuePerOrder', group: '收入', icon: DollarSign, fmt: (v) => (v || 0) ? '¥' + (v || 0).toFixed(0) : '-' },
   { label: '单均订单量', key: 'ordersPerProduct', group: '收入', icon: ShoppingCart, fmt: (v) => (v || 0).toFixed(1) },
   { label: '平均折扣率', key: 'avgDiscountRatio', group: '收入', icon: Percent, fmt: (v) => (v || 0).toFixed(1) + '%' },
+  { label: '退款金额', key: 'totalRefund', group: '收入', icon: RotateCcw, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '净收入', key: 'netRevenue', group: '收入', icon: DollarSign, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '折扣总额', key: 'totalDiscount', group: '收入', icon: Percent, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '退款损失率', key: 'refundLossRate', group: '收入', icon: Percent, fmt: (v) => (v || 0).toFixed(1) + '%' },
+  { label: '折扣率', key: 'discountRate', group: '收入', icon: Percent, fmt: (v) => (v || 0).toFixed(1) + '%' },
   // ── 利润 ──
   { label: '利润总额', key: 'totalProfit', group: '利润', icon: TrendingUp, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
   { label: '利润率', key: 'profitRate', group: '利润', icon: Percent, fmt: (v) => (v || 0).toFixed(1) + '%' },
   { label: '单商品利润', key: 'profitPerProduct', group: '利润', icon: DollarSign, fmt: (v) => (v || 0) ? '¥' + (v || 0).toFixed(0) : '-' },
   { label: '单均利润', key: 'profitPerOrder', group: '利润', icon: DollarSign, fmt: (v) => (v || 0) ? '¥' + (v || 0).toFixed(0) : '-' },
   { label: '毛利率', key: 'grossProfitRate', group: '利润', icon: Percent, fmt: (v) => (v || 0).toFixed(1) + '%' },
+  { label: '毛利润', key: 'grossProfit', group: '利润', icon: DollarSign, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '税前利润', key: 'preTaxProfit', group: '利润', icon: DollarSign, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '税后净利润', key: 'netProfitAfterTax', group: '利润', icon: DollarSign, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '毛利润率', key: 'grossProfitMargin', group: '利润', icon: Percent, fmt: (v) => (v || 0).toFixed(1) + '%' },
+  { label: '净利率', key: 'netProfitMargin', group: '利润', icon: Percent, fmt: (v) => (v || 0).toFixed(1) + '%' },
   // ── 成本 ──
   { label: '总成本', key: 'totalCost', group: '成本', icon: BarChart3, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
   { label: '单品成本', key: 'avgUnitCost', group: '成本', icon: DollarSign, fmt: (v) => (v || 0) ? '¥' + (v || 0).toFixed(0) : '-' },
@@ -61,6 +75,12 @@ export const ALL_PRODUCT_KPIS: ProductKpiItem[] = [
   { label: '成本率', key: 'costRate', group: '成本', icon: Percent, fmt: (v) => (v || 0).toFixed(1) + '%' },
   { label: '物流成本', key: 'totalLogistics', group: '成本', icon: BarChart3, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
   { label: '平台佣金', key: 'totalPlatformFee', group: '成本', icon: BarChart3, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '包装费', key: 'totalPackagingFee', group: '成本', icon: Package, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '运费', key: 'totalShippingFee', group: '成本', icon: Package, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '产品进价', key: 'totalProductCost', group: '成本', icon: Package, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '折扣/折让', key: 'totalAllowance', group: '成本', icon: Percent, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '税金', key: 'totalTaxes', group: '成本', icon: BarChart3, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '自定义扣除', key: 'totalCustomDeductions', group: '成本', icon: BarChart3, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
   // ── 退款/售后 ──
   { label: '退款率', key: 'refundRate', group: '退款/售后', icon: RotateCcw, fmt: (v) => (v || 0).toFixed(1) + '%' },
   { label: '售后率', key: 'afterSaleRate', group: '退款/售后', icon: RotateCcw, fmt: (v) => (v || 0).toFixed(1) + '%' },
@@ -68,6 +88,9 @@ export const ALL_PRODUCT_KPIS: ProductKpiItem[] = [
   { label: '退款订单数', key: 'totalRefundOrders', group: '退款/售后', icon: RotateCcw, fmt: (v) => (v || 0).toFixed(0) },
   { label: '售后订单数', key: 'totalAfterSale', group: '退款/售后', icon: RotateCcw, fmt: (v) => (v || 0).toFixed(0) },
   { label: '高售后品', key: 'highAfterSaleCount', group: '退款/售后', icon: AlertTriangle, fmt: (v) => (v || 0).toFixed(0) },
+  { label: '单品退款', key: 'refundPerProduct', group: '退款/售后', icon: RotateCcw, fmt: (v) => (v || 0) ? '¥' + (v || 0).toFixed(0) : '-' },
+  { label: '售后金额', key: 'afterSaleAmount', group: '退款/售后', icon: DollarSign, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
+  { label: '品质退款率', key: 'qualityRefundRate', group: '退款/售后', icon: AlertTriangle, fmt: (v) => (v || 0).toFixed(1) + '%' },
   // ── 推广 ──
   { label: '推广花费', key: 'totalPromoCost', group: '推广', icon: BarChart3, fmt: (v) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
   { label: '推广ROI', key: 'avgRoi', group: '推广', icon: Activity, fmt: (v) => (v || 0) > 0 ? (v || 0).toFixed(1) : '-' },
@@ -79,15 +102,25 @@ export const ALL_PRODUCT_KPIS: ProductKpiItem[] = [
   { label: '推广成交率', key: 'promoConvertRate', group: '推广', icon: Percent, fmt: (v) => (v || 0).toFixed(1) + '%' },
   { label: '最高ROI', key: 'maxRoi', group: '推广', icon: TrendingUp, fmt: (v) => (v || 0) > 0 ? (v || 0).toFixed(1) : '-' },
   { label: '最低ROI', key: 'minRoi', group: '推广', icon: TrendingUp, fmt: (v) => (v || 0) > 0 ? (v || 0).toFixed(1) : '-' },
+  { label: '推广订单数', key: 'totalPromoOrders', group: '推广', icon: ShoppingCart, fmt: (v) => (v || 0).toFixed(0) },
+  { label: '推广展示量', key: 'totalPromoImpressions', group: '推广', icon: Eye, fmt: (v) => (v || 0) >= 10000 ? ((v || 0) / 10000).toFixed(1) + '万' : (v || 0).toFixed(0) },
+  { label: 'CPC', key: 'avgCpc', group: '推广', icon: DollarSign, fmt: (v) => (v || 0) ? '¥' + (v || 0).toFixed(2) : '-' },
+  { label: '推广订单占比', key: 'promoOrderRatio', group: '推广', icon: Percent, fmt: (v) => (v || 0).toFixed(1) + '%' },
+  { label: 'CTR', key: 'avgCtr', group: '推广', icon: Percent, fmt: (v) => (v || 0) ? (v || 0).toFixed(2) + '%' : '-' },
+  { label: 'CVR', key: 'avgCvr', group: '推广', icon: Percent, fmt: (v) => (v || 0) ? (v || 0).toFixed(2) + '%' : '-' },
+  { label: '单品推广成交', key: 'promoTransactionPerProduct', group: '推广', icon: TrendingUp, fmt: (v) => (v || 0) ? '¥' + (v || 0).toFixed(0) : '-' },
+  { label: '单品推广点击', key: 'promoClicksPerProduct', group: '推广', icon: Activity, fmt: (v) => (v || 0).toFixed(0) },
+  { label: 'CPM', key: 'avgCpm', group: '推广', icon: BarChart3, fmt: (v) => (v || 0) ? '¥' + (v || 0).toFixed(2) : '-' },
+  { label: '时均推广订单', key: 'hourlyPromotedOrders', group: '推广', icon: Clock, fmt: (v) => (v || 0).toFixed(1) },
 ];
 
 export const KPI_GROUPS = [
-  { name: '商品概况', labels: ['商品数', '动销率', '零销品', '低库存品', '平均周转', '动销商品', '新品数', '平均活跃天数', '平均售价'] },
-  { name: '收入', labels: ['总GMV', '总实收', '总销量', '客单价', '总订单量', '单均GMV', '单均实收', '单均订单量', '平均折扣率'] },
-  { name: '利润', labels: ['利润总额', '利润率', '单商品利润', '单均利润', '毛利率'] },
-  { name: '成本', labels: ['总成本', '单品成本', '单品利润', '成本率', '物流成本', '平台佣金'] },
-  { name: '退款/售后', labels: ['退款率', '售后率', '高退款品', '退款订单数', '售后订单数', '高售后品'] },
-  { name: '推广', labels: ['推广花费', '推广ROI', '高推广品', '推广费比', '推广成交', '推广点击', '单品推广费', '推广成交率', '最高ROI', '最低ROI'] },
+  { name: '商品概况', labels: ['商品数', '动销率', '零销品', '低库存品', '平均周转', '动销商品', '新品数', '平均活跃天数', '平均售价', '日均销量', '商品生命周期', '库存预估', '库存深度(天)'] },
+  { name: '收入', labels: ['总GMV', '总实收', '总销量', '客单价', '总订单量', '单均GMV', '单均实收', '单均订单量', '平均折扣率', '退款金额', '净收入', '折扣总额', '退款损失率', '折扣率'] },
+  { name: '利润', labels: ['利润总额', '利润率', '单商品利润', '单均利润', '毛利率', '毛利润', '税前利润', '税后净利润', '毛利润率', '净利率'] },
+  { name: '成本', labels: ['总成本', '单品成本', '单品利润', '成本率', '物流成本', '平台佣金', '包装费', '运费', '产品进价', '折扣/折让', '税金', '自定义扣除'] },
+  { name: '退款/售后', labels: ['退款率', '售后率', '高退款品', '退款订单数', '售后订单数', '高售后品', '单品退款', '售后金额', '品质退款率'] },
+  { name: '推广', labels: ['推广花费', '推广ROI', '高推广品', '推广费比', '推广成交', '推广点击', '单品推广费', '推广成交率', '最高ROI', '最低ROI', '推广订单数', '推广展示量', 'CPC', '推广订单占比', 'CTR', 'CVR', '单品推广成交', '单品推广点击', 'CPM', '时均推广订单'] },
 ];
 
 export const KPI_DATAKEY_MAP = {
@@ -136,6 +169,39 @@ export const KPI_DATAKEY_MAP = {
   '推广成交率': null,
   '最高ROI': null,
   '最低ROI': null,
+  '日均销量': null,
+  '商品生命周期': null,
+  '库存预估': null,
+  '库存深度(天)': null,
+  '退款金额': null,
+  '净收入': null,
+  '折扣总额': null,
+  '退款损失率': null,
+  '折扣率': null,
+  '毛利润': null,
+  '税前利润': null,
+  '税后净利润': null,
+  '毛利润率': null,
+  '净利率': null,
+  '包装费': null,
+  '运费': null,
+  '产品进价': null,
+  '折扣/折让': null,
+  '税金': null,
+  '自定义扣除': null,
+  '单品退款': null,
+  '售后金额': null,
+  '品质退款率': null,
+  '推广订单数': 'promoOrders',
+  '推广展示量': null,
+  'CPC': null,
+  '推广订单占比': null,
+  'CTR': null,
+  'CVR': null,
+  '单品推广成交': null,
+  '单品推广点击': null,
+  'CPM': null,
+  '时均推广订单': null,
 };
 
 const LINE_COLORS = [
