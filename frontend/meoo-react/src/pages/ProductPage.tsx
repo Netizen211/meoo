@@ -33,6 +33,7 @@ import {
   loadSpecOverrides, saveSpecOverrides, type SpecOverrides,
 } from '../utils/specGrouping';
 import SpecPreviewCard from '../components/SpecPreviewCard';
+import ProductKpiPanel, { ALL_PRODUCT_KPIS, KPI_GROUPS, KPI_DATAKEY_MAP } from './product/ProductKpiPanel';
 
 
 const COLORS = CHART_COLORS;
@@ -199,8 +200,14 @@ export default function ProductPage() {
     saveSpecOverrides(productId, overrides);
     setSpecVersion(v => v + 1);
   }, []);
-  // ── 趋势图 ──
-  const [selectedTrendKpi, setSelectedTrendKpi] = useState<string | null>(null);
+  // ── 趋势图（多折线支持） ──
+  const [selectedTrendKpis, setSelectedTrendKpis] = useState<string[]>(() => {
+    try { const s = localStorage.getItem('dianfx_product_selected_trend_kpis'); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
+  // 同步到 localStorage
+  useEffect(() => {
+    try { localStorage.setItem('dianfx_product_selected_trend_kpis', JSON.stringify(selectedTrendKpis)); } catch {}
+  }, [selectedTrendKpis]);
 
   const pageSize = 10;
 
@@ -351,45 +358,7 @@ export default function ProductPage() {
   const [targetDetailProduct, setTargetDetailProduct] = useState<{ product: any; engineResult: TargetEngineResult; rowMode: '单品' | '总额'; profitPerOrder: number } | null>(null);
   const [uploadingProductId, setUploadingProductId] = useState<string | null>(null);
 
-  // ── KPI 指标池 ──
-  const ALL_PRODUCT_KPIS = useMemo(() => [
-    // 商品
-    { label: '商品数', key: 'productCount', group: '商品', iconName: 'Package', fmt: (v: number) => (v || 0).toFixed(0) },
-    { label: '动销率', key: 'sellThroughRate', group: '商品', iconName: 'Activity', fmt: (v: number) => (v || 0).toFixed(1) + '%' },
-    { label: '零销品', key: 'zeroSalesCount', group: '商品', iconName: 'AlertTriangle', fmt: (v: number) => (v || 0).toFixed(0) },
-    { label: '低库存品', key: 'lowInventoryCount', group: '商品', iconName: 'AlertTriangle', fmt: (v: number) => (v || 0).toFixed(0) },
-    { label: '平均周转', key: 'avgTurnover', group: '商品', iconName: 'Clock', fmt: (v: number) => (v || 0).toFixed(0) + '天' },
-    // 收入
-    { label: '总GMV', key: 'totalGmv', group: '收入', iconName: 'TrendingUp', fmt: (v: number) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
-    { label: '总实收', key: 'totalRevenue', group: '收入', iconName: 'DollarSign', fmt: (v: number) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
-    { label: '总销量', key: 'totalSales', group: '收入', iconName: 'ShoppingCart', fmt: (v: number) => (v || 0).toFixed(0) },
-    { label: '客单价', key: 'avgPrice', group: '收入', iconName: 'Target', fmt: (v: number) => (v || 0) ? '¥' + (v || 0).toFixed(0) : '-' },
-    // 利润
-    { label: '利润总额', key: 'totalProfit', group: '利润', iconName: 'TrendingUp', fmt: (v: number) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
-    { label: '利润率', key: 'profitRate', group: '利润', iconName: 'Percent', fmt: (v: number) => (v || 0).toFixed(1) + '%' },
-    // 退款
-    { label: '退款率', key: 'refundRate', group: '退款', iconName: 'RotateCcw', fmt: (v: number) => (v || 0).toFixed(1) + '%' },
-    { label: '高退款品', key: 'highRefundCount', group: '退款', iconName: 'AlertTriangle', fmt: (v: number) => (v || 0).toFixed(0) },
-    // 推广
-    { label: '高推广品', key: 'highPromoCount', group: '推广', iconName: 'Zap', fmt: (v: number) => (v || 0).toFixed(0) },
-    { label: '推广花费', key: 'totalPromoCost', group: '推广', iconName: 'BarChart3', fmt: (v: number) => (v || 0) >= 10000 ? '¥' + ((v || 0) / 10000).toFixed(1) + '万' : '¥' + (v || 0).toFixed(0) },
-    { label: '推广ROI', key: 'avgRoi', group: '推广', iconName: 'Activity', fmt: (v: number) => (v || 0) > 0 ? (v || 0).toFixed(1) : '-' },
-  ], []);
-
-  const KPI_GROUPS = useMemo(() => {
-    const groups: { name: string; items: typeof ALL_PRODUCT_KPIS }[] = [
-      { name: '商品', items: [] },
-      { name: '收入', items: [] },
-      { name: '利润', items: [] },
-      { name: '退款', items: [] },
-      { name: '推广', items: [] },
-    ];
-    ALL_PRODUCT_KPIS.forEach(kpi => {
-      const g = groups.find(g => g.name === kpi.group);
-      if (g) g.items.push(kpi);
-    });
-    return groups;
-  }, [ALL_PRODUCT_KPIS]);
+  
 
 
 
@@ -457,6 +426,9 @@ export default function ProductPage() {
       avgPrice: d.orders > 0 ? d.revenue / d.orders : 0,
       refundRate: d.revenue > 0 ? (d.refund / d.revenue) * 100 : 0,
       profitRate: d.revenue > 0 ? (d.profit / d.revenue) * 100 : 0,
+      afterSaleRate: d.orders > 0 ? (d.refund / d.orders) * 100 : 0,
+      avgRoi: d.promoCost > 0 ? d.gmv / d.promoCost : 0,
+      avgPromoRatio: d.revenue > 0 ? (d.promoCost / d.revenue) * 100 : 0,
     }));
   }, [filteredOrders, currentDisplayData]);
 
@@ -725,20 +697,47 @@ export default function ProductPage() {
     const totalRevenue = filteredProducts.reduce((s, p) => s + p.revenue, 0);
     const totalProfit = filteredProducts.reduce((s, p) => s + p.profit, 0);
     const totalGmv = filteredProducts.reduce((s, p) => s + p.gmv, 0);
-    const avgPrice = filteredProducts.length > 0 ? totalRevenue / filteredProducts.reduce((s, p) => s + p.orders, 0) : 0;
-    const afterSaleCount = filteredProducts.reduce((s, p) => s + p.afterSale, 0);
     const totalOrders = filteredProducts.reduce((s, p) => s + p.orders, 0);
+    const afterSaleCount = filteredProducts.reduce((s, p) => s + (p.afterSale || 0), 0);
+    const totalRefundOrders = filteredProducts.reduce((s, p) => s + (p.refundCount || 0), 0);
     const afterSaleRate = totalOrders > 0 ? (afterSaleCount / totalOrders) * 100 : 0;
+    const refundRate = totalOrders > 0 ? (totalRefundOrders / totalOrders) * 100 : 0;
     const zeroSales = filteredProducts.filter(p => p.sales <= 0).length;
     const lowInventory = filteredProducts.filter(p => p.inventoryStatus === 'low').length;
     const activeProducts = filteredProducts.filter(p => p.sales > 0).length;
     const sellThroughRate = filteredProducts.length > 0 ? (activeProducts / filteredProducts.length) * 100 : 0;
     const avgTurnover = filteredProducts.reduce((s, p) => s + (p.turnoverDays < 999 ? p.turnoverDays : 0), 0) / (filteredProducts.filter(p => p.turnoverDays < 999).length || 1);
-    const avgPromoRatio = filteredProducts.reduce((s, p) => s + p.promoCostRatio, 0) / (filteredProducts.length || 1);
-    const totalRefundOrders = filteredProducts.reduce((s, p) => s + (p.refundCount || 0), 0);
-    const refundRate = totalOrders > 0 ? (totalRefundOrders / totalOrders) * 100 : 0;
+    const avgPromoRatio = filteredProducts.reduce((s, p) => s + (p.promoCostRatio || 0), 0) / (filteredProducts.length || 1);
+    const avgPrice = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+    const gmvPerOrder = totalOrders > 0 ? totalGmv / totalOrders : 0;
+    const revenuePerOrder = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+    const ordersPerProduct = productIds.size > 0 ? totalOrders / productIds.size : 0;
+    const profitPerOrder = totalOrders > 0 ? totalProfit / totalOrders : 0;
+    const grossProfitRate = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+    const avgDiscountRatio = filteredProducts.reduce((s, p) => s + (p.discountRatio || 0), 0) / (filteredProducts.length || 1);
+    const avgActiveDays = filteredProducts.reduce((s, p) => s + (p.activeDays || 0), 0) / (filteredProducts.length || 1);
+    const avgSellingPrice = filteredProducts.reduce((s, p) => s + (p.avgPrice || 0), 0) / (filteredProducts.length || 1);
+    const newProductCount = allDates.length > 0 ? filteredProducts.filter(p => p.firstDate && p.firstDate >= allDates[0][0]).length : 0;
+    const totalCost = filteredProducts.reduce((s, p) => s + (p.costs || 0), 0);
+    const activeProductsWithSales = filteredProducts.filter(p => p.sales > 0);
+    const avgUnitCost = activeProductsWithSales.length > 0 ? activeProductsWithSales.reduce((s, p) => s + ((p.costs || 0) / (p.sales || 1)), 0) / activeProductsWithSales.length : 0;
+    const avgUnitProfit = activeProductsWithSales.length > 0 ? activeProductsWithSales.reduce((s, p) => s + ((p.profit || 0) / (p.sales || 1)), 0) / activeProductsWithSales.length : 0;
+    const costRate = totalRevenue > 0 ? (totalCost / totalRevenue) * 100 : 0;
+    const totalLogistics = filteredProducts.reduce((s, p) => { const cb = p.costBreakdown || {}; return s + (cb.shippingFee || 0) + (cb.packagingFee || 0); }, 0);
+    const totalPlatformFee = filteredProducts.reduce((s, p) => { const cb = p.costBreakdown || {}; return s + (cb.platformFee || 0); }, 0);
+    const totalAfterSale = filteredProducts.reduce((s, p) => s + (p.afterSale || 0), 0);
+    const highAfterSaleCount = filteredProducts.filter(p => (p.afterSaleRate || 0) > 20).length;
+    const totalPromoTransaction = filteredProducts.reduce((s, p) => s + (p.promoTransaction || 0), 0);
+    const totalPromoClicks = filteredProducts.reduce((s, p) => s + (p.promoClicks || 0), 0);
+    const avgPromoCostPerProduct = filteredProducts.reduce((s, p) => s + (p.promoCost || 0), 0) / (filteredProducts.length || 1);
+    const promoConvertRate = totalPromoClicks > 0 ? (totalPromoTransaction / totalPromoClicks) * 100 : 0;
+    const roiValues = filteredProducts.map(p => p.roi || 0).filter(r => r > 0);
+    const maxRoi = roiValues.length > 0 ? Math.max(...roiValues) : 0;
+    const minRoi = roiValues.length > 0 ? Math.min(...roiValues) : 0;
+    const highPromoCount = filteredProducts.filter(p => (p.promoCostRatio || 0) > 30).length;
+    const highRefundCount = filteredProducts.filter(p => (p.refundRate || 0) > 15).length;
 
-    // 计算环比变化
+    // 环比变化
     const diffs: Record<string, number | null> = {};
     const prevMatched = prevProducts.filter(p => productIds.has(p.id));
     if (prevMatched.length > 0) {
@@ -747,21 +746,105 @@ export default function ProductPage() {
       const prevProfit = prevMatched.reduce((s, p) => s + p.profit, 0);
       const prevGmv = prevMatched.reduce((s, p) => s + p.gmv, 0);
       const prevOrders = prevMatched.reduce((s, p) => s + p.orders, 0);
-      const prevActive = prevMatched.filter(p => p.sales > 0).length;
       const prevAvgPrice = prevOrders > 0 ? prevRevenue / prevOrders : 0;
-      const prevSellThrough = prevMatched.length > 0 ? (prevActive / prevMatched.length) * 100 : 0;
+      const prevSellThrough = prevMatched.length > 0 ? (prevMatched.filter(p => p.sales > 0).length / prevMatched.length) * 100 : 0;
+      const prevAfterSaleCount = prevMatched.reduce((s, p) => s + (p.afterSale || 0), 0);
+      const prevAfterSaleRate = prevOrders > 0 ? (prevAfterSaleCount / prevOrders) * 100 : 0;
+      const prevRefundOrders = prevMatched.reduce((s, p) => s + (p.refundCount || 0), 0);
+      const prevRefundRate = prevOrders > 0 ? (prevRefundOrders / prevOrders) * 100 : 0;
+      const prevPromoRatio = prevMatched.length > 0 ? prevMatched.reduce((s, p) => s + (p.promoCostRatio || 0), 0) / prevMatched.length : 0;
+      const prevGmvPerOrder = prevOrders > 0 ? prevGmv / prevOrders : 0;
+      const prevRevenuePerOrder = prevOrders > 0 ? prevRevenue / prevOrders : 0;
+      const prevOrdersPerProduct = prevMatched.length > 0 ? prevOrders / prevMatched.length : 0;
+      const prevProfitPerOrder = prevOrders > 0 ? prevProfit / prevOrders : 0;
+      const prevGrossProfitRate = prevRevenue > 0 ? (prevProfit / prevRevenue) * 100 : 0;
+      const prevTotalCost = prevMatched.reduce((s, p) => s + (p.costs || 0), 0);
+      const prevCostRate = prevRevenue > 0 ? (prevTotalCost / prevRevenue) * 100 : 0;
+      const prevPromoTransaction = prevMatched.reduce((s, p) => s + (p.promoTransaction || 0), 0);
+      const prevPromoClicks = prevMatched.reduce((s, p) => s + (p.promoClicks || 0), 0);
+      const prevPromoConvertRate = prevPromoClicks > 0 ? (prevPromoTransaction / prevPromoClicks) * 100 : 0;
       diffs.productCount = changePct(productIds.size, prevMatched.length);
       diffs.totalGmv = changePct(totalGmv, prevGmv);
       diffs.totalRevenue = changePct(totalRevenue, prevRevenue);
       diffs.totalProfit = changePct(totalProfit, prevProfit);
+      diffs.totalSales = changePct(totalSales, prevSales);
       diffs.avgPrice = changePct(avgPrice, prevAvgPrice);
       diffs.sellThroughRate = changePct(sellThroughRate, prevSellThrough);
+      diffs.totalOrders = changePct(totalOrders, prevOrders);
+      diffs.afterSaleRate = changePct(afterSaleRate, prevAfterSaleRate);
+      diffs.refundRate = changePct(refundRate, prevRefundRate);
+      diffs.avgPromoRatio = changePct(avgPromoRatio, prevPromoRatio);
+      diffs.gmvPerOrder = changePct(gmvPerOrder, prevGmvPerOrder);
+      diffs.revenuePerOrder = changePct(revenuePerOrder, prevRevenuePerOrder);
+      diffs.ordersPerProduct = changePct(ordersPerProduct, prevOrdersPerProduct);
+      diffs.profitPerOrder = changePct(profitPerOrder, prevProfitPerOrder);
+      diffs.grossProfitRate = changePct(grossProfitRate, prevGrossProfitRate);
+      diffs.totalCost = changePct(totalCost, prevTotalCost);
+      diffs.costRate = changePct(costRate, prevCostRate);
+      diffs.totalPromoTransaction = changePct(totalPromoTransaction, prevPromoTransaction);
+      diffs.totalPromoClicks = changePct(totalPromoClicks, prevPromoClicks);
+      diffs.promoConvertRate = changePct(promoConvertRate, prevPromoConvertRate);
     } else {
-      diffs.productCount = null; diffs.totalGmv = null; diffs.totalRevenue = null;
-      diffs.totalProfit = null; diffs.avgPrice = null; diffs.sellThroughRate = null;
+      ['productCount','totalGmv','totalRevenue','totalProfit','totalSales','avgPrice',
+       'sellThroughRate','totalOrders','afterSaleRate','refundRate','avgPromoRatio',
+       'gmvPerOrder','revenuePerOrder','ordersPerProduct','profitPerOrder','grossProfitRate',
+       'totalCost','costRate','totalPromoTransaction','totalPromoClicks','promoConvertRate'
+      ].forEach(k => { diffs[k] = null; });
     }
-    return { productCount: productIds.size, totalSales, totalRevenue, totalProfit, totalGmv, avgPrice, afterSaleRate, zeroSales, lowInventory, sellThroughRate, avgTurnover, avgPromoRatio, refundRate, diffs };
-  }, [filteredProducts, prevProducts]);
+    return {
+      productCount: productIds.size, totalSales, totalRevenue, totalProfit, totalGmv,
+      avgPrice, afterSaleRate, zeroSales, lowInventory, sellThroughRate, avgTurnover,
+      avgPromoRatio, refundRate, totalOrders, gmvPerOrder, revenuePerOrder,
+      ordersPerProduct, avgDiscountRatio, avgActiveDays, avgSellingPrice,
+      newProductCount, grossProfitRate, profitPerOrder, totalCost, avgUnitCost,
+      avgUnitProfit, costRate, totalLogistics, totalPlatformFee, totalAfterSale,
+      highAfterSaleCount, totalPromoTransaction, totalPromoClicks,
+      avgPromoCostPerProduct, promoConvertRate, maxRoi, minRoi, diffs,
+    };
+  }, [filteredProducts, prevProducts, allDates]);
+
+  // ── KPI 值映射 + 变化率映射（传给 ProductKpiPanel）──
+  const kpiValues = useMemo(() => {
+    if (!kpiMetrics) return {};
+    const { diffs: _, ...vals } = kpiMetrics;
+    return {
+      ...vals,
+      activeProductCount: kpiMetrics.productCount - (kpiMetrics.zeroSales || 0),
+      profitRate: kpiMetrics.grossProfitRate,
+      totalRefundOrders: filteredProducts.reduce((s, p) => s + (p.refundCount || 0), 0),
+      highPromoCount: filteredProducts.filter(p => (p.promoCostRatio || 0) > 30).length,
+      highRefundCount: filteredProducts.filter(p => (p.refundRate || 0) > 15).length,
+      profitPerProduct: kpiMetrics.productCount > 0 ? kpiMetrics.totalProfit / kpiMetrics.productCount : 0,
+    };
+  }, [kpiMetrics, filteredProducts]);
+
+  const kpiChanges = useMemo(() => {
+    if (!kpiMetrics || !kpiMetrics.diffs) return {};
+    const d = kpiMetrics.diffs;
+    const allKeys = [
+      'productCount', 'totalSales', 'totalRevenue', 'totalProfit', 'totalGmv',
+      'avgPrice', 'sellThroughRate', 'zeroSalesCount', 'lowInventoryCount',
+      'avgTurnover', 'afterSaleRate', 'refundRate', 'totalOrders', 'avgPromoRatio',
+      'totalPromoCost', 'avgRoi', 'highRefundCount', 'highPromoCount', 'profitRate',
+      'profitPerProduct', 'newProductCount', 'avgActiveDays', 'avgSellingPrice',
+      'gmvPerOrder', 'revenuePerOrder', 'ordersPerProduct', 'avgDiscountRatio',
+      'grossProfitRate', 'profitPerOrder', 'totalCost', 'avgUnitCost',
+      'avgUnitProfit', 'costRate', 'totalLogistics', 'totalPlatformFee',
+      'totalAfterSale', 'highAfterSaleCount', 'totalPromoTransaction',
+      'totalPromoClicks', 'avgPromoCostPerProduct', 'promoConvertRate', 'maxRoi', 'minRoi',
+    ];
+    const changes: Record<string, number | null> = {};
+    allKeys.forEach(k => {
+      changes[k] = (d as any)[k] ?? null;
+    });
+    return changes;
+  }, [kpiMetrics]);
+
+  /** 当前排序的卡片列表 */
+  const sortedKpiCards = useMemo(() => {
+    const order = kpiCardOrder.filter(label => visibleKpis.has(label));
+    return order.map(label => ALL_PRODUCT_KPIS.find(k => k.label === label)).filter(Boolean) as typeof ALL_PRODUCT_KPIS;
+  }, [kpiCardOrder, visibleKpis]);
 
   // ── 全店汇总（用于计算商品占比） ──
   const storeTotals = useMemo(() => {
@@ -1486,141 +1569,7 @@ const noData = !filteredOrders.length;
     URL.revokeObjectURL(url);
   };
 
-        const renderKpiPanel = () => {
-    const visibleList = kpiCardOrder.filter(k => visibleKpis.has(k));
-    const displayed = visibleList.slice(0, 10);
-    const allKpis = ALL_PRODUCT_KPIS;
-    const kpiValues: Record<string, number> = {};
-    allKpis.forEach(kpi => {
-      kpiValues[kpi.label] = (kpiMetrics as any)?.[kpi.key] || 0;
-    });
-    const primaryCount = 5;
-    const primaryKpis = displayed.slice(0, primaryCount);
-    const extraCount = displayed.length - primaryCount;
-    return (
-      <>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {primaryKpis.map((label) => {
-            const kpi = allKpis.find(k => k.label === label);
-            if (!kpi) return null;
-            const val = kpiValues[label];
-            const isProfit = label.includes('利润') || label.includes('利润率');
-            const valColor = 'text-pdd-text';
-            const isSelected = selectedTrendKpi === label;
-            return (
-              <div key={label}
-                className={`rounded-lg border px-4 py-3 cursor-pointer transition-all ${
-                  isSelected
-                    ? 'bg-pdd-primary/[0.08] border-pdd-primary/30 shadow-sm'
-                    : 'bg-pdd-card border-pdd-border/60 hover:border-pdd-primary/30 hover:shadow-sm'
-                }`}
-                onClick={() => setSelectedTrendKpi(isSelected ? null : label)}>
-                <div className="text-[11px] font-medium text-pdd-text-secondary/70 leading-none mb-2">{label}</div>
-                <div className={'text-xl font-bold tabular-nums leading-none tracking-tight ' + valColor}>
-                  {kpi.fmt(val)}
-                </div>
-              </div>
-            );
-          })}
-          {extraCount > 0 && (
-            <div onClick={() => setShowKpiSelector(true)}
-              className="bg-pdd-bg/50 rounded-lg border border-dashed border-pdd-border/40 flex items-center justify-center cursor-pointer hover:border-pdd-primary/30 hover:bg-pdd-bg transition-all group">
-              <span className="text-xs text-pdd-text-secondary/50 group-hover:text-pdd-primary/70">+{extraCount}个指标</span>
-            </div>
-          )}
-        </div>
-
-        {/* KPI 趋势图 */}
-        {selectedTrendKpi && dailyTrendData.length > 1 && (
-          <div className="mt-4 bg-pdd-card rounded-lg border border-pdd-border/60 overflow-hidden">
-            <div className="flex items-center justify-between px-4 py-2.5 border-b border-pdd-border/30">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-semibold text-pdd-text">{selectedTrendKpi} 趋势</span>
-                <span className="text-[10px] text-pdd-text-secondary/60">
-                  {dailyTrendData[0]?.date} ~ {dailyTrendData[dailyTrendData.length-1]?.date}
-                </span>
-              </div>
-              <button onClick={() => setSelectedTrendKpi(null)} className="text-pdd-text-secondary/40 hover:text-pdd-text/70 p-0.5">
-                <X size={13} />
-              </button>
-            </div>
-            <div className="px-2 pt-2 pb-1 h-[200px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={dailyTrendData} margin={{ top: 8, right: 16, bottom: 4, left: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--pdd-border)" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }}
-                    axisLine={false}
-                    tickLine={false}
-                    tickFormatter={(v: string) => v.slice(5)}
-                  />
-                  <YAxis
-                    tick={{ fontSize: 10, fill: 'var(--pdd-text-secondary)' }}
-                    axisLine={false}
-                    tickLine={false}
-                    width={60}
-                  />
-                  <Tooltip content={<ChartTooltip />} />
-                  <Line
-                    type="monotone"
-                    dataKey={(() => {
-                      const k = allKpis.find(k => k.label === selectedTrendKpi);
-                      const map: Record<string, string> = {
-                        '商品数': 'productCount', '总GMV': 'gmv', '总实收': 'revenue',
-                        '总销量': 'sales', '客单价': 'avgPrice', '利润总额': 'profit',
-                        '利润率': 'profitRate', '退款率': 'refundRate',
-                        '推广花费': 'promoCost', '有效订单量': 'orders',
-                      };
-                      return map[selectedTrendKpi] || 'revenue';
-                    })()}
-                    stroke="var(--pdd-primary)"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4, fill: 'var(--pdd-primary)' }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        )}
-
-        {/* KPI 选择器弹窗 */}
-        {showKpiSelector && (
-          <div className="fixed inset-0 bg-black/20 z-50 flex items-center justify-center p-4" onClick={() => setShowKpiSelector(false)}>
-            <div className="bg-pdd-card rounded-lg border border-pdd-border shadow-lg max-w-lg w-full p-5" onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-semibold text-pdd-text">自定义KPI指标</h3>
-                <button onClick={() => setShowKpiSelector(false)} className="text-pdd-text-secondary hover:text-pdd-text"><X size={16} /></button>
-              </div>
-              <div className="text-[11px] text-pdd-text-secondary mb-3">选择要显示的指标（最多10个，最少1个）</div>
-              {KPI_GROUPS.map(group => (
-                <div key={group.name} className="mb-3">
-                  <div className="text-[11px] font-semibold text-pdd-text-secondary mb-1.5">{group.name}</div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {group.items.map(kpi => {
-                      const active = visibleKpis.has(kpi.label);
-                      const count = visibleKpis.size;
-                      return (
-                        <button key={kpi.label} onClick={() => {
-                          if (active) { if (count <= 1) return; setVisibleKpis(prev => { const n = new Set(prev); n.delete(kpi.label); return n; });
-                          } else { if (count >= 10) return; setVisibleKpis(prev => { const n = new Set(prev); n.add(kpi.label); return n; }); }
-                        }}
-                          className={'px-2.5 py-1 text-[11px] font-medium rounded border transition-colors ' + (active ? 'bg-pdd-primary/10 text-pdd-primary border-pdd-primary/20' : 'bg-pdd-card text-pdd-text-secondary border-pdd-border hover:border-pdd-primary/30')}>
-                          {kpi.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-              <div className="text-[10px] text-pdd-text-secondary/70 mt-2">已选 {visibleKpis.size}/10 个指标</div>
-            </div>
-          </div>
-        )}
-      </>
-    );
-  };
+        
 
   // ── 列配置 — getMergedCellData：行内按 rowMode 映射 ──
 
@@ -2702,7 +2651,43 @@ function TargetDialog({ product, targets, recommendation, onSave, onClose }: {
       {/* ── 主体内容 ── */}
       <div className="space-y-4">
         {/* KPI 卡片 */}
-        {renderKpiPanel()}
+        <ProductKpiPanel
+            kpiCards={sortedKpiCards}
+            allKpiCards={ALL_PRODUCT_KPIS}
+            kpiValues={kpiValues}
+            kpiChanges={kpiChanges}
+            visibleKpis={visibleKpis}
+            setVisibleKpis={setVisibleKpis}
+            showKpiSelector={showKpiSelector}
+            setShowKpiSelector={setShowKpiSelector}
+            noData={!kpiMetrics}
+            onCardClick={(label) => {
+              const dataKey = KPI_DATAKEY_MAP[label as keyof typeof KPI_DATAKEY_MAP];
+              if (!dataKey) return; // 该KPI无日趋势数据
+              setSelectedTrendKpis(prev => {
+                const exists = prev.includes(label);
+                if (exists) return prev.filter(l => l !== label);
+                if (prev.length >= 10) return prev;
+                return [...prev, label];
+              });
+            }}
+            onCardReorder={(newCards) => {
+              const newOrder = newCards.map(c => c.label);
+              setKpiCardOrder(newOrder);
+              try { localStorage.setItem('dianfx_product_kpi_order', JSON.stringify(newOrder)); } catch {}
+            }}
+            onKpiSelect={(label) => {
+              setKpiCardOrder(prev => {
+                const filtered = prev.filter(l => l !== label);
+                return [label, ...filtered];
+              });
+            }}
+            dailyTrendData={dailyTrendData}
+            selectedTrendKpis={selectedTrendKpis}
+            onClearLine={(label) => {
+              setSelectedTrendKpis(prev => prev.filter(l => l !== label));
+            }}
+          />
 
         {/* 商品表格 */}
         {renderContent()}
