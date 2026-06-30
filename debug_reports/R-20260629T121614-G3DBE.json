@@ -1,0 +1,116 @@
+{
+  "id": "R-20260629T121614-G3DBE",
+  "title": "这个按钮之前不是说了只有调试账号登录了才会现实呢？为什么现在一直显示着",
+  "description": "[问题模块] div\nDOM路径: #root > div:nth-child(2)\nReact组件: Y\n位置: (1677, 738) 48x48\n文本: 调试\n主题: light\nbackground: rgb(255, 68, 68)\ncolor: rgb(255, 255, 255)\nborder: 0px none rgb(255, 255, 255)",
+  "severity": "major",
+  "ip": "240e:3b4:3816:3a80:d144:81e6:c665:71df",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-29T12:16:14.548Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+    "screen": "1920x1080",
+    "url": "https://melody.wang/#/login",
+    "language": "zh-CN",
+    "theme": "light",
+    "timestamp": "2026-06-29T12:16:14.595Z"
+  },
+  "logs": [
+    {
+      "id": 1,
+      "type": "network",
+      "message": "PUT /api/v1/preferences/dark_mode [401] 432ms",
+      "ts": "20:15:06",
+      "t": 1782735306491
+    },
+    {
+      "id": 2,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 430ms",
+      "ts": "20:15:07",
+      "t": 1782735307982
+    },
+    {
+      "id": 3,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 427ms",
+      "ts": "20:15:20",
+      "t": 1782735320988
+    },
+    {
+      "id": 4,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 433ms",
+      "ts": "20:15:35",
+      "t": 1782735335984
+    },
+    {
+      "id": 5,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 431ms",
+      "ts": "20:15:50",
+      "t": 1782735350980
+    },
+    {
+      "id": 6,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 425ms",
+      "ts": "20:16:05",
+      "t": 1782735365983
+    },
+    {
+      "id": 7,
+      "type": "network",
+      "message": "GET /api/v1/debug/check [200] 437ms",
+      "ts": "20:16:13",
+      "t": 1782735373880
+    }
+  ],
+  "status": "open",
+  "pageContext": {},
+  "elementInfos": [
+    {
+      "tag": "div",
+      "id": "",
+      "cls": "",
+      "selectorPath": "#root > div:nth-child(2)",
+      "reactComponent": "Y",
+      "computedCss": {
+        "background-color": "rgb(255, 68, 68)",
+        "color": "rgb(255, 255, 255)",
+        "border": "0px none rgb(255, 255, 255)",
+        "border-top-color": "rgb(255, 255, 255)",
+        "border-bottom-color": "rgb(255, 255, 255)",
+        "font-size": "13px",
+        "font-family": "sans-serif",
+        "font-weight": "700",
+        "text-align": "start",
+        "padding": "0px",
+        "margin": "0px",
+        "width": "47.9972px",
+        "height": "47.9972px",
+        "min-width": "0px",
+        "min-height": "0px",
+        "display": "flex",
+        "flex-direction": "row",
+        "align-items": "center",
+        "justify-content": "center",
+        "gap": "normal",
+        "box-shadow": "rgba(0, 0, 0, 0.3) 0px 2px 12px 0px",
+        "border-radius": "50%",
+        "opacity": "1"
+      },
+      "position": [
+        1677,
+        738,
+        48,
+        48
+      ],
+      "text": "调试",
+      "theme": "light"
+    }
+  ],
+  "buildInfo": {
+    "buildId": "mqz6i2yn-jb2y0m"
+  }
+}

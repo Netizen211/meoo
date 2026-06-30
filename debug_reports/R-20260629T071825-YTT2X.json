@@ -1,0 +1,84 @@
+{
+  "id": "R-20260629T071825-YTT2X",
+  "title": "黑色背景下这个也是白色的",
+  "description": "[问题模块] div.pdd-card.p-3.bg-gradient-to-r.from-blue-50.to-white.border.border-blue-100\nDOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.space-y-3 > div.space-y-3 > div.pdd-card.p-3.bg-gradient-to-r\nReact组件: U\n位置: (688, 376) 1408x42\n文本: ### 上传数据后，可到“数据质量检查”查看数据完整性，或到“同步状态”检查各数据源延迟\n主题: dark\nbackground: rgb(30, 41, 59)\ncolor: rgb(255, 255, 255)\nborder: 1px solid rgb(219, 234, 254)",
+  "severity": "major",
+  "ip": "113.90.87.104",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-29T07:18:25.890Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "screen": "2560x1440",
+    "url": "https://melody.wang/#/upload",
+    "language": "zh-CN",
+    "theme": "dark",
+    "timestamp": "2026-06-29T07:18:25.222Z"
+  },
+  "logs": [
+    {
+      "id": 46,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "15:17:55",
+      "t": 1782717475484
+    },
+    {
+      "id": 47,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "15:18:00",
+      "t": 1782717480484
+    },
+    {
+      "id": 48,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 420ms",
+      "ts": "15:18:05",
+      "t": 1782717485897
+    },
+    {
+      "id": 49,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 415ms",
+      "ts": "15:18:08",
+      "t": 1782717488150
+    },
+    {
+      "id": 50,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1ms",
+      "ts": "15:18:10",
+      "t": 1782717490486
+    },
+    {
+      "id": 51,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1ms",
+      "ts": "15:18:15",
+      "t": 1782717495490
+    },
+    {
+      "id": 52,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1ms",
+      "ts": "15:18:20",
+      "t": 1782717500490
+    },
+    {
+      "id": 53,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 417ms",
+      "ts": "15:18:22",
+      "t": 1782717502815
+    },
+    {
+      "id": 54,
+      "type": "network",
+      "message": "GET /api/v1/debug/check [200] 433ms",
+      "ts": "15:18:23",
+      "t": 1782717503991
+    }
+  ],
+  "status": "open"
+}

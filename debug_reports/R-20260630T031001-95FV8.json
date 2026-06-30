@@ -1,0 +1,148 @@
+{
+  "id": "R-20260630T031001-95FV8",
+  "title": "【测试】v7 全部字段验证",
+  "description": "验证服务器正确保存所有 v7 新增字段: timeline, codeTraces, componentRenderCounts, userSessionId, userPageLoadId, timelineStats",
+  "severity": "critical",
+  "ip": "::ffff:127.0.0.1",
+  "userId": "debug-001",
+  "username": "测试账号001",
+  "createdAt": "2026-06-30T03:10:01.661Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 Test",
+    "screen": "1920x1080",
+    "language": "zh-CN",
+    "url": "https://melody.wang/test",
+    "timezone": "Asia/Shanghai",
+    "platform": "Win32"
+  },
+  "logs": [],
+  "status": "open",
+  "config": {
+    "test_key": "test_value"
+  },
+  "routeHistory": [
+    "/#/dashboard",
+    "/#/products"
+  ],
+  "errorSummary": [
+    {
+      "message": "TypeError: test",
+      "count": 3,
+      "lastTs": "10:00:05"
+    },
+    {
+      "message": "ChunkLoadError",
+      "count": 1,
+      "lastTs": "09:59:55"
+    }
+  ],
+  "runtimeDiagnostics": {
+    "online": true,
+    "loadComplete": true
+  },
+  "timeline": [
+    {
+      "id": 1,
+      "sessionId": "sid-v7",
+      "ts": 1782788800000,
+      "type": "navigation",
+      "category": "page_load",
+      "message": "页面加载: 测试页"
+    },
+    {
+      "id": 2,
+      "sessionId": "sid-v7",
+      "ts": 1782788801000,
+      "type": "action",
+      "category": "click",
+      "message": "点击: 测试按钮"
+    },
+    {
+      "id": 3,
+      "sessionId": "sid-v7",
+      "ts": 1782788802000,
+      "type": "network",
+      "category": "api",
+      "message": "GET /api/test",
+      "data": {
+        "method": "GET",
+        "status": 200,
+        "duration": 150
+      }
+    },
+    {
+      "id": 4,
+      "sessionId": "sid-v7",
+      "ts": 1782788803000,
+      "type": "error",
+      "message": "TypeError: test error"
+    },
+    {
+      "id": 5,
+      "sessionId": "sid-v7",
+      "ts": 1782788804000,
+      "type": "code",
+      "category": "webpack_chunk",
+      "message": "Chunk 加载: [882]"
+    },
+    {
+      "id": 6,
+      "sessionId": "sid-v7",
+      "ts": 1782788805000,
+      "type": "input",
+      "category": "input",
+      "message": "输入: search-box"
+    }
+  ],
+  "codeTraces": [
+    {
+      "id": 101,
+      "sessionId": "sid-v7",
+      "ts": 1782788803500,
+      "type": "code",
+      "category": "webpack_chunk",
+      "message": "Chunk 加载: [882, 913]",
+      "data": {
+        "chunkIds": [
+          "882",
+          "913"
+        ]
+      }
+    },
+    {
+      "id": 102,
+      "sessionId": "sid-v7",
+      "ts": 1782788805500,
+      "type": "render",
+      "category": "react_render",
+      "message": "渲染: DashboardPage",
+      "data": {
+        "name": "DashboardPage"
+      }
+    },
+    {
+      "id": 103,
+      "sessionId": "sid-v7",
+      "ts": 1782788806500,
+      "type": "custom",
+      "category": "dom_change",
+      "message": "DOM 变更: div.container"
+    }
+  ],
+  "componentRenderCounts": {
+    "DashboardPage": 15,
+    "KpiPanel": 8,
+    "DataTable": 5,
+    "AuthPage": 3,
+    "ProductPage": 12
+  },
+  "userSessionId": "sid-v7-final-003",
+  "userPageLoadId": "pl-v7-final-003",
+  "timelineStats": {
+    "total": 425,
+    "sessionDuration": 125000,
+    "storageBytes": 28450,
+    "sessionId": "sid-v7-final-003",
+    "pageLoadId": "pl-v7-final-003"
+  }
+}

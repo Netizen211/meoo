@@ -1,0 +1,18 @@
+{
+  "id": "R-20260630T031044-34VKM",
+  "title": "旧版客户端兼容测试",
+  "description": "模拟旧版前端，只发送基本字段",
+  "severity": "minor",
+  "ip": "::ffff:127.0.0.1",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-30T03:10:44.016Z",
+  "deviceInfo": {
+    "userAgent": "",
+    "screen": "",
+    "url": "",
+    "language": ""
+  },
+  "logs": [],
+  "status": "open"
+}

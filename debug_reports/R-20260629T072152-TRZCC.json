@@ -1,0 +1,84 @@
+{
+  "id": "R-20260629T072152-TRZCC",
+  "title": "有出现了报错",
+  "description": "[问题模块] div.fixed.bottom-4.right-4.z-50.px-4.py-2.5.rounded-xl.shadow-[0_4px_12px_rgba(16,24,40,0.1)].text-sm.flex.items-center.gap-2.transition-all.duration-300.bg-pdd-danger.text-white\nDOM路径: #app-root > div.fixed.bottom-4.right-4\nReact组件: ce\n位置: (2322, 1223) 222x40\n文本: 同步失败去店铺页导入\n主题: light\nbackground: rgb(239, 68, 68)\ncolor: rgb(255, 255, 255)\nborder: 0px solid rgb(229, 231, 235)",
+  "severity": "major",
+  "ip": "113.90.87.104",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-29T07:21:52.373Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "screen": "2560x1440",
+    "url": "https://melody.wang/#/upload",
+    "language": "zh-CN",
+    "theme": "light",
+    "timestamp": "2026-06-29T07:21:51.184Z"
+  },
+  "logs": [
+    {
+      "id": 366,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 419ms",
+      "ts": "15:21:22",
+      "t": 1782717682835
+    },
+    {
+      "id": 367,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 9ms",
+      "ts": "15:21:25",
+      "t": 1782717685493
+    },
+    {
+      "id": 368,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 8ms",
+      "ts": "15:21:30",
+      "t": 1782717690493
+    },
+    {
+      "id": 369,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 13ms",
+      "ts": "15:21:35",
+      "t": 1782717695497
+    },
+    {
+      "id": 370,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 1274ms",
+      "ts": "15:21:40",
+      "t": 1782717700512
+    },
+    {
+      "id": 371,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 419ms",
+      "ts": "15:21:40",
+      "t": 1782717700928
+    },
+    {
+      "id": 372,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 7ms",
+      "ts": "15:21:45",
+      "t": 1782717705495
+    },
+    {
+      "id": 373,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 10ms",
+      "ts": "15:21:50",
+      "t": 1782717710490
+    },
+    {
+      "id": 374,
+      "type": "network",
+      "message": "GET /api/v1/debug/check [200] 417ms",
+      "ts": "15:21:50",
+      "t": 1782717710769
+    }
+  ],
+  "status": "open"
+}

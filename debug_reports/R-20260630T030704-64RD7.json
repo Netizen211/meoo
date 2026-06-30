@@ -1,0 +1,64 @@
+{
+  "id": "R-20260630T030704-64RD7",
+  "title": "【测试】反馈工具 v7 链路验证",
+  "description": "验证 TimelineStore 持久化 + CodeTracer 代码追踪 + 用户信息全链路",
+  "severity": "major",
+  "ip": "::ffff:127.0.0.1",
+  "userId": "debug-001",
+  "username": "调试001",
+  "createdAt": "2026-06-30T03:07:04.998Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 TestAgent",
+    "screen": "1920x1080x24",
+    "language": "zh-CN",
+    "theme": "light",
+    "timestamp": "2026-06-30T10:00:00.000Z",
+    "url": "https://melody.wang/#/dashboard",
+    "timezone": "Asia/Shanghai",
+    "platform": "Win32"
+  },
+  "logs": [
+    {
+      "id": 1,
+      "type": "info",
+      "message": "[app] 启动测试",
+      "ts": "10:00:00",
+      "t": 1782788800000
+    }
+  ],
+  "status": "open",
+  "config": {
+    "test_key": "test_value",
+    "db_host": "***"
+  },
+  "networkDiagnostics": {
+    "requestIds": [
+      "req-001",
+      "req-002"
+    ],
+    "dnsTime": 5,
+    "ttfb": 120
+  },
+  "routeHistory": [
+    "/#/dashboard",
+    "/#/products",
+    "/#/orders"
+  ],
+  "errorSummary": [
+    {
+      "message": "TypeError: Cannot read properties of undefined (reading map)",
+      "count": 3,
+      "lastTs": "10:00:05"
+    },
+    {
+      "message": "ChunkLoadError: Loading chunk 882 failed",
+      "count": 1,
+      "lastTs": "09:59:55",
+      "source": "legacy"
+    }
+  ],
+  "runtimeDiagnostics": {
+    "online": true,
+    "loadComplete": true
+  }
+}

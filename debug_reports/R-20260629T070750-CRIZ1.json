@@ -1,0 +1,84 @@
+{
+  "id": "R-20260629T070750-CRIZ1",
+  "title": "白色的背景下，但这个界面还是黑色的",
+  "description": "DOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.space-y-3 > div.relative.group.mb-6 > div.border-pdd-border.bg-pdd-card.text-pdd-text > div.p-6.pt-4\nReact组件: u\n位置: (681, 136) 1408x351\n文本: 拖拽文件或文件夹到此处上传支持 CSV、XLSX 格式 | 订单数据、推广数据、运费险数据点击选择文件或拖拽到此处📄 选择文件或📁 选择文件夹（批量上传）\n主题: light\nbackground: rgba(0, 0, 0, 0)\ncolor: rgb(16, 24, 40)\nborder: 0px solid rgb(229, 231, 235)\n\n[问题模块] div.p-2\nDOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.space-y-3 > div.relative.group > div.rounded-lg.border-pdd-border.bg-pdd-card > div.p-2\nReact组件: u\n位置: (681, 80) 1408x44\n文本: 📤 上传📊 数据总览🔍 数据质量检查🧹 数据清理🔄 同步状态\n主题: light\nbackground: rgba(0, 0, 0, 0)\ncolor: rgb(16, 24, 40)\nborder: 0px solid rgb(229, 231, 235)",
+  "severity": "major",
+  "ip": "113.90.87.104",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-29T07:07:50.496Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "screen": "2560x1440",
+    "url": "https://melody.wang/#/upload",
+    "language": "zh-CN",
+    "theme": "light",
+    "timestamp": "2026-06-29T07:07:49.575Z"
+  },
+  "logs": [
+    {
+      "id": 26,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 3ms",
+      "ts": "15:07:20",
+      "t": 1782716840712
+    },
+    {
+      "id": 27,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 507ms",
+      "ts": "15:07:26",
+      "t": 1782716846216
+    },
+    {
+      "id": 28,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 434ms",
+      "ts": "15:07:29",
+      "t": 1782716849243
+    },
+    {
+      "id": 29,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "15:07:30",
+      "t": 1782716850711
+    },
+    {
+      "id": 30,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1ms",
+      "ts": "15:07:35",
+      "t": 1782716855707
+    },
+    {
+      "id": 31,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "15:07:40",
+      "t": 1782716860711
+    },
+    {
+      "id": 32,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 420ms",
+      "ts": "15:07:43",
+      "t": 1782716863395
+    },
+    {
+      "id": 33,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "15:07:45",
+      "t": 1782716865712
+    },
+    {
+      "id": 34,
+      "type": "network",
+      "message": "GET /api/v1/debug/check [200] 421ms",
+      "ts": "15:07:48",
+      "t": 1782716868888
+    }
+  ],
+  "status": "open"
+}

@@ -1,0 +1,140 @@
+{
+  "id": "R-20260630T124053-ZOMTA",
+  "title": "【自动化测试】完整链路验证",
+  "description": "模拟前端 buildFullSnapshot 提交，验证所有数据字段",
+  "severity": "minor",
+  "ip": "::ffff:127.0.0.1",
+  "userId": "test-user",
+  "username": "测试账号",
+  "createdAt": "2026-06-30T12:40:53.565Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 Test",
+    "screen": "1920x1080x24",
+    "url": "https://melody.wang/#/after-sale",
+    "language": "zh-CN",
+    "theme": "dark",
+    "timestamp": "2026-06-30T12:40:00.000Z"
+  },
+  "logs": [
+    {
+      "ts": "12:39:00",
+      "type": "info",
+      "message": "页面加载完成"
+    },
+    {
+      "ts": "12:39:05",
+      "type": "warn",
+      "message": "售后数据加载延迟"
+    },
+    {
+      "ts": "12:39:10",
+      "type": "error",
+      "message": "API /api/v1/analytics 503"
+    }
+  ],
+  "status": "open",
+  "userActions": [
+    {
+      "category": "route",
+      "action": "navigate",
+      "detail": "#/dashboard",
+      "ts": 1749000000
+    },
+    {
+      "category": "route",
+      "action": "navigate",
+      "detail": "#/after-sale",
+      "ts": 1749000010
+    },
+    {
+      "category": "click",
+      "action": "click",
+      "detail": "反馈按钮",
+      "ts": 1749000020
+    }
+  ],
+  "networkRequests": [
+    {
+      "method": "GET",
+      "url": "/api/v1/data/orders",
+      "status": 200,
+      "duration": 320
+    },
+    {
+      "method": "GET",
+      "url": "/api/v1/analytics",
+      "status": 503,
+      "duration": 5000,
+      "error": "Service Unavailable"
+    }
+  ],
+  "config": {
+    "dianfx_dark_mode": "true",
+    "dianfx_default_store": "store_b"
+  },
+  "errorSummary": [
+    {
+      "message": "API /api/v1/analytics 503",
+      "count": 1,
+      "lastTs": "12:39:10"
+    }
+  ],
+  "pageContext": {
+    "page": "after-sale",
+    "route": "#/after-sale",
+    "userId": "test-user",
+    "username": "测试账号",
+    "role": "admin",
+    "storeCount": 3,
+    "storeIds": [
+      "store_a",
+      "store_b",
+      "store_c"
+    ],
+    "uploadCount": 12,
+    "currentStoreId": "store_b",
+    "currentStoreData": {
+      "ordersCount": 5842,
+      "promotionSummaryCount": 128,
+      "promotionProductsCount": 45,
+      "afterSaleCount": 327,
+      "financialCount": 5842,
+      "insuranceCount": 5120
+    },
+    "dataCounts": {
+      "totalOrders": 15230,
+      "totalPromotionSummary": 356,
+      "totalPromotionProducts": 112,
+      "totalPromotionHourly": 890,
+      "totalShippingInsurance": 14200,
+      "totalAfterSaleRecords": 876,
+      "totalFinancialRecords": 15230
+    },
+    "recentUploads": [
+      {
+        "storeId": "store_a",
+        "type": "csv",
+        "fileName": "订单_202606.csv",
+        "rows": 5230
+      },
+      {
+        "storeId": "store_b",
+        "type": "csv",
+        "fileName": "订单_202606.csv",
+        "rows": 5842
+      },
+      {
+        "storeId": "store_c",
+        "type": "xlsx",
+        "fileName": "推广数据_06月.xlsx",
+        "rows": 128
+      }
+    ],
+    "storageMode": "full",
+    "syncStatus": "synced",
+    "timestamp": "2026-06-30T12:40:00.000Z"
+  },
+  "buildInfo": {
+    "buildId": "mr0mkzl1-4czilt"
+  }
+}

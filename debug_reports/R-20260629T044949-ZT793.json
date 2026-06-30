@@ -1,0 +1,17 @@
+{
+  "id": "R-20260629T044949-ZT793",
+  "title": "Test Report",
+  "description": "This is a test",
+  "severity": "major",
+  "ip": "127.0.0.1",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-29T04:49:49.942Z",
+  "deviceInfo": {
+    "ua": "test",
+    "screen": "1920x1080",
+    "url": "http://test.com"
+  },
+  "logs": [],
+  "status": "open"
+}

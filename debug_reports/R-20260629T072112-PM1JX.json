@@ -1,0 +1,175 @@
+{
+  "id": "R-20260629T072112-PM1JX",
+  "title": "看一下这个是什么问题",
+  "description": "DOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.space-y-3 > div:nth-child(10) > div.rounded-lg.border.bg-pdd-card > div.p-4 > div.flex.items-start.gap-3 > div.flex-1.min-w-0 > div.text-xs.mt-1.5.space-y-1 > div.flex.items-center.gap-2 > div.inline-flex.items-center.rounded-md\nReact组件: f\n位置: (858, 541) 81x18\n文本: ⚠️ 缺1个字段\n主题: light\nbackground: rgba(0, 0, 0, 0)\ncolor: rgb(245, 158, 11)\nborder: 1px solid rgb(229, 231, 235)\n\n[问题模块] div.p-4\nDOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.space-y-3 > div:nth-child(9) > div.rounded-lg.border.bg-pdd-card > div.p-4\nReact组件: u\n位置: (687, 481) 1406x118\n文本: 商品推广_分小时数据_20260523至20260523.xlsx商品推广数据 · 130.0KB✅ 26列 × 795行⚠️ 缺1个字段解析完成查看推广\n主题: light\nbackground: rgba(0, 0, 0, 0)\ncolor: rgb(16, 24, 40)\nborder: 0px solid rgb(229, 231, 235)",
+  "severity": "major",
+  "ip": "113.90.87.104",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-29T07:21:12.685Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "screen": "2560x1440",
+    "url": "https://melody.wang/#/upload",
+    "language": "zh-CN",
+    "theme": "light",
+    "timestamp": "2026-06-29T07:21:12.078Z"
+  },
+  "logs": [
+    {
+      "id": 340,
+      "type": "network",
+      "message": "GET /api/v1/preferences [429] 7227ms",
+      "ts": "15:20:42",
+      "t": 1782717642166
+    },
+    {
+      "id": 341,
+      "type": "network",
+      "message": "GET /api/v1/preferences [429] 7648ms",
+      "ts": "15:20:42",
+      "t": 1782717642588
+    },
+    {
+      "id": 342,
+      "type": "network",
+      "message": "GET /api/v1/preferences [429] 8065ms",
+      "ts": "15:20:43",
+      "t": 1782717643005
+    },
+    {
+      "id": 343,
+      "type": "network",
+      "message": "GET /api/v1/preferences [429] 9769ms",
+      "ts": "15:20:44",
+      "t": 1782717644710
+    },
+    {
+      "id": 344,
+      "type": "network",
+      "message": "GET /api/v1/preferences [429] 9769ms",
+      "ts": "15:20:44",
+      "t": 1782717644710
+    },
+    {
+      "id": 345,
+      "type": "network",
+      "message": "GET /api/v1/preferences [429] 9792ms",
+      "ts": "15:20:44",
+      "t": 1782717644734
+    },
+    {
+      "id": 346,
+      "type": "network",
+      "message": "GET /api/v1/preferences [429] 9796ms",
+      "ts": "15:20:44",
+      "t": 1782717644746
+    },
+    {
+      "id": 347,
+      "type": "network",
+      "message": "GET /api/v1/sse [429] 1152ms",
+      "ts": "15:20:45",
+      "t": 1782717645829
+    },
+    {
+      "id": 348,
+      "type": "network",
+      "message": "GET /api/v1/preferences [429] 10314ms",
+      "ts": "15:20:45",
+      "t": 1782717645829
+    },
+    {
+      "id": 349,
+      "type": "network",
+      "message": "GET /api/v1/preferences [429] 10200ms",
+      "ts": "15:20:45",
+      "t": 1782717645829
+    },
+    {
+      "id": 350,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 34ms",
+      "ts": "15:20:45",
+      "t": 1782717645846
+    },
+    {
+      "id": 351,
+      "type": "network",
+      "message": "GET /api/v1/preferences [429] 10198ms",
+      "ts": "15:20:45",
+      "t": 1782717645938
+    },
+    {
+      "id": 352,
+      "type": "network",
+      "message": "GET /api/v1/sse [429] 1604ms",
+      "ts": "15:20:51",
+      "t": 1782717651232
+    },
+    {
+      "id": 353,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 40ms",
+      "ts": "15:20:51",
+      "t": 1782717651247
+    },
+    {
+      "id": 354,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 417ms",
+      "ts": "15:20:52",
+      "t": 1782717652827
+    },
+    {
+      "id": 355,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 12ms",
+      "ts": "15:20:55",
+      "t": 1782717655498
+    },
+    {
+      "id": 356,
+      "type": "network",
+      "message": "GET /api/v1/sse [429] 427ms",
+      "ts": "15:20:59",
+      "t": 1782717659527
+    },
+    {
+      "id": 357,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 10ms",
+      "ts": "15:21:00",
+      "t": 1782717660489
+    },
+    {
+      "id": 358,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [429] 416ms",
+      "ts": "15:21:05",
+      "t": 1782717665905
+    },
+    {
+      "id": 359,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 421ms",
+      "ts": "15:21:08",
+      "t": 1782717668174
+    },
+    {
+      "id": 360,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 608ms",
+      "ts": "15:21:11",
+      "t": 1782717671086
+    },
+    {
+      "id": 361,
+      "type": "network",
+      "message": "GET /api/v1/debug/check [200] 418ms",
+      "ts": "15:21:11",
+      "t": 1782717671657
+    }
+  ],
+  "status": "open"
+}

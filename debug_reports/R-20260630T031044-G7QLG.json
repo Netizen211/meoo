@@ -1,0 +1,383 @@
+{
+  "id": "R-20260630T031044-G7QLG",
+  "title": "大数据量压力测试",
+  "description": "50条时间线事件 + 大量codeTraces",
+  "severity": "major",
+  "ip": "::ffff:127.0.0.1",
+  "userId": "stress-test",
+  "username": "压力测试",
+  "createdAt": "2026-06-30T03:10:44.025Z",
+  "deviceInfo": {
+    "userAgent": "",
+    "screen": "",
+    "url": "",
+    "language": ""
+  },
+  "logs": [],
+  "status": "open",
+  "timeline": [
+    {
+      "id": 1,
+      "sessionId": "sid-large",
+      "ts": 1000,
+      "type": "action",
+      "message": "事件 1"
+    },
+    {
+      "id": 2,
+      "sessionId": "sid-large",
+      "ts": 2000,
+      "type": "action",
+      "message": "事件 2"
+    },
+    {
+      "id": 3,
+      "sessionId": "sid-large",
+      "ts": 3000,
+      "type": "action",
+      "message": "事件 3"
+    },
+    {
+      "id": 4,
+      "sessionId": "sid-large",
+      "ts": 4000,
+      "type": "action",
+      "message": "事件 4"
+    },
+    {
+      "id": 5,
+      "sessionId": "sid-large",
+      "ts": 5000,
+      "type": "action",
+      "message": "事件 5"
+    },
+    {
+      "id": 6,
+      "sessionId": "sid-large",
+      "ts": 6000,
+      "type": "action",
+      "message": "事件 6"
+    },
+    {
+      "id": 7,
+      "sessionId": "sid-large",
+      "ts": 7000,
+      "type": "action",
+      "message": "事件 7"
+    },
+    {
+      "id": 8,
+      "sessionId": "sid-large",
+      "ts": 8000,
+      "type": "action",
+      "message": "事件 8"
+    },
+    {
+      "id": 9,
+      "sessionId": "sid-large",
+      "ts": 9000,
+      "type": "action",
+      "message": "事件 9"
+    },
+    {
+      "id": 10,
+      "sessionId": "sid-large",
+      "ts": 10000,
+      "type": "action",
+      "message": "事件 10"
+    },
+    {
+      "id": 11,
+      "sessionId": "sid-large",
+      "ts": 11000,
+      "type": "action",
+      "message": "事件 11"
+    },
+    {
+      "id": 12,
+      "sessionId": "sid-large",
+      "ts": 12000,
+      "type": "action",
+      "message": "事件 12"
+    },
+    {
+      "id": 13,
+      "sessionId": "sid-large",
+      "ts": 13000,
+      "type": "action",
+      "message": "事件 13"
+    },
+    {
+      "id": 14,
+      "sessionId": "sid-large",
+      "ts": 14000,
+      "type": "action",
+      "message": "事件 14"
+    },
+    {
+      "id": 15,
+      "sessionId": "sid-large",
+      "ts": 15000,
+      "type": "action",
+      "message": "事件 15"
+    },
+    {
+      "id": 16,
+      "sessionId": "sid-large",
+      "ts": 16000,
+      "type": "action",
+      "message": "事件 16"
+    },
+    {
+      "id": 17,
+      "sessionId": "sid-large",
+      "ts": 17000,
+      "type": "action",
+      "message": "事件 17"
+    },
+    {
+      "id": 18,
+      "sessionId": "sid-large",
+      "ts": 18000,
+      "type": "action",
+      "message": "事件 18"
+    },
+    {
+      "id": 19,
+      "sessionId": "sid-large",
+      "ts": 19000,
+      "type": "action",
+      "message": "事件 19"
+    },
+    {
+      "id": 20,
+      "sessionId": "sid-large",
+      "ts": 20000,
+      "type": "action",
+      "message": "事件 20"
+    },
+    {
+      "id": 21,
+      "sessionId": "sid-large",
+      "ts": 21000,
+      "type": "action",
+      "message": "事件 21"
+    },
+    {
+      "id": 22,
+      "sessionId": "sid-large",
+      "ts": 22000,
+      "type": "action",
+      "message": "事件 22"
+    },
+    {
+      "id": 23,
+      "sessionId": "sid-large",
+      "ts": 23000,
+      "type": "action",
+      "message": "事件 23"
+    },
+    {
+      "id": 24,
+      "sessionId": "sid-large",
+      "ts": 24000,
+      "type": "action",
+      "message": "事件 24"
+    },
+    {
+      "id": 25,
+      "sessionId": "sid-large",
+      "ts": 25000,
+      "type": "action",
+      "message": "事件 25"
+    },
+    {
+      "id": 26,
+      "sessionId": "sid-large",
+      "ts": 26000,
+      "type": "action",
+      "message": "事件 26"
+    },
+    {
+      "id": 27,
+      "sessionId": "sid-large",
+      "ts": 27000,
+      "type": "action",
+      "message": "事件 27"
+    },
+    {
+      "id": 28,
+      "sessionId": "sid-large",
+      "ts": 28000,
+      "type": "action",
+      "message": "事件 28"
+    },
+    {
+      "id": 29,
+      "sessionId": "sid-large",
+      "ts": 29000,
+      "type": "action",
+      "message": "事件 29"
+    },
+    {
+      "id": 30,
+      "sessionId": "sid-large",
+      "ts": 30000,
+      "type": "action",
+      "message": "事件 30"
+    },
+    {
+      "id": 31,
+      "sessionId": "sid-large",
+      "ts": 31000,
+      "type": "action",
+      "message": "事件 31"
+    },
+    {
+      "id": 32,
+      "sessionId": "sid-large",
+      "ts": 32000,
+      "type": "action",
+      "message": "事件 32"
+    },
+    {
+      "id": 33,
+      "sessionId": "sid-large",
+      "ts": 33000,
+      "type": "action",
+      "message": "事件 33"
+    },
+    {
+      "id": 34,
+      "sessionId": "sid-large",
+      "ts": 34000,
+      "type": "action",
+      "message": "事件 34"
+    },
+    {
+      "id": 35,
+      "sessionId": "sid-large",
+      "ts": 35000,
+      "type": "action",
+      "message": "事件 35"
+    },
+    {
+      "id": 36,
+      "sessionId": "sid-large",
+      "ts": 36000,
+      "type": "action",
+      "message": "事件 36"
+    },
+    {
+      "id": 37,
+      "sessionId": "sid-large",
+      "ts": 37000,
+      "type": "action",
+      "message": "事件 37"
+    },
+    {
+      "id": 38,
+      "sessionId": "sid-large",
+      "ts": 38000,
+      "type": "action",
+      "message": "事件 38"
+    },
+    {
+      "id": 39,
+      "sessionId": "sid-large",
+      "ts": 39000,
+      "type": "action",
+      "message": "事件 39"
+    },
+    {
+      "id": 40,
+      "sessionId": "sid-large",
+      "ts": 40000,
+      "type": "action",
+      "message": "事件 40"
+    },
+    {
+      "id": 41,
+      "sessionId": "sid-large",
+      "ts": 41000,
+      "type": "action",
+      "message": "事件 41"
+    },
+    {
+      "id": 42,
+      "sessionId": "sid-large",
+      "ts": 42000,
+      "type": "action",
+      "message": "事件 42"
+    },
+    {
+      "id": 43,
+      "sessionId": "sid-large",
+      "ts": 43000,
+      "type": "action",
+      "message": "事件 43"
+    },
+    {
+      "id": 44,
+      "sessionId": "sid-large",
+      "ts": 44000,
+      "type": "action",
+      "message": "事件 44"
+    },
+    {
+      "id": 45,
+      "sessionId": "sid-large",
+      "ts": 45000,
+      "type": "action",
+      "message": "事件 45"
+    },
+    {
+      "id": 46,
+      "sessionId": "sid-large",
+      "ts": 46000,
+      "type": "action",
+      "message": "事件 46"
+    },
+    {
+      "id": 47,
+      "sessionId": "sid-large",
+      "ts": 47000,
+      "type": "action",
+      "message": "事件 47"
+    },
+    {
+      "id": 48,
+      "sessionId": "sid-large",
+      "ts": 48000,
+      "type": "action",
+      "message": "事件 48"
+    },
+    {
+      "id": 49,
+      "sessionId": "sid-large",
+      "ts": 49000,
+      "type": "action",
+      "message": "事件 49"
+    },
+    {
+      "id": 50,
+      "sessionId": "sid-large",
+      "ts": 50000,
+      "type": "action",
+      "message": "事件 50"
+    }
+  ],
+  "codeTraces": [
+    {
+      "id": 1,
+      "sessionId": "sid-large",
+      "ts": 1000,
+      "type": "code",
+      "message": "Chunk加载"
+    }
+  ],
+  "componentRenderCounts": {
+    "A": 5,
+    "B": 3
+  }
+}

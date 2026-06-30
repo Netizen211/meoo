@@ -1,0 +1,321 @@
+{
+  "id": "R-20260629T063734-UAVZT",
+  "title": "深色颜色显示异常",
+  "description": "[问题模块] div.bg-white.rounded-2xl.shadow-xl.border.border-gray-100.p-16.text-center\nDOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-8.max-w-[1400px].mx-auto > div.bg-white.rounded-2xl.shadow-xl\nReact组件: d\n位置: (724, 96) 1336x270\n文本: 📅时间窗口请先上传订单数据以查看时间窗口分析\n主题: dark\nbackground: rgb(255, 255, 255)\ncolor: rgb(255, 255, 255)\nborder: 1px solid rgb(243, 244, 246)",
+  "severity": "major",
+  "ip": "113.90.87.104",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-29T06:37:34.278Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "screen": "2560x1440",
+    "url": "https://melody.wang/#/time-window",
+    "language": "zh-CN",
+    "theme": "dark",
+    "timestamp": "2026-06-29T06:37:33.938Z"
+  },
+  "logs": [
+    {
+      "id": 84,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:35:11"
+    },
+    {
+      "id": 85,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:35:16"
+    },
+    {
+      "id": 86,
+      "type": "network",
+      "message": "GET /api/v1/sse [524] 125455ms",
+      "ts": "14:35:16"
+    },
+    {
+      "id": 87,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 439ms",
+      "ts": "14:35:19"
+    },
+    {
+      "id": 88,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 438ms",
+      "ts": "14:35:21"
+    },
+    {
+      "id": 89,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1ms",
+      "ts": "14:35:26"
+    },
+    {
+      "id": 90,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1ms",
+      "ts": "14:35:31"
+    },
+    {
+      "id": 91,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 450ms",
+      "ts": "14:35:35"
+    },
+    {
+      "id": 92,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 17ms",
+      "ts": "14:35:36"
+    },
+    {
+      "id": 93,
+      "type": "network",
+      "message": "GET /api/v1/analytics/dashboard [200] 435ms",
+      "ts": "14:35:38"
+    },
+    {
+      "id": 94,
+      "type": "network",
+      "message": "GET /api/v1/admin/storage/usage [200] 727ms",
+      "ts": "14:35:39"
+    },
+    {
+      "id": 95,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 17ms",
+      "ts": "14:35:41"
+    },
+    {
+      "id": 96,
+      "type": "network",
+      "message": "PUT /api/v1/preferences/last_store [200] 445ms",
+      "ts": "14:35:41"
+    },
+    {
+      "id": 97,
+      "type": "network",
+      "message": "PUT /api/v1/preferences/last_store [409] 472ms",
+      "ts": "14:35:41"
+    },
+    {
+      "id": 98,
+      "type": "network",
+      "message": "GET /api/v1/preferences [200] 457ms",
+      "ts": "14:35:41"
+    },
+    {
+      "id": 99,
+      "type": "network",
+      "message": "GET /api/v1/analytics/products/stats [200] 445ms",
+      "ts": "14:35:42"
+    },
+    {
+      "id": 100,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1ms",
+      "ts": "14:35:46"
+    },
+    {
+      "id": 101,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 430ms",
+      "ts": "14:35:49"
+    },
+    {
+      "id": 102,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 442ms",
+      "ts": "14:35:51"
+    },
+    {
+      "id": 103,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1ms",
+      "ts": "14:35:56"
+    },
+    {
+      "id": 104,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:36:01"
+    },
+    {
+      "id": 105,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 440ms",
+      "ts": "14:36:05"
+    },
+    {
+      "id": 106,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1ms",
+      "ts": "14:36:06"
+    },
+    {
+      "id": 107,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:36:11"
+    },
+    {
+      "id": 108,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:36:16"
+    },
+    {
+      "id": 109,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 436ms",
+      "ts": "14:36:19"
+    },
+    {
+      "id": 110,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 443ms",
+      "ts": "14:36:21"
+    },
+    {
+      "id": 111,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:36:26"
+    },
+    {
+      "id": 112,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1ms",
+      "ts": "14:36:31"
+    },
+    {
+      "id": 113,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 445ms",
+      "ts": "14:36:35"
+    },
+    {
+      "id": 114,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:36:36"
+    },
+    {
+      "id": 115,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:36:41"
+    },
+    {
+      "id": 116,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 3ms",
+      "ts": "14:36:46"
+    },
+    {
+      "id": 117,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 425ms",
+      "ts": "14:36:49"
+    },
+    {
+      "id": 118,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 444ms",
+      "ts": "14:36:51"
+    },
+    {
+      "id": 119,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:36:56"
+    },
+    {
+      "id": 120,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:37:01"
+    },
+    {
+      "id": 121,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 437ms",
+      "ts": "14:37:05"
+    },
+    {
+      "id": 122,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:37:06"
+    },
+    {
+      "id": 123,
+      "type": "network",
+      "message": "GET /api/v1/debug/check [200] 429ms",
+      "ts": "14:37:07"
+    },
+    {
+      "id": 124,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 447ms",
+      "ts": "14:37:07"
+    },
+    {
+      "id": 125,
+      "type": "network",
+      "message": "POST /api/v1/debug/report [200] 443ms",
+      "ts": "14:37:08"
+    },
+    {
+      "id": 126,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:37:11"
+    },
+    {
+      "id": 127,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:37:16"
+    },
+    {
+      "id": 128,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 442ms",
+      "ts": "14:37:19"
+    },
+    {
+      "id": 129,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 435ms",
+      "ts": "14:37:21"
+    },
+    {
+      "id": 130,
+      "type": "network",
+      "message": "GET /api/v1/sse [524] 125260ms",
+      "ts": "14:37:22"
+    },
+    {
+      "id": 131,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "14:37:26"
+    },
+    {
+      "id": 132,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1ms",
+      "ts": "14:37:31"
+    },
+    {
+      "id": 133,
+      "type": "network",
+      "message": "GET /api/v1/debug/check [200] 431ms",
+      "ts": "14:37:33"
+    }
+  ],
+  "status": "open"
+}

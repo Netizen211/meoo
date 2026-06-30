@@ -1,0 +1,139 @@
+{
+  "id": "R-20260629T055610-X070Z",
+  "title": "这个位置的色差很大",
+  "description": "[问题模块] div.flex.items-center.gap-1.bg-pdd-gray-100.rounded-md.px-2.py-1\n位置: (1646, 852) 143x27",
+  "severity": "major",
+  "ip": "113.90.87.104",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-29T05:56:10.286Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "screen": "2560x1440",
+    "url": "https://melody.wang/#/dashboard",
+    "language": "zh-CN"
+  },
+  "logs": [
+    {
+      "id": 8,
+      "type": "network",
+      "message": "GET /api/v1/admin/storage/usage [200] 423ms",
+      "ts": "13:55:41"
+    },
+    {
+      "id": 9,
+      "type": "network",
+      "message": "POST /api/v1/data/pull [200] 427ms",
+      "ts": "13:55:41"
+    },
+    {
+      "id": 10,
+      "type": "network",
+      "message": "GET /api/v1/stores [200] 427ms",
+      "ts": "13:55:41"
+    },
+    {
+      "id": 11,
+      "type": "network",
+      "message": "GET /api/v1/analytics/dashboard [200] 2ms",
+      "ts": "13:55:41"
+    },
+    {
+      "id": 12,
+      "type": "network",
+      "message": "GET /api/v1/preferences [200] 432ms",
+      "ts": "13:55:41"
+    },
+    {
+      "id": 13,
+      "type": "network",
+      "message": "PUT /api/v1/preferences/last_store [200] 419ms",
+      "ts": "13:55:41"
+    },
+    {
+      "id": 14,
+      "type": "network",
+      "message": "POST /api/v1/data/pull [200] 422ms",
+      "ts": "13:55:41"
+    },
+    {
+      "id": 15,
+      "type": "network",
+      "message": "POST /api/v1/preferences/migrate [200] 467ms",
+      "ts": "13:55:41"
+    },
+    {
+      "id": 16,
+      "type": "network",
+      "message": "PUT /api/v1/preferences/last_store [409] 427ms",
+      "ts": "13:55:43"
+    },
+    {
+      "id": 17,
+      "type": "network",
+      "message": "PUT /api/v1/preferences/last_store [409] 427ms",
+      "ts": "13:55:43"
+    },
+    {
+      "id": 18,
+      "type": "network",
+      "message": "GET /api/v1/preferences [200] 420ms",
+      "ts": "13:55:43"
+    },
+    {
+      "id": 19,
+      "type": "network",
+      "message": "GET /api/v1/preferences [200] 855ms",
+      "ts": "13:55:44"
+    },
+    {
+      "id": 20,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 17ms",
+      "ts": "13:55:45"
+    },
+    {
+      "id": 21,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 21ms",
+      "ts": "13:55:49"
+    },
+    {
+      "id": 22,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 428ms",
+      "ts": "13:55:50"
+    },
+    {
+      "id": 23,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 429ms",
+      "ts": "13:55:53"
+    },
+    {
+      "id": 24,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 16ms",
+      "ts": "13:55:55"
+    },
+    {
+      "id": 25,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 16ms",
+      "ts": "13:56:00"
+    },
+    {
+      "id": 26,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 16ms",
+      "ts": "13:56:05"
+    },
+    {
+      "id": 27,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 427ms",
+      "ts": "13:56:08"
+    }
+  ],
+  "status": "open"
+}

@@ -1,0 +1,55 @@
+{
+  "id": "R-20260629T055951-PG606",
+  "title": "为什么每次刷新都要重新登录呢？",
+  "description": "[问题模块] div.w-full.lg:w-[40%].flex.items-center.justify-center.p-6.lg:p-10.relative\n位置: (1536, 0) 1024x1279\n文本: 店分析登录注册记住用户名登录 还没有账号？立即注册 →服务条款|隐私政策",
+  "severity": "major",
+  "ip": "113.90.87.104",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-29T05:59:51.436Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "screen": "2560x1440",
+    "url": "https://melody.wang/#/login",
+    "language": "zh-CN"
+  },
+  "logs": [
+    {
+      "id": 1,
+      "type": "network",
+      "message": "GET /api/v1/stores [200] 444ms",
+      "ts": "13:59:23"
+    },
+    {
+      "id": 2,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 2ms",
+      "ts": "13:59:23"
+    },
+    {
+      "id": 3,
+      "type": "network",
+      "message": "PUT /api/v1/preferences/last_store [409] 449ms",
+      "ts": "13:59:24"
+    },
+    {
+      "id": 4,
+      "type": "network",
+      "message": "GET /api/v1/preferences [200] 433ms",
+      "ts": "13:59:24"
+    },
+    {
+      "id": 5,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 432ms",
+      "ts": "13:59:25"
+    },
+    {
+      "id": 6,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 427ms",
+      "ts": "13:59:38"
+    }
+  ],
+  "status": "open"
+}

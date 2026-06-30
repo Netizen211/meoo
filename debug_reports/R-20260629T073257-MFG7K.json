@@ -1,0 +1,84 @@
+{
+  "id": "R-20260629T073257-MFG7K",
+  "title": "为什么选择全部类目和有的类目后数据就被空了",
+  "description": "DOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.lg:p-6.space-y-4 > div.bg-pdd-card.rounded-lg.border > div.px-3.py-2.flex\nReact组件: g\n位置: (695, 89) 1390x48\n文本: 近7天近30天近90天全部自定义对比开启后选择对比时段，图表以虚线展示同期数据全部类目童装/婴儿装/亲子装全部省份黑龙江省安徽省山东省山西省广东省浙江省江苏省湖\n主题: light\nbackground: rgba(0, 0, 0, 0)\ncolor: rgb(0, 0, 0)\nborder: 0px solid rgb(229, 231, 235)\n\n[问题模块] div.grid.grid-cols-3.md:grid-cols-6.gap-3\nDOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.lg:p-6.space-y-4 > div.space-y-4 > div:nth-child(1) > div.grid.grid-cols-3.md:grid-cols-6\nReact组件: h\n位置: (694, 154) 1392x495\n文本: 商家实收--客单价--有效订单量--退款金额--退款单数--转化率--推广花费--GMV（商品总价）--推广ROI--推广订单量--平均订单花费--利润金额--\n主题: light\nbackground: rgba(0, 0, 0, 0)\ncolor: rgb(0, 0, 0)\nborder: 0px solid rgb(229, 231, 235)",
+  "severity": "major",
+  "ip": "113.90.87.104",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-29T07:32:57.824Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "screen": "2560x1440",
+    "url": "https://melody.wang/#/dashboard",
+    "language": "zh-CN",
+    "theme": "light",
+    "timestamp": "2026-06-29T07:32:56.484Z"
+  },
+  "logs": [
+    {
+      "id": 44,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 17ms",
+      "ts": "15:32:27",
+      "t": 1782718347767
+    },
+    {
+      "id": 45,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 17ms",
+      "ts": "15:32:32",
+      "t": 1782718352770
+    },
+    {
+      "id": 46,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 776ms",
+      "ts": "15:32:35",
+      "t": 1782718355693
+    },
+    {
+      "id": 47,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 17ms",
+      "ts": "15:32:37",
+      "t": 1782718357765
+    },
+    {
+      "id": 48,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 472ms",
+      "ts": "15:32:43",
+      "t": 1782718363222
+    },
+    {
+      "id": 49,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 17ms",
+      "ts": "15:32:47",
+      "t": 1782718367768
+    },
+    {
+      "id": 50,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 471ms",
+      "ts": "15:32:50",
+      "t": 1782718370389
+    },
+    {
+      "id": 51,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 17ms",
+      "ts": "15:32:52",
+      "t": 1782718372765
+    },
+    {
+      "id": 52,
+      "type": "network",
+      "message": "GET /api/v1/debug/check [200] 475ms",
+      "ts": "15:32:56",
+      "t": 1782718376020
+    }
+  ],
+  "status": "open"
+}

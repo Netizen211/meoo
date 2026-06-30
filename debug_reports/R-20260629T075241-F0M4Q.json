@@ -1,0 +1,427 @@
+{
+  "id": "R-20260629T075241-F0M4Q",
+  "title": "我看了数据还是不对",
+  "description": "DOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.lg:p-6.space-y-4 > div.space-y-4 > div:nth-child(1) > div.grid.grid-cols-3.md:grid-cols-6 > div.bg-pdd-card.rounded-lg.border\nReact组件: ne\n位置: (1154, 746) 222x73\n文本: 罚款次数0\n主题: light\nbackground: rgb(255, 255, 255)\ncolor: rgb(0, 0, 0)\nborder: 1px solid rgb(227, 234, 245)\nDOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.lg:p-6.space-y-4 > div.space-y-4 > div:nth-child(1) > div.grid.grid-cols-3.md:grid-cols-6 > div.bg-pdd-card.rounded-lg.border\nReact组件: ne\n位置: (920, 746) 222x73\n文本: 罚款金额¥0.00\n主题: light\nbackground: rgb(255, 255, 255)\ncolor: rgb(0, 0, 0)\nborder: 1px solid rgb(227, 234, 245)\n\n\nDOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.lg:p-6.space-y-4 > div.space-y-4 > div:nth-child(1) > div.grid.grid-cols-3.md:grid-cols-6 > div.bg-pdd-card.rounded-lg.border\nReact组件: ne\n位置: (1388, 837) 222x73\n文本: 总互动成本¥0.00\n主题: light\nbackground: rgb(255, 255, 255)\ncolor: rgb(0, 0, 0)\nborder: 1px solid rgb(227, 234, 245)\nDOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.lg:p-6.space-y-4 > div.space-y-4 > div:nth-child(1) > div.grid.grid-cols-3.md:grid-cols-6 > div.bg-pdd-card.rounded-lg.border\nReact组件: ne\n位置: (1622, 837) 222x73\n文本: 互动成本率0.00%\n主题: light\nbackground: rgb(255, 255, 255)\ncolor: rgb(0, 0, 0)\nborder: 1px solid rgb(227, 234, 245)\n\n\nDOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.lg:p-6.space-y-4 > div.space-y-4 > div:nth-child(1) > div.grid.grid-cols-3.md:grid-cols-6 > div.bg-pdd-card.rounded-lg.border\nReact组件: ne\n位置: (1622, 922) 222x73\n文本: 百亿补贴¥0.00\n主题: light\nbackground: rgb(255, 255, 255)\ncolor: rgb(0, 0, 0)\nborder: 1px solid rgb(227, 234, 245)\n[问题模块] div.grid.grid-cols-3.md:grid-cols-6.gap-3\nDOM路径: #app-root > div.flex-1.flex.flex-col > main.flex-1.overflow-y-auto.scrollbar-thin > div.admin-container > div > div.p-4.lg:p-6.space-y-4 > div.space-y-4 > div:nth-child(1) > div.grid.grid-cols-3.md:grid-cols-6\nReact组件: h\n位置: (686, -346) 1392x1340\n文本: 商家实收¥58364.23客单价¥54.37有效订单量992退款金额¥14543.02退款单数294转化率1.85%推广花费¥12775.51GMV（商品总价）\n主题: light\nbackground: rgba(0, 0, 0, 0)\ncolor: rgb(0, 0, 0)\nborder: 0px solid rgb(229, 231, 235)",
+  "severity": "major",
+  "ip": "113.90.87.104",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-29T07:52:41.165Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36",
+    "screen": "2560x1440",
+    "url": "https://melody.wang/#/dashboard",
+    "language": "zh-CN",
+    "theme": "light",
+    "timestamp": "2026-06-29T07:52:40.156Z"
+  },
+  "logs": [
+    {
+      "id": 173,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 796ms",
+      "ts": "15:52:10",
+      "t": 1782719530497
+    },
+    {
+      "id": 174,
+      "type": "error",
+      "message": "[KPI] filteredPromoProducts count: 0 first row keys: none",
+      "ts": "15:52:12",
+      "t": 1782719532172
+    },
+    {
+      "id": 175,
+      "type": "error",
+      "message": "[KPI] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:12",
+      "t": 1782719532315
+    },
+    {
+      "id": 176,
+      "type": "error",
+      "message": "[KPI] result inquiryCost: 0 favoriteCost: 0 followCost: 0",
+      "ts": "15:52:12",
+      "t": 1782719532336
+    },
+    {
+      "id": 177,
+      "type": "error",
+      "message": "[Trend] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:12",
+      "t": 1782719532506
+    },
+    {
+      "id": 178,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 449ms",
+      "ts": "15:52:12",
+      "t": 1782719532585
+    },
+    {
+      "id": 179,
+      "type": "error",
+      "message": "[KPI] filteredPromoProducts count: 0 first row keys: none",
+      "ts": "15:52:12",
+      "t": 1782719532620
+    },
+    {
+      "id": 180,
+      "type": "error",
+      "message": "[KPI] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:12",
+      "t": 1782719532758
+    },
+    {
+      "id": 181,
+      "type": "error",
+      "message": "[KPI] result inquiryCost: 0 favoriteCost: 0 followCost: 0",
+      "ts": "15:52:12",
+      "t": 1782719532779
+    },
+    {
+      "id": 182,
+      "type": "error",
+      "message": "[Trend] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:12",
+      "t": 1782719532949
+    },
+    {
+      "id": 183,
+      "type": "error",
+      "message": "[KPI] filteredPromoProducts count: 0 first row keys: none",
+      "ts": "15:52:17",
+      "t": 1782719537183
+    },
+    {
+      "id": 184,
+      "type": "error",
+      "message": "[KPI] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:17",
+      "t": 1782719537327
+    },
+    {
+      "id": 185,
+      "type": "error",
+      "message": "[KPI] result inquiryCost: 0 favoriteCost: 0 followCost: 0",
+      "ts": "15:52:17",
+      "t": 1782719537350
+    },
+    {
+      "id": 186,
+      "type": "error",
+      "message": "[Trend] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:17",
+      "t": 1782719537524
+    },
+    {
+      "id": 187,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1512ms",
+      "ts": "15:52:18",
+      "t": 1782719538659
+    },
+    {
+      "id": 188,
+      "type": "error",
+      "message": "[KPI] filteredPromoProducts count: 0 first row keys: none",
+      "ts": "15:52:18",
+      "t": 1782719538709
+    },
+    {
+      "id": 189,
+      "type": "error",
+      "message": "[KPI] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:18",
+      "t": 1782719538851
+    },
+    {
+      "id": 190,
+      "type": "error",
+      "message": "[KPI] result inquiryCost: 0 favoriteCost: 0 followCost: 0",
+      "ts": "15:52:18",
+      "t": 1782719538872
+    },
+    {
+      "id": 191,
+      "type": "error",
+      "message": "[Trend] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:19",
+      "t": 1782719539043
+    },
+    {
+      "id": 192,
+      "type": "error",
+      "message": "[KPI] filteredPromoProducts count: 0 first row keys: none",
+      "ts": "15:52:23",
+      "t": 1782719543154
+    },
+    {
+      "id": 193,
+      "type": "error",
+      "message": "[KPI] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:23",
+      "t": 1782719543295
+    },
+    {
+      "id": 194,
+      "type": "error",
+      "message": "[KPI] result inquiryCost: 0 favoriteCost: 0 followCost: 0",
+      "ts": "15:52:23",
+      "t": 1782719543316
+    },
+    {
+      "id": 195,
+      "type": "error",
+      "message": "[Trend] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:23",
+      "t": 1782719543488
+    },
+    {
+      "id": 196,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 471ms",
+      "ts": "15:52:23",
+      "t": 1782719543586
+    },
+    {
+      "id": 197,
+      "type": "error",
+      "message": "[KPI] filteredPromoProducts count: 0 first row keys: none",
+      "ts": "15:52:23",
+      "t": 1782719543621
+    },
+    {
+      "id": 198,
+      "type": "error",
+      "message": "[KPI] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:23",
+      "t": 1782719543780
+    },
+    {
+      "id": 199,
+      "type": "error",
+      "message": "[KPI] result inquiryCost: 0 favoriteCost: 0 followCost: 0",
+      "ts": "15:52:23",
+      "t": 1782719543801
+    },
+    {
+      "id": 200,
+      "type": "error",
+      "message": "[Trend] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:23",
+      "t": 1782719543975
+    },
+    {
+      "id": 201,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 496ms",
+      "ts": "15:52:25",
+      "t": 1782719545304
+    },
+    {
+      "id": 202,
+      "type": "error",
+      "message": "[KPI] filteredPromoProducts count: 0 first row keys: none",
+      "ts": "15:52:27",
+      "t": 1782719547190
+    },
+    {
+      "id": 203,
+      "type": "error",
+      "message": "[KPI] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:27",
+      "t": 1782719547330
+    },
+    {
+      "id": 204,
+      "type": "error",
+      "message": "[KPI] result inquiryCost: 0 favoriteCost: 0 followCost: 0",
+      "ts": "15:52:27",
+      "t": 1782719547351
+    },
+    {
+      "id": 205,
+      "type": "error",
+      "message": "[Trend] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:27",
+      "t": 1782719547520
+    },
+    {
+      "id": 206,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 1521ms",
+      "ts": "15:52:28",
+      "t": 1782719548675
+    },
+    {
+      "id": 207,
+      "type": "error",
+      "message": "[KPI] filteredPromoProducts count: 0 first row keys: none",
+      "ts": "15:52:28",
+      "t": 1782719548715
+    },
+    {
+      "id": 208,
+      "type": "error",
+      "message": "[KPI] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:28",
+      "t": 1782719548853
+    },
+    {
+      "id": 209,
+      "type": "error",
+      "message": "[KPI] result inquiryCost: 0 favoriteCost: 0 followCost: 0",
+      "ts": "15:52:28",
+      "t": 1782719548874
+    },
+    {
+      "id": 210,
+      "type": "error",
+      "message": "[Trend] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:29",
+      "t": 1782719549054
+    },
+    {
+      "id": 211,
+      "type": "error",
+      "message": "[KPI] filteredPromoProducts count: 0 first row keys: none",
+      "ts": "15:52:32",
+      "t": 1782719552188
+    },
+    {
+      "id": 212,
+      "type": "error",
+      "message": "[KPI] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:32",
+      "t": 1782719552327
+    },
+    {
+      "id": 213,
+      "type": "error",
+      "message": "[KPI] result inquiryCost: 0 favoriteCost: 0 followCost: 0",
+      "ts": "15:52:32",
+      "t": 1782719552348
+    },
+    {
+      "id": 214,
+      "type": "error",
+      "message": "[Trend] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:32",
+      "t": 1782719552522
+    },
+    {
+      "id": 215,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 655ms",
+      "ts": "15:52:32",
+      "t": 1782719552806
+    },
+    {
+      "id": 216,
+      "type": "error",
+      "message": "[KPI] filteredPromoProducts count: 0 first row keys: none",
+      "ts": "15:52:32",
+      "t": 1782719552842
+    },
+    {
+      "id": 217,
+      "type": "error",
+      "message": "[KPI] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:32",
+      "t": 1782719552983
+    },
+    {
+      "id": 218,
+      "type": "error",
+      "message": "[KPI] result inquiryCost: 0 favoriteCost: 0 followCost: 0",
+      "ts": "15:52:33",
+      "t": 1782719553004
+    },
+    {
+      "id": 219,
+      "type": "error",
+      "message": "[Trend] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:33",
+      "t": 1782719553176
+    },
+    {
+      "id": 220,
+      "type": "error",
+      "message": "[KPI] filteredPromoProducts count: 0 first row keys: none",
+      "ts": "15:52:37",
+      "t": 1782719557174
+    },
+    {
+      "id": 221,
+      "type": "error",
+      "message": "[KPI] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:37",
+      "t": 1782719557315
+    },
+    {
+      "id": 222,
+      "type": "error",
+      "message": "[KPI] result inquiryCost: 0 favoriteCost: 0 followCost: 0",
+      "ts": "15:52:37",
+      "t": 1782719557336
+    },
+    {
+      "id": 223,
+      "type": "error",
+      "message": "[Trend] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:37",
+      "t": 1782719557506
+    },
+    {
+      "id": 224,
+      "type": "network",
+      "message": "GET /api/v1/analytics/bulk [200] 446ms",
+      "ts": "15:52:37",
+      "t": 1782719557583
+    },
+    {
+      "id": 225,
+      "type": "error",
+      "message": "[KPI] filteredPromoProducts count: 0 first row keys: none",
+      "ts": "15:52:37",
+      "t": 1782719557619
+    },
+    {
+      "id": 226,
+      "type": "error",
+      "message": "[KPI] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:37",
+      "t": 1782719557758
+    },
+    {
+      "id": 227,
+      "type": "error",
+      "message": "[KPI] result inquiryCost: 0 favoriteCost: 0 followCost: 0",
+      "ts": "15:52:37",
+      "t": 1782719557779
+    },
+    {
+      "id": 228,
+      "type": "error",
+      "message": "[Trend] interaction source: 90 records, isDetail: false",
+      "ts": "15:52:37",
+      "t": 1782719557953
+    },
+    {
+      "id": 229,
+      "type": "network",
+      "message": "GET /api/v1/debug/check [200] 748ms",
+      "ts": "15:52:39",
+      "t": 1782719559652
+    },
+    {
+      "id": 230,
+      "type": "network",
+      "message": "GET /build-meta.json [200] 499ms",
+      "ts": "15:52:40",
+      "t": 1782719560130
+    }
+  ],
+  "status": "open"
+}

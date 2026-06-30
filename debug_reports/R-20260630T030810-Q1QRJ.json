@@ -1,0 +1,53 @@
+{
+  "id": "R-20260630T030810-Q1QRJ",
+  "title": "【测试】v7 字段验证第二轮",
+  "description": "验证服务器已保存所有 v7 新增字段",
+  "severity": "critical",
+  "ip": "::ffff:127.0.0.1",
+  "userId": "debug-001",
+  "username": "调试001",
+  "createdAt": "2026-06-30T03:08:10.600Z",
+  "deviceInfo": {
+    "userAgent": "Test",
+    "screen": "1920x1080"
+  },
+  "logs": [],
+  "status": "open",
+  "config": {
+    "key": "value"
+  },
+  "errorSummary": [
+    {
+      "message": "Test error",
+      "count": 1,
+      "lastTs": "10:00:00"
+    }
+  ],
+  "codeTraces": [
+    {
+      "id": 101,
+      "sessionId": "sid-v7",
+      "ts": 1782788803500,
+      "type": "code",
+      "message": "Chunk加载"
+    },
+    {
+      "id": 102,
+      "sessionId": "sid-v7",
+      "ts": 1782788805500,
+      "type": "render",
+      "message": "渲染组件"
+    }
+  ],
+  "componentRenderCounts": {
+    "DashboardPage": 15,
+    "KpiPanel": 8
+  },
+  "userSessionId": "sid-v7-test-002",
+  "userPageLoadId": "pl-v7-test-002",
+  "timelineStats": {
+    "total": 425,
+    "sessionDuration": 125000,
+    "storageBytes": 28450
+  }
+}

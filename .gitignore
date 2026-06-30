@@ -96,3 +96,18 @@ sim_results.json
 standings_raw.json
 teams_raw.json
 DFXCJ1.01/
+
+# Python 缓存
+__pycache__/
+*.pyc
+
+# 临时测试脚本（非项目源码）
+kpi-test.js
+kpi-verify*.js
+generate_test_report.js
+sync-reports.js
+gen_config.json
+check_dates.js
+
+# 路径错误 / 误创建的文件
+frontend/meoo-react/src/pagesdashboardOrderDetailModal.tsx

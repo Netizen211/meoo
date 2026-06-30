@@ -1,0 +1,56 @@
+{
+  "id": "R-20260630T123916-H02RY",
+  "title": "【自动化测试】反馈数据抓取质量验证",
+  "description": "自动提交的测试报告，验证 dataCounts/currentStoreId/currentStoreData 等字段是否正常捕获",
+  "severity": "minor",
+  "ip": "::ffff:127.0.0.1",
+  "userId": "",
+  "username": "",
+  "createdAt": "2026-06-30T12:39:16.190Z",
+  "deviceInfo": {
+    "userAgent": "Mozilla/5.0 Test Automation",
+    "screen": "1920x1080x24",
+    "url": "https://melody.wang/#/dashboard",
+    "language": "zh-CN",
+    "theme": "light",
+    "timestamp": "2026-06-30T12:39:06.000Z"
+  },
+  "logs": [
+    {
+      "ts": "12:00:00",
+      "type": "info",
+      "message": "[自动化测试] 反馈数据验证"
+    }
+  ],
+  "status": "open",
+  "userActions": [
+    {
+      "category": "route",
+      "action": "navigate",
+      "detail": "dashboard",
+      "ts": 1782823146
+    },
+    {
+      "category": "click",
+      "action": "click",
+      "detail": "反馈按钮",
+      "ts": 1782823146
+    }
+  ],
+  "pageContext": {
+    "page": "dashboard",
+    "route": "#/dashboard",
+    "userId": "test-user",
+    "username": "测试账号",
+    "role": "test",
+    "storeCount": 2,
+    "storeIds": [
+      "store_1",
+      "store_2"
+    ],
+    "uploadCount": 5
+  },
+  "buildInfo": {
+    "buildId": "mr0mkzl1-4czilt"
+  }
+}
